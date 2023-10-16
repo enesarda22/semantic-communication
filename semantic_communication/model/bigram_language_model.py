@@ -22,6 +22,9 @@ class BigramLanguageModel(nn.Module):
             nn.ReLU(),
             nn.Linear(4 * n_embeddings, n_embeddings),  # projection
         )
+        self.ln1 = nn.LayerNorm(n_embeddings)
+        self.ln2 = nn.LayerNorm(n_embeddings)
+        self.ln3 = nn.LayerNorm(n_embeddings)
         self.lm_head = nn.Linear(n_embeddings, vocab_size)
 
         self.block_size = block_size
@@ -36,9 +39,11 @@ class BigramLanguageModel(nn.Module):
             torch.arange(T, device=self.device)
         )  # (T,C)
         x = token_embeddings + pos_embeddings
-        x = x + self.sa_heads(x)  # residual connection
-        x = x + self.ff_net(x)  # residual connection
-        logits = self.lm_head(x)
+
+        # residual connection after the layer, norm before the layer
+        x = x + self.sa_heads(self.ln1(x))
+        x = x + self.ff_net(self.ln2(x))
+        logits = self.lm_head(self.ln3(x))
 
         if targets is None:
             loss = None
