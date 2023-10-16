@@ -18,8 +18,9 @@ class BigramLanguageModel(nn.Module):
             block_size=block_size,
         )
         self.ff_net = nn.Sequential(
-            nn.Linear(n_embeddings, n_embeddings),
+            nn.Linear(n_embeddings, 4 * n_embeddings),
             nn.ReLU(),
+            nn.Linear(4 * n_embeddings, n_embeddings),  # projection
         )
         self.lm_head = nn.Linear(n_embeddings, vocab_size)
 
@@ -35,8 +36,8 @@ class BigramLanguageModel(nn.Module):
             torch.arange(T, device=self.device)
         )  # (T,C)
         x = token_embeddings + pos_embeddings
-        x = self.sa_heads(x)
-        x = self.ff_net(x)
+        x = x + self.sa_heads(x)  # residual connection
+        x = x + self.ff_net(x)  # residual connection
         logits = self.lm_head(x)
 
         if targets is None:
