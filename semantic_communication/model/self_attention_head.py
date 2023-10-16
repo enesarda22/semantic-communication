@@ -15,8 +15,6 @@ class SelfAttentionHead(nn.Module):
         self.head_size = head_size
 
     def forward(self, x):
-        B, T, C = x.shape
-
         k = self.key(x)  # (B,T,C)
         q = self.query(x)  # (B,T,C)
         v = self.value(x)  # (B,T,C)
