@@ -1,8 +1,15 @@
+import numpy as np
 from tqdm import tqdm
 import torch
 
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.model.bigram_language_model import BigramLanguageModel
+
+
+def print_loss(losses, group):
+    mean_loss = np.mean(losses)
+    se = np.std(losses, ddof=1) / np.sqrt(len(losses))
+    print(f"{group} Mean Loss: {mean_loss:.3f} ± {se:.3f}")
 
 
 def generate_text():
@@ -31,8 +38,10 @@ if __name__ == "__main__":
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
-    for epoch in tqdm(range(1000)):
-        for b in data_handler.train_dataloader:
+    for _ in range(20):
+        train_losses = []
+        model.train()
+        for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
 
             logits, loss = model(xb[:, :-1], xb[:, 1:])
@@ -41,7 +50,18 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
 
-        if epoch % 100 == 0:
-            print(f"Loss after epoch {epoch}={loss.item()}")
+            train_losses.append(loss.item())
+
+        val_losses = []
+        model.eval()
+        for b in data_handler.val_dataloader:
+            xb = b[0].to(device)
+
+            _, loss = model(xb[:, :-1], xb[:, 1:])
+            val_losses.append(loss.item())
+
+        print("\n")
+        print_loss(train_losses, "Train")
+        print_loss(val_losses, "Val")
 
     generate_text()

@@ -17,6 +17,10 @@ class BigramLanguageModel(nn.Module):
             head_size=n_embeddings // n_heads,
             block_size=block_size,
         )
+        self.ff_net = nn.Sequential(
+            nn.Linear(n_embeddings, n_embeddings),
+            nn.ReLU(),
+        )
         self.lm_head = nn.Linear(n_embeddings, vocab_size)
 
         self.block_size = block_size
@@ -32,6 +36,7 @@ class BigramLanguageModel(nn.Module):
         )  # (T,C)
         x = token_embeddings + pos_embeddings
         x = self.sa_heads(x)
+        x = self.ff_net(x)
         logits = self.lm_head(x)
 
         if targets is None:
@@ -61,7 +66,7 @@ class BigramLanguageModel(nn.Module):
         return idx
 
     def generate_from_scratch(self):
-        idx = torch.zeros((1, self.block_size), dtype=torch.long)
+        idx = torch.ones((1, self.block_size), dtype=torch.long)
         for i in range(self.block_size - 1):
             # get the predictions
             logits, loss = self(idx)

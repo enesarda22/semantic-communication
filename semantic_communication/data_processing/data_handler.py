@@ -23,7 +23,7 @@ class DataHandler:
 
         self.train_size = 0.8
 
-    def load_data(self):
+    def load_data(self, with_encoder_output=False):
         text = []
         with open("IMDB Dataset.csv", mode="r") as file:
             csv_reader = csv.reader(file)
@@ -35,22 +35,25 @@ class DataHandler:
         self.vocab_size = self.tokenizer.vocab_size
 
         tokens = self.tokenizer(
-            text[:1000],
+            text[:],
             padding="max_length",
             max_length=self.max_length + 2,
             truncation=True,
             return_tensors="pt",
         ).to(self.device)
 
-        bert = AutoModel.from_pretrained(self.model_name).to(self.device)
-        bert.eval()
-        with torch.no_grad():
-            encoder_output = bert(**tokens)
+        if with_encoder_output:
+            bert = AutoModel.from_pretrained(self.model_name).to(self.device)
+            bert.eval()
+            with torch.no_grad():
+                encoder_output = bert(**tokens)
 
-        encoder_output = self.mean_pooling(
-            model_output=encoder_output,
-            attention_mask=tokens["attention_mask"],
-        )
+            encoder_output = self.mean_pooling(
+                model_output=encoder_output,
+                attention_mask=tokens["attention_mask"],
+            )
+        else:
+            encoder_output = torch.ones(tokens["input_ids"].shape[0], 100)
 
         self.encoder = LabelEncoder()
         input_ids = self.encoder.fit_transform(tokens["input_ids"][:, :-1].flatten())
