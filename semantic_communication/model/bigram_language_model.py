@@ -21,6 +21,7 @@ class BigramLanguageModel(nn.Module):
             nn.Linear(n_embeddings, 4 * n_embeddings),
             nn.ReLU(),
             nn.Linear(4 * n_embeddings, n_embeddings),  # projection
+            nn.Dropout(0.1),
         )
         self.ln1 = nn.LayerNorm(n_embeddings)
         self.ln2 = nn.LayerNorm(n_embeddings)

@@ -11,6 +11,8 @@ class SelfAttentionHead(nn.Module):
         self.value = nn.Linear(embedding_size, head_size, bias=False)
         self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
 
+        self.dropout = nn.Dropout(0.1)
+
     def forward(self, x):
         B, T, C = x.shape
 
@@ -21,6 +23,7 @@ class SelfAttentionHead(nn.Module):
         wei = q @ k.transpose(-2, -1) * C**-0.5  # (B,T,T)
         wei = wei.masked_fill(self.tril == 0, -torch.inf)  # (B,T,T)
         wei = F.softmax(wei, dim=-1)  # (B,T,T)
+        wei = self.dropout(wei)
 
         out = wei @ v  # (B,T,C)
         return out
