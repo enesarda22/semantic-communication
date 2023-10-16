@@ -22,6 +22,7 @@ if __name__ == "__main__":
 
     model = BigramLanguageModel(
         vocab_size=data_handler.vocab_size,
+        n_heads=4,
         n_embeddings=32,
         block_size=data_handler.max_length,
         device=device,
