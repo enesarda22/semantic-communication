@@ -4,6 +4,7 @@ from torch import nn
 from semantic_communication.model.self_attention_head import SelfAttentionHead
 
 
+# TODO: add multiple heads as another dimension
 class MultiHeadAttention(nn.Module):
     def __init__(self, n_heads, embedding_size, head_size, block_size):
         super().__init__()
