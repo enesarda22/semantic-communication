@@ -36,7 +36,7 @@ if __name__ == "__main__":
     )
     generate_text()
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
 
     for _ in range(20):
         train_losses = []
