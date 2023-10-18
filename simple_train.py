@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 
 from semantic_communication.data_processing.data_handler import DataHandler
-from semantic_communication.model.decoder import BigramLanguageModel
+from semantic_communication.model.decoder import Decoder
 
 
 def print_loss(losses, group):
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(device=device)
     data_handler.load_data(with_encoder_output=True)
 
-    model = BigramLanguageModel(
+    model = Decoder(
         vocab_size=data_handler.vocab_size,
         n_heads=4,
         n_embeddings=384,
