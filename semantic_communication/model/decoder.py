@@ -5,10 +5,12 @@ from torch.nn import functional as F
 from semantic_communication.model.multi_head_attention import MultiHeadAttention
 
 
-class BigramLanguageModel(nn.Module):
+class Decoder(nn.Module):
     def __init__(self, vocab_size, n_heads, n_embeddings, block_size, device):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
+
+        # TODO: change this to cosine sine embeddings
         self.position_embedding_table = nn.Embedding(block_size, n_embeddings)
 
         self.sa_heads = MultiHeadAttention(
@@ -31,11 +33,13 @@ class BigramLanguageModel(nn.Module):
         self.block_size = block_size
         self.device = device
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, encoder_output, targets=None):
         # idx and targets are both (B,T) tensor of integers
         B, T = idx.shape
 
         token_embeddings = self.token_embedding_table(idx)  # (B,T,C)
+        token_embeddings[:, 0, :] = encoder_output
+
         pos_embeddings = self.position_embedding_table(
             torch.arange(T, device=self.device)
         )  # (T,C)
@@ -72,17 +76,21 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)  # (B, T+1)
         return idx
 
-    def generate_from_scratch(self):
-        idx = torch.ones((1, self.block_size), dtype=torch.long)
+    def generate_from_scratch(self, encoder_output, sample=True):
+        idx = torch.ones((encoder_output.shape[0], self.block_size), dtype=torch.long)
         for i in range(self.block_size - 1):
             # get the predictions
-            logits, loss = self(idx)
+            logits, loss = self(idx, encoder_output)
             # generate new token
             logits = logits[:, i, :]  # becomes (B, C)
             # apply softmax to get probabilities
             probs = F.softmax(logits, dim=-1)  # (B, C)
-            # sample from the distribution
-            idx_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            idx[0, i + 1] = idx_next
+
+            if sample:
+                idx_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
+            else:
+                idx_next = torch.argmax(probs, dim=1)
+
+            idx[:, i + 1] = idx_next
 
         return idx

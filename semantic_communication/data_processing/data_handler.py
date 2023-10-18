@@ -35,7 +35,7 @@ class DataHandler:
         self.vocab_size = self.tokenizer.vocab_size
 
         tokens = self.tokenizer(
-            text[:],
+            text[:40000],
             padding="max_length",
             max_length=self.max_length + 2,
             truncation=True,
