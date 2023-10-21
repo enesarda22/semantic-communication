@@ -11,7 +11,11 @@ class DataHandler:
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
     max_length = 10
 
-    def __init__(self, device):
+    def __init__(
+        self,
+        device,
+        data_size=40000,
+    ):
         self.device = device
 
         self.tokenizer = None
@@ -19,8 +23,8 @@ class DataHandler:
         self.train_dataloader = None
         self.val_dataloader = None
 
+        self.data_size = data_size
         self.batch_size = 32
-
         self.train_size = 0.8
 
     def load_data(self, with_encoder_output=False):
@@ -35,7 +39,7 @@ class DataHandler:
         self.vocab_size = self.tokenizer.vocab_size
 
         tokens = self.tokenizer(
-            text[:40000],
+            text[: self.data_size],
             padding="max_length",
             max_length=self.max_length + 2,
             truncation=True,
