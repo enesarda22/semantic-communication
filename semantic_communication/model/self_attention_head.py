@@ -14,6 +14,7 @@ class SelfAttentionHead(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
+        # TODO: add attention mask
         k = self.key(x)  # (B,T,C)
         q = self.query(x)  # (B,T,C)
         v = self.value(x)  # (B,T,C)

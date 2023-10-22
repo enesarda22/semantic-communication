@@ -8,11 +8,6 @@ from semantic_communication.model.multi_head_attention import MultiHeadAttention
 class Decoder(nn.Module):
     def __init__(self, vocab_size, n_heads, n_embeddings, block_size, device):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
-
-        # TODO: change this to cosine sine embeddings
-        self.position_embedding_table = nn.Embedding(block_size, n_embeddings)
-
         self.sa_heads = MultiHeadAttention(
             n_heads=n_heads,
             embedding_size=n_embeddings,
@@ -33,20 +28,9 @@ class Decoder(nn.Module):
         self.block_size = block_size
         self.device = device
 
-    def forward(self, idx, encoder_output, targets=None):
-        # idx and targets are both (B,T) tensor of integers
-        B, T = idx.shape
-
-        token_embeddings = self.token_embedding_table(idx)  # (B,T,C)
-        token_embeddings[:, 0, :] = encoder_output
-
-        pos_embeddings = self.position_embedding_table(
-            torch.arange(T, device=self.device)
-        )  # (T,C)
-        x = token_embeddings + pos_embeddings
-
+    def forward(self, encoder_output, targets=None):
         # residual connection after the layer, norm before the layer
-        x = x + self.sa_heads(self.ln1(x))
+        x = encoder_output + self.sa_heads(self.ln1(encoder_output))
         x = x + self.ff_net(self.ln2(x))
         logits = self.lm_head(self.ln3(x))
 
@@ -60,37 +44,22 @@ class Decoder(nn.Module):
 
         return logits, loss
 
-    def generate(self, idx, max_new_tokens):
-        # idx is (B, T) array of indices in the current context
-        for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.block_size :]
-            # get the predictions
-            logits, loss = self(idx_cond)
-            # focus only on the last time step
-            logits = logits[:, -1, :]  # becomes (B, C)
-            # apply softmax to get probabilities
-            probs = F.softmax(logits, dim=-1)  # (B, C)
-            # sample from the distribution
-            idx_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            # append sampled index to the running sequence
-            idx = torch.cat((idx, idx_next), dim=1)  # (B, T+1)
-        return idx
+    def generate(self, encoder_output, sample=True):
+        B, T, C = encoder_output.shape
 
-    def generate_from_scratch(self, encoder_output, sample=True):
-        idx = torch.ones((encoder_output.shape[0], self.block_size), dtype=torch.long)
-        for i in range(self.block_size - 1):
-            # get the predictions
-            logits, loss = self(idx, encoder_output)
-            # generate new token
-            logits = logits[:, i, :]  # becomes (B, C)
-            # apply softmax to get probabilities
-            probs = F.softmax(logits, dim=-1)  # (B, C)
+        padded_encoder_output = torch.ones((B, self.block_size, C))
+        padded_encoder_output[:, :T, :] = encoder_output
 
-            if sample:
-                idx_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            else:
-                idx_next = torch.argmax(probs, dim=1)
+        # get the predictions
+        logits, _ = self(padded_encoder_output)  # (B, T, C)
+        # generate new token
+        logits = logits[:, T - 1, :]  # (B, C)
+        # apply softmax to get probabilities
+        probs = F.softmax(logits, dim=-1)  # (B, C)
 
-            idx[:, i + 1] = idx_next
+        if sample:
+            idx_next = torch.multinomial(probs, num_samples=1)
+        else:
+            idx_next = torch.argmax(probs, dim=1)
 
-        return idx
+        return idx_next  # (B, 1)
