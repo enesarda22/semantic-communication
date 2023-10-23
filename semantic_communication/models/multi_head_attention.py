@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from semantic_communication.model.self_attention_head import SelfAttentionHead
+from semantic_communication.models.self_attention_head import SelfAttentionHead
 
 
 # TODO: add multiple heads as another dimension

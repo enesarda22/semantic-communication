@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from semantic_communication.model.multi_head_attention import MultiHeadAttention
+from semantic_communication.models.multi_head_attention import MultiHeadAttention
 
 
-class Decoder(nn.Module):
+class SemanticDecoder(nn.Module):
     def __init__(self, vocab_size, n_heads, n_embeddings, block_size, device):
         super().__init__()
         self.sa_heads = MultiHeadAttention(
@@ -44,7 +44,7 @@ class Decoder(nn.Module):
 
         return logits, loss
 
-    def generate(self, encoder_output, sample=True):
+    def generate(self, encoder_output, sample=False):
         B, T, C = encoder_output.shape
 
         padded_encoder_output = torch.ones((B, self.block_size, C))
