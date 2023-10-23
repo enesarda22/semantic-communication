@@ -3,18 +3,20 @@ from typing import List
 from torch import nn
 from transformers import BertModel
 
+from semantic_communication.utils.channel import Channel
+
 
 class Transceiver(nn.Module):  # TODO: find a cooler name
     def __init__(
         self,
-        channel1: Channel,
-        channel2: Channel,
-        channel3: Channel,
+        tx_relay_ch: Channel,
+        relay_rcv_ch: Channel,
+        tx_rcv_ch: Channel,
     ):
         super().__init__()
-        self.channel1 = channel1
-        self.channel2 = channel2
-        self.channel3 = channel3
+        self.tx_relay_ch = tx_relay_ch
+        self.relay_rcv_ch = relay_rcv_ch
+        self.tx_rcv_ch = tx_rcv_ch
 
         self.transmitter = Transmitter()
         self.relay = Relay()
@@ -23,10 +25,9 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
     def forward(self, s):
         x = self.transmitter(s)  # B, T, C
 
-        y1 = self.channel1(x[:, :-1, :])
-        y2 = self.relay(y1)
-
-        y3 = self.receiver(x[:, 1:, :])
+        y1 = self.tx_relay_ch(x[:, :-1, :])
+        y2 = self.relay_rcv_ch(self.relay(y1))
+        y3 = self.tx_rcv_ch(x[:, 1:, :])
         y4 = y2 + y3  # superposition
 
         s_hat = self.receiver(y4)
