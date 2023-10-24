@@ -1,9 +1,13 @@
-import numpy as np
-from tqdm import tqdm
 import torch
+from tqdm import tqdm
+from torch import nn
+import numpy as np
 
-from semantic_communication.models.channel_enc_dec import *
-from semantic_communication.utils.channel import *
+from semantic_communication.models.channel_enc_dec import (
+    Channel_Encoder,
+    Channel_Decoder,
+)
+from semantic_communication.utils.channel import AWGN, Rayleigh
 from semantic_communication.data_processing.data_handler import DataHandler
 
 
@@ -21,17 +25,16 @@ if __name__ == "__main__":
 
     # TX - RELAY
     class tx_relay(nn.Module):
-        def __init__(self, SNR, sig_pow):
+        def __init__(self, SNR, sig_pow):  # TODO: take channel as input
             super(tx_relay, self).__init__()
 
-            self.tx_encoder = Channel_Encoder(364, 128)
+            self.tx_encoder = Channel_Encoder(384, 128)
 
-            self.relay_decoder = Channel_Decoder(128, 364)
-            self.channel = AWGN(SNR, sig_pow)
+            self.relay_decoder = Channel_Decoder(128, 384)
+            self.channel = Rayleigh(SNR, sig_pow)
 
         def forward(self, x):
             return self.relay_decoder(self.channel(self.tx_encoder(x)))
-
 
     tx_relay_model = tx_relay(1, 1)
     optimizer = torch.optim.AdamW(tx_relay_model.parameters(), lr=1e-4)
@@ -73,12 +76,14 @@ if __name__ == "__main__":
         def __init__(self, SNR_TX_RX, SNR_REL_RX, sig_pow_TX_RX, sig_pow_REL_RX):
             super(tx_relay_rx, self).__init__()
 
-            self.tx_encoder = Channel_Encoder(364, 128)
-            self.tx_encoder.load_state_dict(tx_relay_model.tx_encoder.state_dict())  # load decoder of TX enc
+            self.tx_encoder = Channel_Encoder(384, 128)
+            self.tx_encoder.load_state_dict(
+                tx_relay_model.tx_encoder.state_dict()
+            )  # load decoder of TX enc
 
-            self.relay_encoder = Channel_Encoder(364, 128)
+            self.relay_encoder = Channel_Encoder(384, 128)
 
-            self.rx_decoder = Channel_Decoder(128, 364)
+            self.rx_decoder = Channel_Decoder(128, 384)
 
             self.channel_tx_rx = AWGN(SNR_TX_RX, sig_pow_TX_RX)
             self.channel_rel_rx = AWGN(SNR_REL_RX, sig_pow_REL_RX)
@@ -87,10 +92,9 @@ if __name__ == "__main__":
             y1 = self.channel_tx_rx(self.tx_encoder(x1))
             y2 = self.channel_rel_rx(self.relay_encoder(x2))
 
-            return self.rx_decoder(y1+y2)
+            return self.rx_decoder(y1 + y2)
 
-
-    tx_relay_rx_model = tx_relay_rx(1, 1,1, 1)
+    tx_relay_rx_model = tx_relay_rx(1, 1, 1, 1)
     optimizer = torch.optim.AdamW(tx_relay_rx_model.parameters(), lr=1e-4)
     criterion = nn.MSELoss()
 
@@ -124,9 +128,3 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
     # torch.save(model.state_dict(), "relay_rx_model.pt")
-
-
-
-
-
-

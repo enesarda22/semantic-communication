@@ -76,17 +76,4 @@ class Receiver(nn.Module):
         return s
 
 
-class ChannelDecoder(nn.Module):
-    def __init__(self, input_size, output_size):
-        super().__init__()
-
-    def forward(self):
-        pass
-
-
-class ChannelEncoder(nn.Module):
-    def __init__(self, input_size, output_size):
-        super().__init__()
-
-    def forward(self):
-        pass
+# TODO: channel encoder decoder goes here

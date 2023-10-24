@@ -13,7 +13,11 @@ class Channel_Enc_Comp(nn.Module):
         self.prelu = nn.PReLU()
 
     def forward(self, x):
-        return self.prelu(self.bn(self.linear(x)))
+        x = self.linear(x).transpose(1, 2)
+        x = self.bn(x).transpose(1, 2)
+
+        out = self.prelu(x)
+        return out
 
 
 class Channel_Encoder(nn.Module):
@@ -26,7 +30,9 @@ class Channel_Encoder(nn.Module):
         for i in range(up_dim - low_dim + 1):
             dims.append(np.power(4, up_dim - i))
 
-        self.layers = nn.ModuleList([Channel_Enc_Comp(dims[i], dims[i+1]) for i in range(len(dims)-1)])
+        self.layers = nn.ModuleList(
+            [Channel_Enc_Comp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+        )
 
         self.linear = nn.Linear(dims[-1], nout)
 
@@ -47,7 +53,9 @@ class Channel_Decoder(nn.Module):
         for i in range(up_dim - low_dim + 1):
             dims.append(np.power(4, low_dim + i))
 
-        self.layers = nn.ModuleList([Channel_Enc_Comp(dims[i], dims[i+1]) for i in range(len(dims)-1)])
+        self.layers = nn.ModuleList(
+            [Channel_Enc_Comp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+        )
 
         self.linear = nn.Linear(dims[-1], nout)
 
