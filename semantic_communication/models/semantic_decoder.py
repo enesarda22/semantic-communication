@@ -52,14 +52,16 @@ class SemanticDecoder(nn.Module):
 
         # get the predictions
         logits, _ = self(padded_encoder_output)  # (B, T, C)
-        # generate new token
-        logits = logits[:, T - 1, :]  # (B, C)
         # apply softmax to get probabilities
         probs = F.softmax(logits, dim=-1)  # (B, C)
 
         if sample:
-            idx_next = torch.multinomial(probs, num_samples=1)
+            idx_next = torch.multinomial(
+                probs.view(B * self.block_size, -1),
+                num_samples=1,
+            )
+            idx_next = idx_next.reshape(B, -1)
         else:
-            idx_next = torch.argmax(probs, dim=1)
+            idx_next = torch.argmax(probs, dim=-1)
 
-        return idx_next  # (B, 1)
+        return idx_next[:, :T]  # (B, T)

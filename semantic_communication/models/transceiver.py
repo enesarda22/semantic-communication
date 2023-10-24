@@ -1,8 +1,11 @@
 from typing import List
 
+import torch
 from torch import nn
 from transformers import BertModel
 
+from semantic_communication.data_processing.data_handler import DataHandler
+from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.utils.channel import Channel
 
 
@@ -48,20 +51,37 @@ class Transmitter(nn.Module):
 
 
 class Relay(nn.Module):
-    def __init__(self, semantic_encoder: BertModel):
+    def __init__(
+        self,
+        semantic_encoder: BertModel,
+        semantic_decoder: SemanticDecoder,
+    ):
         super().__init__()
         self.semantic_encoder = semantic_encoder
-        # TODO: initialize semantic decoder, channel decoder, channel encoder
+        self.semantic_decoder = semantic_decoder
 
     def forward(self, x):
-        x = self.channel_decoder(x)  # decode the current token
-        s_hat = self.semantic_decoder.generate(x)  # predict next token
+        self.semantic_decoder.eval()
+        with torch.no_grad():
+            predicted_ids = self.semantic_decoder.generate(x)
 
-        # encoding
-        x = self.semantic_encoder(s_hat)
-        x1 = self.channel_encoder(x)
+        begin_padding = torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
+        end_padding = 2 * torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
+        predicted_ids = torch.cat((begin_padding, predicted_ids, end_padding), dim=1)
 
-        return x1
+        relay_output = self.semantic_encoder(input_ids=predicted_ids)
+        bert_lhs = relay_output["last_hidden_state"]
+
+        mean_pooling_out = DataHandler.mean_pooling(
+            bert_lhs=bert_lhs,
+            attention_mask=torch.ones(bert_lhs.shape[:-1]),
+        )
+
+        out = torch.cat(
+            tensors=(mean_pooling_out.unsqueeze(1), bert_lhs[:, 1:, :]),
+            dim=1,
+        )
+        return out[:, 1:-1, :]
 
 
 class Receiver(nn.Module):
