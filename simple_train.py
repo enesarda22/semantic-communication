@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 
 from semantic_communication.data_processing.data_handler import DataHandler
-from semantic_communication.model.decoder import Decoder
+from semantic_communication.models.semantic_decoder import SemanticDecoder
 
 
 def print_loss(losses, group):
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(device=device)
     data_handler.load_data()
 
-    model = Decoder(
+    model = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_heads=4,
         n_embeddings=384,
