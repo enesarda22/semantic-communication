@@ -64,11 +64,10 @@ class DataHandler:
 
     @staticmethod
     def mean_pooling(bert_lhs, attention_mask):
-        token_embeddings = bert_lhs
         input_mask_expanded = (
-            attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            attention_mask.unsqueeze(-1).expand(bert_lhs.size()).float()
         )
-        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+        return torch.sum(bert_lhs * input_mask_expanded, 1) / torch.clamp(
             input_mask_expanded.sum(1), min=1e-9
         )
 

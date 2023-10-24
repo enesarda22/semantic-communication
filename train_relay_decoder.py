@@ -24,7 +24,7 @@ if __name__ == "__main__":
         n_embeddings=384,
         block_size=data_handler.max_length,
         device=device,
-    )
+    ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     for _ in range(10):
@@ -48,11 +48,12 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             encoder_output = b[1].to(device)
 
-            _, loss = model(encoder_output[:, :-2, :], xb[:, 1:])
+            with torch.no_grad():
+                _, loss = model(encoder_output[:, :-2, :], xb[:, 1:])
             val_losses.append(loss.item())
 
         print("\n")
         print_loss(train_losses, "Train")
         print_loss(val_losses, "Val")
 
-    torch.save(model.state_dict(), "model.pt")
+    torch.save(model.state_dict(), "relay_decoder.pt")
