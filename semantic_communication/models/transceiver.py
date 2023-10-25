@@ -69,6 +69,7 @@ class Relay(nn.Module):
         end_padding = 2 * torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
         predicted_ids = torch.cat((begin_padding, predicted_ids, end_padding), dim=1)
 
+        # TODO: all this should be done in semantic encoder
         relay_output = self.semantic_encoder(input_ids=predicted_ids)
         bert_lhs = relay_output["last_hidden_state"]
 
