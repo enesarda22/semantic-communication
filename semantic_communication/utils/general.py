@@ -28,8 +28,8 @@ def print_loss(losses, group):
     print(f"{group} Mean Loss: {mean_loss:.3f} ± {se:.3f}")
 
 
-def create_checkpoint(model, path, **kwargs):
+def create_checkpoint(path, **kwargs):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    torch.save({"state_dict": model.state_dict(), **kwargs}, p)
+    torch.save({**kwargs}, p)

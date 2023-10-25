@@ -43,7 +43,7 @@ if __name__ == "__main__":
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     best_loss = 10
-    for i_epoch in range(10):
+    for epoch in range(10):
         train_losses = []
         model.train()
         for b in tqdm(data_handler.train_dataloader):
@@ -75,8 +75,9 @@ if __name__ == "__main__":
         mean_loss = np.mean(val_losses)
         if mean_loss < best_loss:
             create_checkpoint(
-                model=model,
-                mean_loss=mean_loss,
-                path=os.path.join(args.checkpoint_path, f"relay_decoder_{i_epoch}.pt"),
+                path=os.path.join(args.checkpoint_path, f"relay_decoder_{epoch}.pt"),
+                model_state_dict=model.state_dict(),
+                optimizer_state_dict=optimizer.state_dict(),
+                mean_val_loss=mean_loss,
             )
             best_loss = mean_loss
