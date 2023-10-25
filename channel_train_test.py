@@ -25,16 +25,17 @@ if __name__ == "__main__":
 
     # TX - RELAY
     class tx_relay(nn.Module):
-        def __init__(self, SNR, sig_pow):  # TODO: take channel as input
+        def __init__(self, Channel):
             super(tx_relay, self).__init__()
 
             self.tx_encoder = Channel_Encoder(384, 128)
 
             self.relay_decoder = Channel_Decoder(128, 384)
-            self.channel = Rayleigh(SNR, sig_pow)
+            self.channel = Channel
 
         def forward(self, x):
             return self.relay_decoder(self.channel(self.tx_encoder(x)))
+
 
     tx_relay_model = tx_relay(1, 1)
     optimizer = torch.optim.AdamW(tx_relay_model.parameters(), lr=1e-4)
@@ -73,7 +74,7 @@ if __name__ == "__main__":
 
     # TX-ENC, RELAY-ENC - RX-DEC
     class tx_relay_rx(nn.Module):
-        def __init__(self, SNR_TX_RX, SNR_REL_RX, sig_pow_TX_RX, sig_pow_REL_RX):
+        def __init__(self, Channel1, Channel2):
             super(tx_relay_rx, self).__init__()
 
             self.tx_encoder = Channel_Encoder(384, 128)
@@ -85,8 +86,8 @@ if __name__ == "__main__":
 
             self.rx_decoder = Channel_Decoder(128, 384)
 
-            self.channel_tx_rx = AWGN(SNR_TX_RX, sig_pow_TX_RX)
-            self.channel_rel_rx = AWGN(SNR_REL_RX, sig_pow_REL_RX)
+            self.channel_tx_rx = Channel1
+            self.channel_rel_rx = Channel2
 
         def forward(self, x1, x2):
             y1 = self.channel_tx_rx(self.tx_encoder(x1))
