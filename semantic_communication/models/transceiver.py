@@ -65,9 +65,12 @@ class Relay(nn.Module):
         with torch.no_grad():
             predicted_ids = self.semantic_decoder.generate(x)
 
-        begin_padding = torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
-        end_padding = 2 * torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
-        predicted_ids = torch.cat((begin_padding, predicted_ids, end_padding), dim=1)
+        begin_padding = torch.full((predicted_ids.shape[0], 1), 1)
+        end_padding = torch.full((predicted_ids.shape[0], 1), 2)
+        predicted_ids = torch.cat(
+            tensors=(begin_padding, predicted_ids, end_padding),
+            dim=1,
+        )
 
         # TODO: all this should be done in semantic encoder
         relay_output = self.semantic_encoder(input_ids=predicted_ids)
