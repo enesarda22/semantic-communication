@@ -6,20 +6,20 @@ import torch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, SequentialSampler
-from transformers import AutoTokenizer, AutoModel
+
+from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.utils.general import get_device, RANDOM_STATE
 
 
 class DataHandler:
     data_filename = "IMDB Dataset.csv"
-    max_length = 10
-    model_name = "sentence-transformers/all-MiniLM-L6-v2"
 
-    def __init__(self, device):
-        self.device = device
+    def __init__(self, semantic_encoder: SemanticEncoder):
+        self.device = get_device()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.vocab_size = self.tokenizer.vocab_size
+        self.semantic_encoder = semantic_encoder
 
+        self.vocab_size = None
         self.encoder = None
         self.train_dataloader = None
         self.val_dataloader = None
@@ -29,14 +29,19 @@ class DataHandler:
         self.train_size = 0.8
 
     def load_data(self):
-        text = self.load_text()
-        tokens = self.tokenize(text=text)
-        encoder_output = self.load_encoder_output(tokens=tokens)
+        messages = self.load_text()
+        tokens = self.semantic_encoder.tokenize(messages=messages)
+
+        encoder_output = self.semantic_encoder(
+            input_ids=tokens["input_ids"],
+            attention_mask=tokens["attention_mask"],
+        )
 
         self.encoder = LabelEncoder()
-        input_ids = self.encoder.fit_transform(tokens["input_ids"][:, :-1].flatten())
-        input_ids = torch.LongTensor(input_ids.reshape(-1, self.max_length + 1))
+        self.encoder.fit(tokens["input_ids"][:, :-1].flatten())
         self.vocab_size = len(self.encoder.classes_)
+
+        input_ids = self.encode_tokens(tokens["input_ids"][:, :-1].flatten())
 
         (
             train_input_ids,
@@ -47,7 +52,7 @@ class DataHandler:
             input_ids,
             encoder_output,
             train_size=self.train_size,
-            random_state=42,
+            random_state=RANDOM_STATE,
         )
 
         train_data = TensorDataset(train_input_ids, train_encoder_outputs)
@@ -62,56 +67,45 @@ class DataHandler:
             val_data, sampler=val_sampler, batch_size=self.batch_size
         )
 
-    @staticmethod
-    def mean_pooling(bert_lhs, attention_mask):
-        input_mask_expanded = (
-            attention_mask.unsqueeze(-1).expand(bert_lhs.size()).float()
-        )
-        return torch.sum(bert_lhs * input_mask_expanded, 1) / torch.clamp(
-            input_mask_expanded.sum(1), min=1e-9
-        )
-
-    @classmethod
-    def load_text(cls) -> List[str]:
+    def load_text(self) -> List[str]:
         text = []
-        with open(cls.data_filename, mode="r") as file:
+        with open(self.data_filename, mode="r") as file:
             csv_reader = csv.reader(file)
-            for line in csv_reader:
+            for i, line in enumerate(csv_reader):
+                if i > self.n_samples:
+                    break
                 text.append(line[0])
-        text = text[1:]
 
+        text = text[1:]
         return text
 
-    def tokenize(self, text: List[str]):
-        return self.tokenizer(
-            text[: self.n_samples],
-            padding="max_length",
-            max_length=self.max_length + 2,
-            truncation=True,
-            return_tensors="pt",
-        ).to(self.device)
-
-    def load_encoder_output(self, tokens):
-        bert = AutoModel.from_pretrained(self.model_name).to(self.device)
-        bert.eval()
-        with torch.no_grad():
-            bert_output = bert(**tokens)
-
-        bert_lhs = bert_output["last_hidden_state"]
-        mean_pooling_output = self.mean_pooling(
-            bert_lhs=bert_lhs,
-            attention_mask=tokens["attention_mask"],
-        )
-        encoder_output = torch.cat(
-            tensors=(mean_pooling_output.unsqueeze(1), bert_lhs[:, 1:, :]),
-            dim=1,
-        )
-
-        return encoder_output
+    # TODO: remove
+    # def load_encoder_output(self, tokens):
+    #     bert.eval()
+    #     with torch.no_grad():
+    #         bert_output = bert(**tokens)
+    #
+    #     bert_lhs = bert_output["last_hidden_state"]
+    #     mean_pooling_output = self.mean_pooling(
+    #         bert_lhs=bert_lhs,
+    #         attention_mask=tokens["attention_mask"],
+    #     )
+    #     encoder_output = torch.cat(
+    #         tensors=(mean_pooling_output.unsqueeze(1), bert_lhs[:, 1:, :]),
+    #         dim=1,
+    #     )
+    #
+    #     return encoder_output
 
     def get_tokens(self, ids):
         token_ids = self.encoder.inverse_transform(ids.flatten())
         token_ids = token_ids.reshape(ids.shape)
 
-        tokens = [self.tokenizer.decode(t) for t in token_ids]
+        tokens = [self.semantic_encoder.tokenizer.decode(t) for t in token_ids]
         return tokens
+
+    def encode_tokens(self, tokens):
+        ids = self.encoder.transform(tokens)
+        ids = torch.LongTensor(ids.reshape(-1, self.semantic_encoder.max_length + 1))
+
+        return ids

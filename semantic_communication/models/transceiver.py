@@ -5,8 +5,8 @@ import torch
 from torch import nn
 from transformers import BertModel
 
-from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
+from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.channel import Channel
 
 
@@ -54,7 +54,7 @@ class Transmitter(nn.Module):
 class Relay(nn.Module):
     def __init__(
         self,
-        semantic_encoder: BertModel,
+        semantic_encoder: SemanticEncoder,
         semantic_decoder: SemanticDecoder,
     ):
         super().__init__()
@@ -73,26 +73,14 @@ class Relay(nn.Module):
             dim=1,
         )
 
-        # TODO: all this should be done in semantic encoder
-        relay_output = self.semantic_encoder(input_ids=predicted_ids)
-        bert_lhs = relay_output["last_hidden_state"]
-
-        mean_pooling_out = DataHandler.mean_pooling(
-            bert_lhs=bert_lhs,
-            attention_mask=torch.ones(bert_lhs.shape[:-1]),
-        )
-
-        out = torch.cat(
-            tensors=(mean_pooling_out.unsqueeze(1), bert_lhs[:, 1:, :]),
-            dim=1,
-        )
+        out = self.semantic_encoder(input_ids=predicted_ids)
         return out[:, 1:-1, :]
 
 
 class Receiver(nn.Module):
     def __init__(self):
         super().__init__()
-        self.channel_decoder = ChannelDecoder(128,384)
+        self.channel_decoder = ChannelDecoder(128, 384)
         # TODO: initialize semantic decoder
 
     def forward(self, y):

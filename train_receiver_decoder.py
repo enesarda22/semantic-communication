@@ -1,35 +1,36 @@
 import torch
 from tqdm import tqdm
-from transformers import AutoModel
 
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
+from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.models.transceiver import Relay
-from train_relay_decoder import print_loss
+from semantic_communication.utils.general import get_device, print_loss
 
 if __name__ == "__main__":
-    device = torch.device("cpu")
+    device = get_device()
 
-    data_handler = DataHandler(device=device)
+    semantic_encoder = SemanticEncoder(max_length=10)
+    data_handler = DataHandler(semantic_encoder=semantic_encoder)
     data_handler.load_data()
 
-    bert = AutoModel.from_pretrained(data_handler.model_name).to(device)
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_heads=4,
         n_embeddings=384,
-        block_size=data_handler.max_length,
-        device=device,
+        block_size=semantic_encoder.max_length,
     ).to(device)
     relay_decoder.load_state_dict(torch.load("relay_decoder.pt"))
-    relay = Relay(semantic_encoder=bert, semantic_decoder=relay_decoder)
+    relay = Relay(
+        semantic_encoder=semantic_encoder,
+        semantic_decoder=relay_decoder,
+    )
 
     receiver_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_heads=4,
         n_embeddings=384,
-        block_size=data_handler.max_length,
-        device=device,
+        block_size=semantic_encoder.max_length,
     ).to(device)
     optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=1e-4)
 

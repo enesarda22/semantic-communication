@@ -6,7 +6,7 @@ from semantic_communication.models.multi_head_attention import MultiHeadAttentio
 
 
 class SemanticDecoder(nn.Module):
-    def __init__(self, vocab_size, n_heads, n_embeddings, block_size, device):
+    def __init__(self, vocab_size, n_heads, n_embeddings, block_size):
         super().__init__()
         self.sa_heads = MultiHeadAttention(
             n_heads=n_heads,
@@ -26,7 +26,6 @@ class SemanticDecoder(nn.Module):
         self.lm_head = nn.Linear(n_embeddings, vocab_size)
 
         self.block_size = block_size
-        self.device = device
 
     def forward(self, encoder_output, targets=None):
         # residual connection after the layer, norm before the layer
