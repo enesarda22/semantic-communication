@@ -19,6 +19,7 @@ class SelfAttentionHead(nn.Module):
         q = self.query(x)  # (B,T,C)
         v = self.value(x)  # (B,T,C)
 
+        # TODO: allow tokens to communicate with future tokens
         wei = q @ k.transpose(-2, -1) * (v.shape[2] ** -0.5)  # (B,T,T)
         wei = wei.masked_fill(self.tril == 0, -torch.inf)  # (B,T,T)
         wei = F.softmax(wei, dim=-1)  # (B,T,T)
