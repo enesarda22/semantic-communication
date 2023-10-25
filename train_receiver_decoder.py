@@ -57,8 +57,11 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             encoder_output = b[1].to(device)
 
+            relay_out = relay(encoder_output[:, :-2, :])
+            superposed_out = relay_out + encoder_output[:, 1:-1, :]
+
             with torch.no_grad():
-                _, loss = receiver_decoder(encoder_output[:, :-2, :], xb[:, 1:])
+                _, loss = receiver_decoder(superposed_out, xb[:, 1:])
             val_losses.append(loss.item())
 
         print("\n")
