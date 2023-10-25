@@ -56,7 +56,7 @@ class SemanticEncoder:
     @staticmethod
     def mean_pooling(bert_lhs, attention_mask=None):
         if attention_mask is None:
-            out = torch.mean(bert_lhs, 1)  # TODO: test
+            out = torch.mean(bert_lhs, 1)
 
         else:
             input_mask_expanded = (
