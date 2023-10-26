@@ -3,9 +3,9 @@ from tqdm import tqdm
 from torch import nn
 import numpy as np
 
-from semantic_communication.models.channel_enc_dec import (
-    Channel_Encoder,
-    Channel_Decoder,
+from semantic_communication.models.transceiver import (
+    ChannelEncoder,
+    ChannelDecoder,
 )
 from semantic_communication.utils.channel import AWGN, Rayleigh
 from semantic_communication.data_processing.data_handler import DataHandler
@@ -23,21 +23,32 @@ if __name__ == "__main__":
     data_handler = DataHandler(device=device)
     data_handler.load_data()
 
+    SNR_tx_relay =  1
+    SNR_relay_rx =  1
+    SNR_tx_rx =  1
+
+    sig_pow = 1.0
+
+    tx_relay_channel = AWGN(SNR_tx_relay, sig_pow)
+    relay_rx_channel = AWGN(SNR_relay_rx, sig_pow)
+    tx_rx_channel = AWGN(SNR_tx_rx, sig_pow)
+
     # TX - RELAY
     class tx_relay(nn.Module):
         def __init__(self, Channel):
             super(tx_relay, self).__init__()
 
-            self.tx_encoder = Channel_Encoder(384, 128)
+            self.tx_encoder = ChannelEncoder(384, 128)
 
-            self.relay_decoder = Channel_Decoder(128, 384)
+            self.relay_decoder = ChannelDecoder(128, 384)
             self.channel = Channel
 
         def forward(self, x):
             return self.relay_decoder(self.channel(self.tx_encoder(x)))
 
 
-    tx_relay_model = tx_relay(1, 1)
+    tx_relay_model = tx_relay(tx_relay_channel)
+
     optimizer = torch.optim.AdamW(tx_relay_model.parameters(), lr=1e-4)
     criterion = nn.MSELoss()
 
@@ -77,14 +88,14 @@ if __name__ == "__main__":
         def __init__(self, Channel1, Channel2):
             super(tx_relay_rx, self).__init__()
 
-            self.tx_encoder = Channel_Encoder(384, 128)
+            self.tx_encoder = ChannelEncoder(384, 128)
             self.tx_encoder.load_state_dict(
                 tx_relay_model.tx_encoder.state_dict()
             )  # load decoder of TX enc
 
-            self.relay_encoder = Channel_Encoder(384, 128)
+            self.relay_encoder = ChannelEncoder(384, 128)
 
-            self.rx_decoder = Channel_Decoder(128, 384)
+            self.rx_decoder = ChannelDecoder(128, 384)
 
             self.channel_tx_rx = Channel1
             self.channel_rel_rx = Channel2
@@ -95,7 +106,7 @@ if __name__ == "__main__":
 
             return self.rx_decoder(y1 + y2)
 
-    tx_relay_rx_model = tx_relay_rx(1, 1, 1, 1)
+    tx_relay_rx_model = tx_relay_rx(tx_rx_channel, relay_rx_channel)
     optimizer = torch.optim.AdamW(tx_relay_rx_model.parameters(), lr=1e-4)
     criterion = nn.MSELoss()
 
@@ -128,4 +139,8 @@ if __name__ == "__main__":
         print_loss(train_losses, "Train")
         print_loss(val_losses, "Val")
 
-    # torch.save(model.state_dict(), "relay_rx_model.pt")
+    torch.save(tx_relay_rx_model.tx_encoder.state_dict(), "tx_channel_encoder.pt")
+    torch.save(tx_relay_rx_model.relay_encoder.state_dict(), "relay_channel_encoder.pt")
+    torch.save(tx_relay_rx_model.rx_decoder.state_dict(), "rx_channel_decoder.pt")
+    torch.save(tx_relay_model.relay_decoder.state_dict(), "relay_channel_decoder.pt")
+
