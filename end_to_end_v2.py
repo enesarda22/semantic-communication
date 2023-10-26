@@ -57,23 +57,13 @@ if __name__ == "__main__":
     SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max, args.SNR_step))
 
     if args.channel_type == "AWGN":
-        # TX-RX Channel
         tx_rx_channel = AWGN(SNR_dB[0] - args.SNR_diff, args.sig_pow)
-
-        # TX-Relay Channel
         tx_relay_channel = AWGN(SNR_dB[0], args.sig_pow)
-
-        # Relay-RX Channel
         relay_rx_channel = AWGN(SNR_dB[0], args.sig_pow)
 
     else:
-        # TX-RX Channel
         tx_rx_channel = Rayleigh(SNR_dB[0] - args.SNR_diff, args.sig_pow)
-
-        # TX-Relay Channel
         tx_relay_channel = Rayleigh(SNR_dB[0], args.sig_pow)
-
-        # Relay-RX Channel
         relay_rx_channel = Rayleigh(SNR_dB[0], args.sig_pow)
 
     relay_decoder = SemanticDecoder(
@@ -159,12 +149,11 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
-        # TODO: Change f" part
         if mean_loss < best_loss:
             create_checkpoint(
                 path=os.path.join(
                     args.checkpoint_path,
-                    f"receiver-decoder/receiver_decoder_{epoch}.pt",
+                    f"end-to-end_transceiver/end_to_end_transceiver_{epoch}.pt",
                 ),
                 model_state_dict=tx_relay_channel_model.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),

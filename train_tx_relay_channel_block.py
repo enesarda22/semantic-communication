@@ -110,12 +110,12 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
-        # TODO: Change f" part
+
         if mean_loss < best_loss:
             create_checkpoint(
                 path=os.path.join(
                     args.checkpoint_path,
-                    f"receiver-decoder/receiver_decoder_{epoch}.pt",
+                    f"tx-relay-channel/tx_relay_channel_{epoch}.pt",
                 ),
                 model_state_dict=tx_relay_channel_model.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
