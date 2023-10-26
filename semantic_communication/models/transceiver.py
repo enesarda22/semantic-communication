@@ -108,9 +108,6 @@ class TxRelayRxChannelModel(nn.Module):
 class Transceiver(nn.Module):  # TODO: find a cooler name
     def __init__(
         self,
-        tx_relay_ch: Channel,
-        relay_rcv_ch: Channel,
-        tx_rcv_ch: Channel,
         semantic_encoder: BertModel,
         relay_semantic_decoder: SemanticDecoder,
         rx_semantic_decoder: SemanticDecoder,
@@ -118,10 +115,8 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel
     ):
         super().__init__()
-        self.tx_relay_ch = tx_relay_ch
-        self.relay_rcv_ch = relay_rcv_ch
-        self.tx_rcv_ch = tx_rcv_ch
 
+        # TODO: Need to add this -1 stuff
         self.transmitter = Transmitter(semantic_encoder)
         self.relay = Relay(semantic_encoder, relay_semantic_decoder)
         self.receiver = Receiver(rx_semantic_decoder)
@@ -139,6 +134,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         # At receiver
         x_hat_rcv = self.tx_relay_rx_channel_enc_dec(x, x_relay)
 
+        # TODO: CHECK
         #y1 = self.tx_relay_ch(x[:, :-1, :])
         #y2 = self.relay_rcv_ch(self.relay(y1))
         #y3 = self.tx_rcv_ch(x[:, 1:, :])

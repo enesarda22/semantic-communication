@@ -20,7 +20,7 @@ def print_loss(losses, group):
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    data_handler = DataHandler(device=device)
+    data_handler = DataHandler()
     data_handler.load_data()
 
     SNR_tx_relay =  1

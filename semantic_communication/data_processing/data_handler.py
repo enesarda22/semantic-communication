@@ -14,7 +14,13 @@ from semantic_communication.utils.general import get_device, RANDOM_STATE
 class DataHandler:
     data_filename = "IMDB Dataset.csv"
 
-    def __init__(self, semantic_encoder: SemanticEncoder):
+    def __init__(
+        self,
+        semantic_encoder: SemanticEncoder,
+        batch_size: int,
+        n_samples: int,
+        train_size: float,
+    ):
         self.device = get_device()
 
         self.semantic_encoder = semantic_encoder
@@ -24,9 +30,9 @@ class DataHandler:
         self.train_dataloader = None
         self.val_dataloader = None
 
-        self.batch_size = 32
-        self.n_samples = 40000
-        self.train_size = 0.8
+        self.batch_size = batch_size
+        self.n_samples = n_samples
+        self.train_size = train_size
 
     def load_data(self):
         messages = self.load_text()
@@ -69,7 +75,7 @@ class DataHandler:
 
     def load_text(self) -> List[str]:
         text = []
-        with open(self.data_filename, mode="r") as file:
+        with open(self.data_filename, mode="r", encoding="utf-8") as file:
             csv_reader = csv.reader(file)
             for i, line in enumerate(csv_reader):
                 if i > self.n_samples:
