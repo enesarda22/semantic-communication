@@ -9,7 +9,9 @@ class SelfAttentionHead(nn.Module):
         self.key = nn.Linear(embedding_size, head_size, bias=False)
         self.query = nn.Linear(embedding_size, head_size, bias=False)
         self.value = nn.Linear(embedding_size, head_size, bias=False)
-        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
+        self.register_buffer(
+            "tril", torch.tril(torch.ones(block_size, block_size))
+        )
 
         self.dropout = nn.Dropout(0.1)
 
