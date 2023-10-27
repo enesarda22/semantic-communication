@@ -15,6 +15,7 @@ from semantic_communication.utils.general import (
     create_checkpoint,
 )
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--relay-decoder-path", type=str)
@@ -69,13 +70,22 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
-            relay_out = relay(encoder_output[:, :-1, :], attention_mask[:, :-1, :])
+            encoder_output = semantic_encoder(
+                input_ids=xb,
+                attention_mask=attention_mask,
+            )
+            relay_out = relay(
+                x=encoder_output[:, :-1, :],
+                attention_mask=attention_mask[:, :-1],
+            )
             superposed_out = relay_out + encoder_output[:, 1:, :]
+            logits, loss = receiver_decoder(
+                encoder_output=superposed_out,
+                attention_mask=attention_mask[:, 1:],
+                targets=xb[:, 1:],
+            )
 
-            logits, loss = receiver_decoder(superposed_out, xb[:, 1:])
             optimizer.zero_grad(set_to_none=True)
-
             loss.backward()
             optimizer.step()
 
@@ -87,12 +97,22 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
-            relay_out = relay(encoder_output[:, :-1, :], attention_mask[:, :-1, :])
+            encoder_output = semantic_encoder(
+                input_ids=xb,
+                attention_mask=attention_mask,
+            )
+            relay_out = relay(
+                x=encoder_output[:, :-1, :],
+                attention_mask=attention_mask[:, :-1],
+            )
             superposed_out = relay_out + encoder_output[:, 1:, :]
 
             with torch.no_grad():
-                _, loss = receiver_decoder(superposed_out, xb[:, 1:])
+                _, loss = receiver_decoder(
+                    encoder_output=superposed_out,
+                    attention_mask=attention_mask[:, 1:],
+                    targets=xb[:, 1:],
+                )
             val_losses.append(loss.item())
 
         print("\n")

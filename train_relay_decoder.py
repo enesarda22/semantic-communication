@@ -54,8 +54,15 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
-            logits, loss = relay_decoder(encoder_output[:, :-1, :], targets=xb[:, 1:], attention_mask=attention_mask[:, :-1])
+            encoder_output = semantic_encoder(
+                input_ids=xb,
+                attention_mask=attention_mask,
+            )
+            logits, loss = relay_decoder(
+                encoder_output=encoder_output[:, :-1, :],
+                attention_mask=attention_mask[:, :-1],
+                targets=xb[:, 1:],
+            )
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -75,7 +82,11 @@ if __name__ == "__main__":
             )
 
             with torch.no_grad():
-                _, loss = relay_decoder(encoder_output[:, :-1, :], targets=xb[:, 1:], attention_mask=attention_mask[:, :-1])
+                _, loss = relay_decoder(
+                    encoder_output[:, :-1, :],
+                    targets=xb[:, 1:],
+                    attention_mask=attention_mask[:, :-1],
+                )
             val_losses.append(loss.item())
 
         print("\n")
@@ -86,7 +97,8 @@ if __name__ == "__main__":
         if mean_loss < best_loss:
             create_checkpoint(
                 path=os.path.join(
-                    args.checkpoint_path, f"relay-decoder/relay_decoder_{epoch}.pt"
+                    args.checkpoint_path,
+                    f"relay-decoder/relay_decoder_{epoch}.pt",
                 ),
                 model_state_dict=relay_decoder.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
