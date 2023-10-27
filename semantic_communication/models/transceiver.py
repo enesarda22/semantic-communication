@@ -126,34 +126,32 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,
     ):
         super().__init__()
-        self.transmitter = Transmitter(semantic_encoder)
+        self.tx_semantic_encoder = semantic_encoder
         self.relay = Relay(semantic_encoder, relay_semantic_decoder)
-        self.receiver = Receiver(rx_semantic_decoder)
+        self.rx_semantic_decoder = rx_semantic_decoder
 
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
     def forward(self, w, attention_mask):
-        x = self.transmitter(w)  # B, T, C
+        # transmitter
+        x = self.tx_semantic_encoder(
+            input_ids=w,
+            attention_mask=attention_mask,
+        )
 
-        # At relay
+        # relay
         x_hat = self.tx_relay_channel_enc_dec(x[:, :-1, :])
         x_relay = self.relay(x_hat, attention_mask[:, :-1])
 
-        # At receiver
+        # receiver
         x_hat_rcv = self.tx_relay_rx_channel_enc_dec(x[:, 1:, :], x_relay)
-        s_hat = self.receiver(x_hat_rcv, w[:, 1:], attention_mask[:, 1:])
+        s_hat = self.rx_semantic_decoder(
+            encoder_output=x_hat_rcv,
+            attention_mask=attention_mask[:, 1:],
+            targets=w[:, 1:],
+        )
         return s_hat
-
-
-class Transmitter(nn.Module):
-    def __init__(self, semantic_encoder: SemanticEncoder):
-        super().__init__()
-        self.semantic_encoder = semantic_encoder
-
-    def forward(self, w: torch.Tensor):
-        x = self.semantic_encoder(input_ids=w)
-        return x
 
 
 class Relay(nn.Module):
@@ -180,17 +178,3 @@ class Relay(nn.Module):
 
         out = self.semantic_encoder(input_ids=predicted_ids)
         return out[:, 1:-1, :]
-
-
-class Receiver(nn.Module):
-    def __init__(self, semantic_decoder: SemanticDecoder):
-        super().__init__()
-        self.semantic_decoder = semantic_decoder
-
-    def forward(self, y, ground_y, attention_mask):
-        s = self.semantic_decoder(
-            encoder_output=y,
-            targets=ground_y,
-            attention_mask=attention_mask,
-        )
-        return s
