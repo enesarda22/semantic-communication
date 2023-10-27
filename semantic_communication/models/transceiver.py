@@ -1,9 +1,6 @@
-from typing import List
-
 import numpy as np
 import torch
 from torch import nn
-from transformers import BertModel
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
@@ -36,7 +33,10 @@ class ChannelEncoder(nn.Module):
             dims.append(np.power(4, up_dim - i))
 
         self.layers = nn.ModuleList(
-            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+            [
+                ChannelEncComp(dims[i], dims[i + 1])
+                for i in range(len(dims) - 1)
+            ]
         )
 
         self.linear = nn.Linear(dims[-1], nout)
@@ -59,7 +59,10 @@ class ChannelDecoder(nn.Module):
             dims.append(np.power(4, low_dim + i))
 
         self.layers = nn.ModuleList(
-            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+            [
+                ChannelEncComp(dims[i], dims[i + 1])
+                for i in range(len(dims) - 1)
+            ]
         )
 
         self.linear = nn.Linear(dims[-1], nout)
@@ -86,7 +89,13 @@ class TxRelayChannelModel(nn.Module):
 
 
 class TxRelayRxChannelModel(nn.Module):
-    def __init__(self, nin, n_latent, channel_tx_rx: Channel, channel_rel_rx: Channel):
+    def __init__(
+        self,
+        nin,
+        n_latent,
+        channel_tx_rx: Channel,
+        channel_rel_rx: Channel,
+    ):
         super(TxRelayRxChannelModel, self).__init__()
 
         self.tx_encoder = ChannelEncoder(nin, n_latent)
@@ -100,7 +109,9 @@ class TxRelayRxChannelModel(nn.Module):
         rel_ch_input = self.relay_encoder(rel_x)
 
         # Superpose
-        ch_output = self.channel_tx_rx(tx_ch_input) + self.channel_rel_rx(rel_ch_input)
+        ch_output = self.channel_tx_rx(tx_ch_input) + self.channel_rel_rx(
+            rel_ch_input
+        )
         x_hat = self.rx_decoder(ch_output)
         return x_hat  # ground truth = tx_x + rel_x
 

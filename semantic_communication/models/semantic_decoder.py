@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from semantic_communication.models.multi_head_attention import MultiHeadAttention
+from semantic_communication.models.multi_head_attention import (
+    MultiHeadAttention,
+)
 
 
 class SemanticDecoder(nn.Module):
@@ -29,7 +31,9 @@ class SemanticDecoder(nn.Module):
 
     def forward(self, encoder_output, attention_mask, targets=None):
         # residual connection after the layer, norm before the layer
-        x = encoder_output + self.sa_heads(self.ln1(encoder_output), attention_mask)
+        x = encoder_output + self.sa_heads(
+            self.ln1(encoder_output), attention_mask
+        )
         x = x + self.ff_net(self.ln2(x))
         logits = self.lm_head(self.ln3(x))
 
@@ -41,7 +45,9 @@ class SemanticDecoder(nn.Module):
             targets = targets.reshape(B * T)
             attention_mask = attention_mask.flatten() == 1
 
-            loss = F.cross_entropy(logits[attention_mask, :], targets[attention_mask])
+            loss = F.cross_entropy(
+                logits[attention_mask, :], targets[attention_mask]
+            )
 
         return logits, loss
 
