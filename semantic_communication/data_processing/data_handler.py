@@ -7,10 +7,15 @@ from w3lib.html import replace_tags
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from torch.utils.data import TensorDataset, RandomSampler, DataLoader, SequentialSampler
+from torch.utils.data import (
+    TensorDataset,
+    RandomSampler,
+    DataLoader,
+    SequentialSampler,
+)
 
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.utils.general import get_device, RANDOM_STATE
+from semantic_communication.utils.general import RANDOM_STATE
 
 
 class DataHandler:
@@ -23,8 +28,6 @@ class DataHandler:
         n_samples: int,
         train_size: float,
     ):
-        self.device = get_device()
-
         self.semantic_encoder = semantic_encoder
 
         self.vocab_size = None
@@ -74,22 +77,18 @@ class DataHandler:
         )
 
     def load_text(self) -> List[str]:
-        text = []
-        with open(self.data_filename, mode="r", encoding="utf-8") as file:
-            csv_reader = csv.reader(file)
-            for i, line in enumerate(csv_reader):
-                if i > self.n_samples:
-                    break
-                text.append(line[0])
+        with open(self.data_filename, mode="r", encoding="utf-8") as f:
+            text = [next(csv.reader(f))[0] for _ in range(self.n_samples + 1)]
 
-        text = text[1:]
+        text = text[1:]  # first line is the columns
         return text
 
     @staticmethod
     def preprocess_text(text: List[str]) -> List[str]:
-        sentences_list = [nltk.sent_tokenize(replace_tags(m, " ")) for m in text]
+        sentences_list = [
+            nltk.sent_tokenize(replace_tags(m, " ")) for m in text
+        ]
         sentences = sum(sentences_list, [])
-
         return sentences
 
     def get_tokens(self, ids):
@@ -101,6 +100,5 @@ class DataHandler:
 
     def encode_tokens(self, tokens):
         ids = self.encoder.transform(tokens)
-        ids = torch.LongTensor(ids.reshape(-1, self.semantic_encoder.max_length))
-
-        return ids
+        ids = ids.reshape(-1, self.semantic_encoder.max_length)
+        return torch.LongTensor(ids)
