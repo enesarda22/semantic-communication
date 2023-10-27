@@ -27,9 +27,9 @@ class SemanticDecoder(nn.Module):
 
         self.block_size = block_size
 
-    def forward(self, encoder_output, targets=None):
+    def forward(self, encoder_output, attention_mask, targets=None):
         # residual connection after the layer, norm before the layer
-        x = encoder_output + self.sa_heads(self.ln1(encoder_output))
+        x = encoder_output + self.sa_heads(self.ln1(encoder_output), attention_mask)
         x = x + self.ff_net(self.ln2(x))
         logits = self.lm_head(self.ln3(x))
 
@@ -39,18 +39,20 @@ class SemanticDecoder(nn.Module):
             B, T, C = logits.shape
             logits = logits.reshape(B * T, C)
             targets = targets.reshape(B * T)
-            loss = F.cross_entropy(logits, targets)
+            attention_mask = attention_mask.flatten() == 1
+
+            loss = F.cross_entropy(logits[attention_mask, :], targets[attention_mask])
 
         return logits, loss
 
-    def generate(self, encoder_output, sample=False):
+    def generate(self, encoder_output, attention_mask, sample=False):
         B, T, C = encoder_output.shape
 
         padded_encoder_output = torch.ones((B, self.block_size, C))
         padded_encoder_output[:, :T, :] = encoder_output
 
         # get the predictions
-        logits, _ = self(padded_encoder_output)  # (B, T, C)
+        logits, _ = self(padded_encoder_output, attention_mask)  # (B, T, C)
         # apply softmax to get probabilities
         probs = F.softmax(logits, dim=-1)  # (B, C)
 

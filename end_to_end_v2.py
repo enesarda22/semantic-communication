@@ -6,9 +6,12 @@ import torch
 from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
-from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.models.transceiver import (TxRelayChannelModel, TxRelayRxChannelModel, Relay, Transceiver)
-from semantic_communication.utils.channel import (AWGN, Rayleigh)
+from semantic_communication.models.transceiver import (
+    TxRelayChannelModel,
+    TxRelayRxChannelModel,
+    Transceiver,
+)
+from semantic_communication.utils.channel import AWGN, Rayleigh
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.general import (
@@ -24,9 +27,9 @@ if __name__ == "__main__":
     parser.add_argument("--tx-relay-channel-model-path", type=str)
     parser.add_argument("--tx-relay-rx-channel-model-path", type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--n-samples", default=40000, type=int)
+    parser.add_argument("--n-samples", default=10000, type=int)
     parser.add_argument("--train-size", default=0.8, type=float)
-    parser.add_argument("--max-length", default=10, type=int)
+    parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
@@ -39,6 +42,7 @@ if __name__ == "__main__":
     parser.add_argument("--SNR-max", default=24, type=int)
     parser.add_argument("--SNR-step", default=3, type=int)
     parser.add_argument("--SNR-window", default=5, type=int)
+    parser.add_argument("--SNR-diff", default=3, type=int)
     parser.add_argument("--channel-type", default="AWGN", type=str)
     args = parser.parse_args()
 
@@ -86,15 +90,29 @@ if __name__ == "__main__":
     receiver_decoder.load_state_dict(rx_checkpoint["model_state_dict"])
 
     tx_relay_channel_model = TxRelayChannelModel(384, 128, tx_relay_channel)
-    tx_relay_rx_channel_model = TxRelayRxChannelModel(384, 128, tx_rx_channel, relay_rx_channel)
+    tx_relay_rx_channel_model = TxRelayRxChannelModel(
+        384, 128, tx_rx_channel, relay_rx_channel
+    )
 
     tx_relay_channel_model_checkpoint = torch.load(args.tx_relay_channel_model_path)
-    tx_relay_channel_model.load_state_dict(tx_relay_channel_model_checkpoint["model_state_dict"])
+    tx_relay_channel_model.load_state_dict(
+        tx_relay_channel_model_checkpoint["model_state_dict"]
+    )
 
-    tx_relay_rx_channel_model_checkpoint = torch.load(args.tx_relay_rx_channel_model_path)
-    tx_relay_rx_channel_model.load_state_dict(tx_relay_rx_channel_model_checkpoint["model_state_dict"])
+    tx_relay_rx_channel_model_checkpoint = torch.load(
+        args.tx_relay_rx_channel_model_path
+    )
+    tx_relay_rx_channel_model.load_state_dict(
+        tx_relay_rx_channel_model_checkpoint["model_state_dict"]
+    )
 
-    transceiver = Transceiver(semantic_encoder, relay_decoder, receiver_decoder, tx_relay_channel_model, tx_relay_rx_channel_model)
+    transceiver = Transceiver(
+        semantic_encoder,
+        relay_decoder,
+        receiver_decoder,
+        tx_relay_channel_model,
+        tx_relay_rx_channel_model,
+    )
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
 
@@ -105,30 +123,37 @@ if __name__ == "__main__":
         train_losses = []
         transceiver.train()
         for b in tqdm(data_handler.train_dataloader):
-            xb = b[0].to(device)
-
             if cur_win > args.SNR_window:
-                cur_win = 0,
-                if not cur_SNR_index >= len(SNR_dB):
+                cur_win = 0
+                if not cur_SNR_index >= len(SNR_dB) - 1:
                     cur_SNR_index += 1
 
                 if args.channel_type == "AWGN":
-                    tx_rx_channel = AWGN(SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow)
+                    tx_rx_channel = AWGN(
+                        SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                    )
                     tx_relay_channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
                     relay_rx_channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
 
                 else:
-                    tx_rx_channel = Rayleigh(SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow)
+                    tx_rx_channel = Rayleigh(
+                        SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                    )
                     tx_relay_channel = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
                     relay_rx_channel = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
 
-                transceiver.tx_relay_channel_enc_dec.channel =tx_relay_channel
+                transceiver.tx_relay_channel_enc_dec.channel = tx_relay_channel
                 transceiver.tx_relay_rx_channel_enc_dec.channel_tx_rx = tx_rx_channel
-                transceiver.tx_relay_rx_channel_enc_dec.channel_rel_rx = relay_rx_channel
+                transceiver.tx_relay_rx_channel_enc_dec.channel_rel_rx = (
+                    relay_rx_channel
+                )
 
             cur_win += 1
 
-            logits, loss = transceiver(xb, xb[:, 1:])
+            xb = b[0].to(device)
+            attention_mask = b[1].to(device)
+            logits, loss = transceiver(xb, attention_mask)
+
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
@@ -138,9 +163,10 @@ if __name__ == "__main__":
         transceiver.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
+            attention_mask = b[1].to(device)
 
             with torch.no_grad():
-                logits, loss = transceiver(xb, xb[:, 1:])
+                logits, loss = transceiver(xb, attention_mask)
 
             val_losses.append(loss.item())
 

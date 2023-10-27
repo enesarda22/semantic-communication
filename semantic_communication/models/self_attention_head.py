@@ -13,8 +13,7 @@ class SelfAttentionHead(nn.Module):
 
         self.dropout = nn.Dropout(0.1)
 
-    def forward(self, x):
-        # TODO: add attention mask
+    def forward(self, x, attention_mask):
         k = self.key(x)  # (B,T,C)
         q = self.query(x)  # (B,T,C)
         v = self.value(x)  # (B,T,C)
@@ -22,8 +21,14 @@ class SelfAttentionHead(nn.Module):
         # TODO: allow tokens to communicate with future tokens
         wei = q @ k.transpose(-2, -1) * (v.shape[2] ** -0.5)  # (B,T,T)
         wei = wei.masked_fill(self.tril == 0, -torch.inf)  # (B,T,T)
-        wei = F.softmax(wei, dim=-1)  # (B,T,T)
-        wei = self.dropout(wei)
 
+        extended_mask = attention_mask.unsqueeze(-1)
+        extended_mask = extended_mask @ extended_mask.transpose(1, 2)
+        wei = wei.masked_fill(extended_mask == 0, -torch.inf)
+
+        wei = F.softmax(wei, dim=-1)  # (B,T,T)
+        wei = torch.nan_to_num(wei)
+
+        wei = self.dropout(wei)
         out = wei @ v  # (B,T,C)
         return out

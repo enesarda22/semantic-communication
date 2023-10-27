@@ -7,8 +7,8 @@ from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.models.transceiver import (TxRelayRxChannelModel, Relay)
-from semantic_communication.utils.channel import (AWGN, Rayleigh)
+from semantic_communication.models.transceiver import TxRelayRxChannelModel, Relay
+from semantic_communication.utils.channel import AWGN, Rayleigh
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.utils.general import (
     get_device,
@@ -20,9 +20,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--relay-decoder-path", type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--n-samples", default=40000, type=int)
+    parser.add_argument("--n-samples", default=10000, type=int)
     parser.add_argument("--train-size", default=0.8, type=float)
-    parser.add_argument("--max-length", default=10, type=int)
+    parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
@@ -74,7 +74,9 @@ if __name__ == "__main__":
         channel_tx_rx = Rayleigh(SNR_dB[0] - args.SNR_diff, args.sig_pow)
         channel_rel_rx = Rayleigh(SNR_dB[0], args.sig_pow)
 
-    tx_relay_rx_channel_model = TxRelayRxChannelModel(384, 128, channel_tx_rx, channel_rel_rx)
+    tx_relay_rx_channel_model = TxRelayRxChannelModel(
+        384, 128, channel_tx_rx, channel_rel_rx
+    )
 
     optimizer = torch.optim.AdamW(tx_relay_rx_channel_model.parameters(), lr=args.lr)
     criterion = torch.nn.MSELoss()
@@ -86,20 +88,20 @@ if __name__ == "__main__":
         train_losses = []
         tx_relay_rx_channel_model.train()
         for b in tqdm(data_handler.train_dataloader):
-            xb = b[0].to(device)
-            encoder_output = b[1].to(device)
-            relay_out = relay(encoder_output[:, :-2, :])
-
             if cur_win > args.SNR_window:
-                cur_win = 0,
-                if not cur_SNR_index >= len(SNR_dB):
+                cur_win = 0
+                if not cur_SNR_index >= len(SNR_dB) - 1:
                     cur_SNR_index += 1
 
                 if args.channel_type == "AWGN":
-                    channel_tx_rx = AWGN(SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow)
+                    channel_tx_rx = AWGN(
+                        SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                    )
                     channel_rel_rx = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
                 else:
-                    channel_tx_rx = Rayleigh(SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow)
+                    channel_tx_rx = Rayleigh(
+                        SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                    )
                     channel_rel_rx = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
 
                 tx_relay_rx_channel_model.channel_tx_rx = channel_tx_rx
@@ -107,9 +109,16 @@ if __name__ == "__main__":
 
             cur_win += 1
 
-            # TODO: CHECK
-            output_hat = tx_relay_rx_channel_model(encoder_output[:, 1:-1, :], relay_out)
-            loss = criterion(output_hat, encoder_output[:, 1:-1, :] + relay_out)
+            xb = b[0].to(device)
+            attention_mask = b[1].to(device)
+
+            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
+            relay_out = relay(encoder_output[:, :-1, :])
+
+            output_hat = tx_relay_rx_channel_model(
+                encoder_output[:, 1:, :], relay_out
+            )
+            loss = criterion(output_hat, encoder_output[:, 1:, :] + relay_out)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -120,13 +129,16 @@ if __name__ == "__main__":
         tx_relay_rx_channel_model.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
-            encoder_output = b[1].to(device)
+            attention_mask = b[1].to(device)
 
-            relay_out = relay(encoder_output[:, :-2, :])
+            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
+            relay_out = relay(encoder_output[:, :-1, :])
 
             with torch.no_grad():
-                output_hat = tx_relay_rx_channel_model(encoder_output[:, 1:-1, :], relay_out)
-                loss = criterion(output_hat, encoder_output[:, 1:-1, :] + relay_out)
+                output_hat = tx_relay_rx_channel_model(
+                    encoder_output[:, 1:, :], relay_out
+                )
+                loss = criterion(output_hat, encoder_output[:, 1:, :] + relay_out)
 
             val_losses.append(loss.item())
 

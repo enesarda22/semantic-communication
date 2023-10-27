@@ -12,7 +12,7 @@ class SemanticEncoder:
 
     def __init__(self, max_length: int):
         self.device = get_device()
-        self.max_length = max_length
+        self.max_length = max_length + 1
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.bert = AutoModel.from_pretrained(self.model_name).to(self.device)
@@ -48,7 +48,7 @@ class SemanticEncoder:
         return self.tokenizer(
             messages,
             padding="max_length",
-            max_length=self.max_length + 2,
+            max_length=self.max_length,
             truncation=True,
             return_tensors="pt",
         ).to(self.device)

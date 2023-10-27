@@ -1,7 +1,9 @@
 import csv
 from typing import List
 
+import nltk
 import torch
+from w3lib.html import replace_tags
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -36,38 +38,36 @@ class DataHandler:
 
     def load_data(self):
         messages = self.load_text()
+        messages = self.preprocess_text(messages)
+
         tokens = self.semantic_encoder.tokenize(messages=messages)
 
-        encoder_output = self.semantic_encoder(
-            input_ids=tokens["input_ids"],
-            attention_mask=tokens["attention_mask"],
-        )
-
         self.encoder = LabelEncoder()
-        self.encoder.fit(tokens["input_ids"][:, :-1].flatten())
+        self.encoder.fit(tokens["input_ids"].flatten())
         self.vocab_size = len(self.encoder.classes_)
 
-        input_ids = self.encode_tokens(tokens["input_ids"][:, :-1].flatten())
+        input_ids = self.encode_tokens(tokens["input_ids"].flatten())
+        attention_mask = tokens["attention_mask"]
 
         (
             train_input_ids,
             val_input_ids,
-            train_encoder_outputs,
-            val_encoder_outputs,
+            train_attention_mask,
+            val_attention_mask,
         ) = train_test_split(
             input_ids,
-            encoder_output,
+            attention_mask,
             train_size=self.train_size,
             random_state=RANDOM_STATE,
         )
 
-        train_data = TensorDataset(train_input_ids, train_encoder_outputs)
+        train_data = TensorDataset(train_input_ids, train_attention_mask)
         train_sampler = RandomSampler(train_data)
         self.train_dataloader = DataLoader(
             train_data, sampler=train_sampler, batch_size=self.batch_size
         )
 
-        val_data = TensorDataset(val_input_ids, val_encoder_outputs)
+        val_data = TensorDataset(val_input_ids, val_attention_mask)
         val_sampler = SequentialSampler(val_data)
         self.val_dataloader = DataLoader(
             val_data, sampler=val_sampler, batch_size=self.batch_size
@@ -85,23 +85,12 @@ class DataHandler:
         text = text[1:]
         return text
 
-    # TODO: remove
-    # def load_encoder_output(self, tokens):
-    #     bert.eval()
-    #     with torch.no_grad():
-    #         bert_output = bert(**tokens)
-    #
-    #     bert_lhs = bert_output["last_hidden_state"]
-    #     mean_pooling_output = self.mean_pooling(
-    #         bert_lhs=bert_lhs,
-    #         attention_mask=tokens["attention_mask"],
-    #     )
-    #     encoder_output = torch.cat(
-    #         tensors=(mean_pooling_output.unsqueeze(1), bert_lhs[:, 1:, :]),
-    #         dim=1,
-    #     )
-    #
-    #     return encoder_output
+    @staticmethod
+    def preprocess_text(text: List[str]) -> List[str]:
+        sentences_list = [nltk.sent_tokenize(replace_tags(m, " ")) for m in text]
+        sentences = sum(sentences_list, [])
+
+        return sentences
 
     def get_tokens(self, ids):
         token_ids = self.encoder.inverse_transform(ids.flatten())
@@ -112,6 +101,6 @@ class DataHandler:
 
     def encode_tokens(self, tokens):
         ids = self.encoder.transform(tokens)
-        ids = torch.LongTensor(ids.reshape(-1, self.semantic_encoder.max_length + 1))
+        ids = torch.LongTensor(ids.reshape(-1, self.semantic_encoder.max_length))
 
         return ids

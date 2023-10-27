@@ -5,9 +5,6 @@ import numpy as np
 
 import torch.nn.functional as F
 
-# TODO: REMOVE
-device = torch.device("cpu")#  torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 
 class Channel(ABC):
     def __init__(self, SNR: float, signal_power_constraint: float = 1):

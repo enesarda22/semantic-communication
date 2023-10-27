@@ -108,15 +108,13 @@ class TxRelayRxChannelModel(nn.Module):
 class Transceiver(nn.Module):  # TODO: find a cooler name
     def __init__(
         self,
-        semantic_encoder: BertModel,
+        semantic_encoder: SemanticEncoder,
         relay_semantic_decoder: SemanticDecoder,
         rx_semantic_decoder: SemanticDecoder,
         tx_relay_channel_enc_dec: TxRelayChannelModel,
-        tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel
+        tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,
     ):
         super().__init__()
-
-        # TODO: Need to add this -1 stuff
         self.transmitter = Transmitter(semantic_encoder)
         self.relay = Relay(semantic_encoder, relay_semantic_decoder)
         self.receiver = Receiver(rx_semantic_decoder)
@@ -124,51 +122,43 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
-    def forward(self, w):
+    def forward(self, w, attention_mask):
         x = self.transmitter(w)  # B, T, C
 
         # At relay
-        x_hat = self.tx_relay_channel_enc_dec(x)
-        x_relay = self.relay(x_hat)
+        x_hat = self.tx_relay_channel_enc_dec(x[:, :-1, :])
+        x_relay = self.relay(x_hat, attention_mask[:, :-1])
 
         # At receiver
-        x_hat_rcv = self.tx_relay_rx_channel_enc_dec(x, x_relay)
-
-        # TODO: CHECK
-        #y1 = self.tx_relay_ch(x[:, :-1, :])
-        #y2 = self.relay_rcv_ch(self.relay(y1))
-        #y3 = self.tx_rcv_ch(x[:, 1:, :])
-        #y4 = y2 + y3  # superposition
-
-        s_hat = self.receiver(x_hat_rcv, w)
+        x_hat_rcv = self.tx_relay_rx_channel_enc_dec(x[:, 1:, :], x_relay)
+        s_hat = self.receiver(x_hat_rcv, w[:, 1:], attention_mask[:, 1:])
         return s_hat
 
 
 class Transmitter(nn.Module):
-    def __init__(self, semantic_encoder: BertModel):
+    def __init__(self, semantic_encoder: SemanticEncoder):
         super().__init__()
         self.semantic_encoder = semantic_encoder
 
     def forward(self, w: torch.Tensor):
-        # TODO: W now tokens, can we give it like this?
-        x = self.semantic_encoder(w)
+        x = self.semantic_encoder(input_ids=w)
         return x
 
 
 class Relay(nn.Module):
     def __init__(
         self,
-        semantic_encoder: BertModel,
+        semantic_encoder: SemanticEncoder,
         semantic_decoder: SemanticDecoder,
     ):
         super().__init__()
         self.semantic_encoder = semantic_encoder
         self.semantic_decoder = semantic_decoder
 
-    def forward(self, x):
+    def forward(self, x, attention_mask):
         self.semantic_decoder.eval()
         with torch.no_grad():
-            predicted_ids = self.semantic_decoder.generate(x)
+            predicted_ids = self.semantic_decoder.generate(x, attention_mask)
 
         begin_padding = torch.full((predicted_ids.shape[0], 1), 1)
         end_padding = torch.full((predicted_ids.shape[0], 1), 2)
@@ -186,7 +176,10 @@ class Receiver(nn.Module):
         super().__init__()
         self.semantic_decoder = semantic_decoder
 
-    def forward(self, y, ground_y):
-        s = self.semantic_decoder(y, ground_y)
+    def forward(self, y, ground_y, attention_mask):
+        s = self.semantic_decoder(
+            encoder_output=y,
+            targets=ground_y,
+            attention_mask=attention_mask,
+        )
         return s
-

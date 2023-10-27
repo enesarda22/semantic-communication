@@ -17,9 +17,9 @@ from semantic_communication.utils.general import (
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--n-samples", default=40000, type=int)
+    parser.add_argument("--n-samples", default=10000, type=int)
     parser.add_argument("--train-size", default=0.8, type=float)
-    parser.add_argument("--max-length", default=10, type=int)
+    parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
@@ -52,11 +52,12 @@ if __name__ == "__main__":
         relay_decoder.train()
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
-            encoder_output = b[1].to(device)
+            attention_mask = b[1].to(device)
 
-            logits, loss = relay_decoder(encoder_output[:, :-2, :], xb[:, 1:])
+            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
+            logits, loss = relay_decoder(encoder_output[:, :-1, :], targets=xb[:, 1:], attention_mask=attention_mask[:, :-1])
+
             optimizer.zero_grad(set_to_none=True)
-
             loss.backward()
             optimizer.step()
 
@@ -66,10 +67,15 @@ if __name__ == "__main__":
         relay_decoder.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
-            encoder_output = b[1].to(device)
+            attention_mask = b[1].to(device)
+
+            encoder_output = semantic_encoder(
+                input_ids=xb,
+                attention_mask=attention_mask,
+            )
 
             with torch.no_grad():
-                _, loss = relay_decoder(encoder_output[:, :-2, :], xb[:, 1:])
+                _, loss = relay_decoder(encoder_output[:, :-1, :], targets=xb[:, 1:], attention_mask=attention_mask[:, :-1])
             val_losses.append(loss.item())
 
         print("\n")
