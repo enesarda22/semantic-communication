@@ -94,7 +94,9 @@ if __name__ == "__main__":
         384, 128, tx_rx_channel, relay_rx_channel
     )
 
-    tx_relay_channel_model_checkpoint = torch.load(args.tx_relay_channel_model_path)
+    tx_relay_channel_model_checkpoint = torch.load(
+        args.tx_relay_channel_model_path
+    )
     tx_relay_channel_model.load_state_dict(
         tx_relay_channel_model_checkpoint["model_state_dict"]
     )
@@ -132,18 +134,28 @@ if __name__ == "__main__":
                     tx_rx_channel = AWGN(
                         SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
                     )
-                    tx_relay_channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
-                    relay_rx_channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
+                    tx_relay_channel = AWGN(
+                        SNR_dB[cur_SNR_index], args.sig_pow
+                    )
+                    relay_rx_channel = AWGN(
+                        SNR_dB[cur_SNR_index], args.sig_pow
+                    )
 
                 else:
                     tx_rx_channel = Rayleigh(
                         SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
                     )
-                    tx_relay_channel = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
-                    relay_rx_channel = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
+                    tx_relay_channel = Rayleigh(
+                        SNR_dB[cur_SNR_index], args.sig_pow
+                    )
+                    relay_rx_channel = Rayleigh(
+                        SNR_dB[cur_SNR_index], args.sig_pow
+                    )
 
                 transceiver.tx_relay_channel_enc_dec.channel = tx_relay_channel
-                transceiver.tx_relay_rx_channel_enc_dec.channel_tx_rx = tx_rx_channel
+                transceiver.tx_relay_rx_channel_enc_dec.channel_tx_rx = (
+                    tx_rx_channel
+                )
                 transceiver.tx_relay_rx_channel_enc_dec.channel_rel_rx = (
                     relay_rx_channel
                 )

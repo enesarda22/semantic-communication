@@ -57,7 +57,10 @@ if __name__ == "__main__":
 
     tx_relay_channel_model = TxRelayChannelModel(384, 128, channel)
 
-    optimizer = torch.optim.AdamW(tx_relay_channel_model.parameters(), lr=args.lr)
+    optimizer = torch.optim.AdamW(
+        params=tx_relay_channel_model.parameters(),
+        lr=args.lr,
+    )
     criterion = torch.nn.MSELoss()
 
     best_loss = 5
@@ -84,9 +87,11 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
+            encoder_output = semantic_encoder(
+                input_ids=xb,
+                attention_mask=attention_mask,
+            )
             encoder_output_hat = tx_relay_channel_model(encoder_output)
-
             loss = criterion(encoder_output_hat, encoder_output)
 
             optimizer.zero_grad(set_to_none=True)
@@ -100,11 +105,15 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(input_ids=xb, attention_mask=attention_mask)
+            encoder_output = semantic_encoder(
+                input_ids=xb,
+                attention_mask=attention_mask,
+            )
 
             with torch.no_grad():
                 encoder_output_hat = tx_relay_channel_model(encoder_output)
-                loss = criterion(encoder_output_hat, encoder_output)
+
+            loss = criterion(encoder_output_hat, encoder_output)
             val_losses.append(loss.item())
 
         print("\n")
