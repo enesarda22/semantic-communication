@@ -83,9 +83,9 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 _, loss = relay_decoder(
-                    encoder_output[:, :-1, :],
-                    targets=xb[:, 1:],
+                    encoder_output=encoder_output[:, :-1, :],
                     attention_mask=attention_mask[:, :-1],
+                    targets=xb[:, 1:],
                 )
             val_losses.append(loss.item())
 
