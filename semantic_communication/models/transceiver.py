@@ -5,6 +5,7 @@ from torch import nn
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.channel import Channel
+from semantic_communication.utils.general import get_device
 
 
 class ChannelEncComp(nn.Module):
@@ -169,13 +170,13 @@ class Relay(nn.Module):
         with torch.no_grad():
             predicted_ids = self.semantic_decoder.generate(x, attention_mask)
 
-        begin_padding = torch.full((predicted_ids.shape[0], 1), 2)
+        begin_padding = torch.full((predicted_ids.shape[0], 1), 2).to(get_device())
         predicted_ids = torch.cat(
             tensors=(begin_padding, predicted_ids),
             dim=1,
         )
 
-        first_token_attention = torch.full((attention_mask.shape[0], 1), 1)
+        first_token_attention = torch.full((attention_mask.shape[0], 1), 1).to(get_device())
         attention_mask = torch.hstack((first_token_attention, attention_mask))
         out = self.semantic_encoder(
             input_ids=predicted_ids,

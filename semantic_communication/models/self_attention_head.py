@@ -25,7 +25,7 @@ class SelfAttentionHead(nn.Module):
         wei = wei.masked_fill(self.tril == 0, -torch.inf)  # (B,T,T)
 
         extended_mask = attention_mask.unsqueeze(-1)
-        extended_mask = extended_mask @ extended_mask.transpose(1, 2)
+        extended_mask = torch._cast_Double(extended_mask)  @ torch._cast_Double(extended_mask.transpose(1, 2))
         wei = wei.masked_fill(extended_mask == 0, -torch.inf)
 
         wei = F.softmax(wei, dim=-1)  # (B,T,T)
