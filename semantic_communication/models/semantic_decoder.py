@@ -58,9 +58,9 @@ class SemanticDecoder(nn.Module):
         padded_encoder_output[:, :T, :] = encoder_output
 
         # get the predictions
-        logits, _ = self(padded_encoder_output, attention_mask)  # (B, T, C)
+        logits, _ = self(padded_encoder_output, attention_mask)
         # apply softmax to get probabilities
-        probs = F.softmax(logits, dim=-1)  # (B, C)
+        probs = F.softmax(logits, dim=-1)
 
         if sample:
             idx_next = torch.multinomial(
