@@ -193,9 +193,9 @@ if __name__ == "__main__":
             create_checkpoint(
                 path=os.path.join(
                     args.checkpoint_path,
-                    f"end-to-end_transceiver/end_to_end_transceiver_{epoch}.pt",
+                    f"end-to-end-transceiver/end_to_end_transceiver_{epoch}.pt",
                 ),
-                model_state_dict=tx_relay_channel_model.state_dict(),
+                model_state_dict=transceiver.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )

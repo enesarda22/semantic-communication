@@ -104,14 +104,14 @@ if __name__ == "__main__":
 
     # Create Channels
     if args.channel_type == "AWGN":
-        tx_rx_channel = AWGN(args.SNR_list[0] - args.SNR_diff, args.sig_pow)
-        tx_relay_channel = AWGN(args.SNR_list[0], args.sig_pow)
-        relay_rx_channel = AWGN(args.SNR_list[0], args.sig_pow)
+        tx_rx_channel = AWGN(int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow)
+        tx_relay_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)
+        relay_rx_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)
 
     else:
-        tx_rx_channel = Rayleigh(args.SNR_list[0] - args.SNR_diff, args.sig_pow)
-        tx_relay_channel = Rayleigh(args.SNR_list[0], args.sig_pow)
-        relay_rx_channel = Rayleigh(args.SNR_list[0], args.sig_pow)
+        tx_rx_channel = Rayleigh(int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow)
+        tx_relay_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)
+        relay_rx_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)
 
     # Create Transceiver
     relay_decoder = SemanticDecoder(
@@ -153,14 +153,14 @@ if __name__ == "__main__":
 
         # Create Channels
         if args.channel_type == "AWGN":
-            tx_rx_channel = AWGN(args.SNR_list[0] - args.SNR_diff, args.sig_pow)
-            tx_relay_channel = AWGN(args.SNR_list[0], args.sig_pow)
-            relay_rx_channel = AWGN(args.SNR_list[0], args.sig_pow)
+            tx_rx_channel = AWGN(int(SNR) - args.SNR_diff, args.sig_pow)
+            tx_relay_channel = AWGN(int(SNR), args.sig_pow)
+            relay_rx_channel = AWGN(int(SNR), args.sig_pow)
 
         else:
-            tx_rx_channel = Rayleigh(args.SNR_list[0] - args.SNR_diff, args.sig_pow)
-            tx_relay_channel = Rayleigh(args.SNR_list[0], args.sig_pow)
-            relay_rx_channel = Rayleigh(args.SNR_list[0], args.sig_pow)
+            tx_rx_channel = Rayleigh(int(SNR) - args.SNR_diff, args.sig_pow)
+            tx_relay_channel = Rayleigh(int(SNR), args.sig_pow)
+            relay_rx_channel = Rayleigh(int(SNR), args.sig_pow)
 
         transceiver.tx_relay_channel_enc_dec.channel=tx_relay_channel
         transceiver.tx_relay_rx_channel_enc_dec.channel_tx_rx=tx_rx_channel
@@ -179,7 +179,7 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 logits, loss = transceiver(xb, attention_mask)
-                probs = F.softmax(logits, dim=-1)  # (B, C)
+                probs = F.softmax(logits, dim=-1)
                 idx = (torch.argmax(probs, dim=-1)).reshape(args.batch_size, args.max_length)
 
                 for (sent1, sent2) in zip(xb, idx):
