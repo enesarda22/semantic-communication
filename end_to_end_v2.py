@@ -28,7 +28,8 @@ if __name__ == "__main__":
     parser.add_argument("--tx-relay-rx-channel-model-path", type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--n-samples", default=10000, type=int)
-    parser.add_argument("--train-size", default=0.8, type=float)
+    parser.add_argument("--train-size", default=0.9, type=float)
+    parser.add_argument("--val-size", default=0.2, type=float)
     parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
@@ -54,6 +55,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         n_samples=args.n_samples,
         train_size=args.train_size,
+        val_size=args.val_size
     )
     data_handler.load_data()
 
@@ -89,10 +91,10 @@ if __name__ == "__main__":
     rx_checkpoint = torch.load(args.receiver_decoder_path)
     receiver_decoder.load_state_dict(rx_checkpoint["model_state_dict"])
 
-    tx_relay_channel_model = TxRelayChannelModel(384, 128, tx_relay_channel)
+    tx_relay_channel_model = TxRelayChannelModel(384, 128, tx_relay_channel).to(device)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         384, 128, tx_rx_channel, relay_rx_channel
-    )
+    ).to(device)
 
     tx_relay_channel_model_checkpoint = torch.load(
         args.tx_relay_channel_model_path
@@ -191,9 +193,9 @@ if __name__ == "__main__":
             create_checkpoint(
                 path=os.path.join(
                     args.checkpoint_path,
-                    f"end-to-end_transceiver/end_to_end_transceiver_{epoch}.pt",
+                    f"end-to-end-transceiver/end_to_end_transceiver_{epoch}.pt",
                 ),
-                model_state_dict=tx_relay_channel_model.state_dict(),
+                model_state_dict=transceiver.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )

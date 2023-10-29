@@ -6,6 +6,8 @@ from semantic_communication.models.multi_head_attention import (
     MultiHeadAttention,
 )
 
+from semantic_communication.utils.general import get_device
+
 
 class SemanticDecoder(nn.Module):
     def __init__(self, vocab_size, n_heads, n_embeddings, block_size):
@@ -54,7 +56,7 @@ class SemanticDecoder(nn.Module):
     def generate(self, encoder_output, attention_mask, sample=False):
         B, T, C = encoder_output.shape
 
-        padded_encoder_output = torch.ones((B, self.block_size, C))
+        padded_encoder_output = torch.ones((B, self.block_size, C)).to(get_device())
         padded_encoder_output[:, :T, :] = encoder_output
 
         # get the predictions

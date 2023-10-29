@@ -24,7 +24,8 @@ if __name__ == "__main__":
     parser.add_argument("--relay-decoder-path", type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--n-samples", default=10000, type=int)
-    parser.add_argument("--train-size", default=0.8, type=float)
+    parser.add_argument("--train-size", default=0.9, type=float)
+    parser.add_argument("--val-size", default=0.2, type=float)
     parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
@@ -50,6 +51,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         n_samples=args.n_samples,
         train_size=args.train_size,
+        val_size=args.val_size
     )
     data_handler.load_data()
 
@@ -82,7 +84,7 @@ if __name__ == "__main__":
         n_latent=128,
         channel_tx_rx=channel_tx_rx,
         channel_rel_rx=channel_rel_rx,
-    )
+    ).to(device)
 
     optimizer = torch.optim.AdamW(
         params=tx_relay_rx_channel_model.parameters(),
@@ -127,7 +129,10 @@ if __name__ == "__main__":
                 input_ids=xb,
                 attention_mask=attention_mask,
             )
-            relay_out = relay(encoder_output[:, :-1, :])
+            relay_out = relay(
+                x=encoder_output[:, :-1, :],
+                attention_mask=attention_mask[:, :-1],
+            )
 
             output_hat = tx_relay_rx_channel_model(
                 encoder_output[:, 1:, :], relay_out
@@ -149,7 +154,10 @@ if __name__ == "__main__":
                 input_ids=xb,
                 attention_mask=attention_mask,
             )
-            relay_out = relay(encoder_output[:, :-1, :])
+            relay_out = relay(
+                x=encoder_output[:, :-1, :],
+                attention_mask=attention_mask[:, :-1],
+            )
 
             with torch.no_grad():
                 output_hat = tx_relay_rx_channel_model(

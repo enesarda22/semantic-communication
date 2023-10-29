@@ -21,7 +21,8 @@ if __name__ == "__main__":
     parser.add_argument("--relay-decoder-path", type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--n-samples", default=10000, type=int)
-    parser.add_argument("--train-size", default=0.8, type=float)
+    parser.add_argument("--train-size", default=0.9, type=float)
+    parser.add_argument("--val-size", default=0.2, type=float)
     parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
@@ -38,6 +39,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         n_samples=args.n_samples,
         train_size=args.train_size,
+        val_size=args.val_size
     )
     data_handler.load_data()
 
@@ -49,11 +51,13 @@ if __name__ == "__main__":
     ).to(device)
     checkpoint = torch.load(args.relay_decoder_path)
     relay_decoder.load_state_dict(checkpoint["model_state_dict"])
+    relay_decoder.to(device)
+
 
     relay = Relay(
         semantic_encoder=semantic_encoder,
         semantic_decoder=relay_decoder,
-    )
+    ).to(device)
     receiver_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_heads=args.n_heads,
