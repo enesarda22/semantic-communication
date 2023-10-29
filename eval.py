@@ -5,6 +5,9 @@ from semantic_communication.models.transceiver import (
     TxRelayRxChannelModel,
     Transceiver,
 )
+
+import matplotlib.pyplot as plt
+
 from nltk.translate.bleu_score import sentence_bleu
 from semantic_communication.utils.general import get_device
 from semantic_communication.models.semantic_encoder import SemanticEncoder
@@ -15,52 +18,52 @@ import torch
 import argparse
 from torch.nn import functional as F
 
-def semantic_similarity_score(self, target_sentences, received_sentences):
-    target_emb = self.sbert.encode(target_sentences)
-    received_emb = self.sbert.encode(received_sentences)
+def semantic_similarity_score(target_sentences, received_sentences, sbert):
+    target_emb = sbert.encode(target_sentences)
+    received_emb = sbert.encode(received_sentences)
     cosine_scores = util.cos_sim(target_emb, received_emb)
 
     return cosine_scores
 
 
-def bleu_1gram(self, target_sentences, received_sentences):
+def bleu_1gram(target_sentences, received_sentences):
     # score = []
     # for (sent1, sent2) in zip(target_sentences, received_sentences):
     #     sent1 = sent1.split()
     #     sent2 = sent2.split()
     #     score.append(sentence_bleu([sent1], sent2,
     #                                weights=(1, 0, 0, 0)))
-    return sentence_bleu([sent1], sent2, weights=(1, 0, 0, 0))
+    return sentence_bleu([target_sentences], received_sentences, weights=(1, 0, 0, 0))
 
 
-def bleu_2gram(self, target_sentences, received_sentences):
+def bleu_2gram(target_sentences, received_sentences):
     # score = []
     # for (sent1, sent2) in zip(target_sentences, received_sentences):
     #     sent1 = sent1.split()
     #     sent2 = sent2.split()
     #     score.append(sentence_bleu([sent1], sent2,
     #                                weights=(0, 1, 0, 0)))
-    return sentence_bleu([sent1], sent2, weights=(0, 1, 0, 0))
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 1, 0, 0))
 
 
-def bleu_3gram(self, target_sentences, received_sentences):
+def bleu_3gram(target_sentences, received_sentences):
     # score = []
     # for (sent1, sent2) in zip(target_sentences, received_sentences):
     #     sent1 = sent1.split()
     #     sent2 = sent2.split()
     #     score.append(sentence_bleu([sent1], sent2,
     #                                weights=(0, 0, 1, 0)))
-    return sentence_bleu([sent1], sent2, weights=(0, 0, 1, 0))
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 1, 0))
 
 
-def bleu_4gram(self, target_sentences, received_sentences):
+def bleu_4gram(target_sentences, received_sentences):
     # score = []
     # for (sent1, sent2) in zip(target_sentences, received_sentences):
     #     sent1 = sent1.split()
     #     sent2 = sent2.split()
     #     score.append(sentence_bleu([sent1], sent2,
     #                                weights=(0, 0, 0, 1)))
-    return sentence_bleu([sent1], sent2, weights=(0, 0, 0, 1))
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 0, 1))
 
 
 if __name__ == "__main__":
@@ -148,9 +151,9 @@ if __name__ == "__main__":
     bleu_2 = []
     bleu_3 = []
     bleu_4 = []
-
+    sbert = SentenceTransformer('all-MiniLM-L6-v2')
     for SNR in args.SNR_list:
-
+        print("Simulating for SNR: " + str(SNR))
         # Create Channels
         if args.channel_type == "AWGN":
             tx_rx_channel = AWGN(int(SNR) - args.SNR_diff, args.sig_pow)
@@ -180,14 +183,14 @@ if __name__ == "__main__":
             with torch.no_grad():
                 logits, loss = transceiver(xb, attention_mask)
                 probs = F.softmax(logits, dim=-1)
-                idx = (torch.argmax(probs, dim=-1)).reshape(args.batch_size, args.max_length)
+                idx = (torch.argmax(probs, dim=-1)).reshape(xb.shape[0], args.max_length)
 
                 for (sent1, sent2) in zip(xb, idx):
                     grnd = data_handler.get_text(sent1[1:].to("cpu"))
                     # TODO: THIS IS NOT WORKING PROPERLY
                     recv = data_handler.get_text(sent2.to("cpu"))
 
-                    cosine_scores.append(semantic_similarity_score(grnd, recv))
+                    cosine_scores.append(semantic_similarity_score(grnd, recv, sbert)[0][0])
 
                     bleu1_scores.append(bleu_1gram(grnd, recv))
                     bleu2_scores.append(bleu_2gram(grnd, recv))
@@ -202,4 +205,40 @@ if __name__ == "__main__":
 
 
 
+snr_np = np.array(args.SNR_list).astype(int)
 
+plt.figure()
+plt.plot(args.SNR_list, semantic_sim)
+plt.grid()
+plt.xlabel("Channel SNR (dB)")
+plt.ylabel("Semantic Similarity")
+plt.xticks(np.arange(np.min(snr_np),np.max(snr_np),3))
+plt.title("Semantic Similarity v. Channel SNR (dB)")
+plt.savefig('SemanticSimilarty_v_SNR.png', dpi=400)
+
+plt.figure()
+plt.plot(args.SNR_list, bleu_1)
+plt.grid()
+plt.xlabel("Channel SNR (dB)")
+plt.ylabel("BLEU 1-gram")
+plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
+plt.title("BLEU 1-gram v. Channel SNR (dB)")
+plt.savefig('BLEU1gram_v_SNR.png', dpi=400)
+
+plt.figure()
+plt.plot(args.SNR_list, bleu_2)
+plt.grid()
+plt.xlabel("Channel SNR (dB)")
+plt.ylabel("BLEU 2-gram")
+plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
+plt.title("BLEU 2-gram v. Channel SNR (dB)")
+plt.savefig('BLEU2gam_v_SNR.png', dpi=400)
+
+plt.figure()
+plt.plot(args.SNR_list, bleu_1)
+plt.grid()
+plt.xlabel("Channel SNR (dB)")
+plt.ylabel("BLEU 3-gram")
+plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
+plt.title("BLEU 3-gram v. Channel SNR (dB)")
+plt.savefig('BLEU3gram_v_SNR.png', dpi=400)
