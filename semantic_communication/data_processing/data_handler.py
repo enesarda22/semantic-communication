@@ -114,11 +114,25 @@ class DataHandler:
         sentences = sum(sentences_list, [])
         return sentences
 
-    def get_tokens(self, ids):
-        token_ids = self.encoder.inverse_transform(ids.flatten())
+    def get_tokens(
+        self,
+        ids,
+        attention_mask=None,
+        skip_special_tokens=False,
+    ) -> List[str]:
+        if attention_mask is not None:
+            pad_token_id = self.encoder.inverse_transform([0])[0]
+            ids = torch.masked_fill(ids, attention_mask == 0, pad_token_id)
+
+        token_ids = self.encoder.inverse_transform(ids.flatten().to("cpu"))
         token_ids = token_ids.reshape(ids.shape)
 
-        tokens = [self.semantic_encoder.tokenizer.decode(t) for t in token_ids]
+        tokens = [
+            self.semantic_encoder.tokenizer.decode(
+                t, skip_special_tokens=skip_special_tokens
+            )
+            for t in token_ids
+        ]
         return tokens
 
     def get_text(self, ids):

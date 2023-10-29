@@ -184,11 +184,23 @@ if __name__ == "__main__":
                 logits, loss = transceiver(xb, attention_mask)
                 probs = F.softmax(logits, dim=-1)
                 idx = (torch.argmax(probs, dim=-1)).reshape(xb.shape[0], args.max_length)
+                idx = torch.masked_select(
+                    idx,
+                    attention_mask[:, :-1] == 1,
+                )
+                predicted_tokens = data_handler.get_tokens(
+                    ids=idx.reshape(-1, 1),
+                    skip_special_tokens=True,
+                )
 
-                for (sent1, sent2) in zip(xb, idx):
+                pred_split_indices = attention_mask[:, :-1].sum(1).cumsum(0)
+                predicted_tokens = np.array_split(predicted_tokens, pred_split_indices)
+
+                for (sent1, sent2) in zip(xb, predicted_tokens):
                     grnd = data_handler.get_text(sent1[1:].to("cpu"))
+
                     # TODO: THIS IS NOT WORKING PROPERLY
-                    recv = data_handler.get_text(sent2.to("cpu"))
+                    recv = " ".join(sent2)
 
                     cosine_scores.append(semantic_similarity_score(grnd, recv, sbert)[0][0])
 
