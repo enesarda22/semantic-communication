@@ -6,8 +6,6 @@ from semantic_communication.models.multi_head_attention import (
     MultiHeadAttention,
 )
 
-from semantic_communication.utils.general import get_device
-
 
 class SemanticDecoder(nn.Module):
     def __init__(self, vocab_size, n_heads, n_embeddings, block_size):
@@ -31,7 +29,12 @@ class SemanticDecoder(nn.Module):
 
         self.block_size = block_size
 
-    def forward(self, encoder_output, attention_mask, targets=None):
+    def forward(self, encoder_output, attention_mask=None, targets=None):
+        B, T, C = encoder_output.shape
+
+        if attention_mask is None:
+            attention_mask = torch.ones(B, T, dtype=torch.long)
+
         # residual connection after the layer, norm before the layer
         x = encoder_output + self.sa_heads(
             self.ln1(encoder_output), attention_mask
@@ -42,8 +45,7 @@ class SemanticDecoder(nn.Module):
         if targets is None:
             loss = None
         else:
-            B, T, C = logits.shape
-            logits = logits.reshape(B * T, C)
+            logits = logits.reshape(B * T, -1)
             targets = targets.reshape(B * T)
             attention_mask = attention_mask.flatten() == 1
 
@@ -53,14 +55,11 @@ class SemanticDecoder(nn.Module):
 
         return logits, loss
 
-    def generate(self, encoder_output, attention_mask, sample=False):
+    def generate(self, encoder_output, attention_mask=None, sample=False):
         B, T, C = encoder_output.shape
 
-        padded_encoder_output = torch.ones((B, self.block_size, C)).to(get_device())
-        padded_encoder_output[:, :T, :] = encoder_output
-
         # get the predictions
-        logits, _ = self(padded_encoder_output, attention_mask)  # (B, T, C)
+        logits, _ = self(encoder_output, attention_mask)  # (B, T, C)
         # apply softmax to get probabilities
         probs = F.softmax(logits, dim=-1)  # (B, C)
 
@@ -73,4 +72,4 @@ class SemanticDecoder(nn.Module):
         else:
             idx_next = torch.argmax(probs, dim=-1)
 
-        return idx_next[:, :T]  # (B, T)
+        return idx_next  # (B, T)

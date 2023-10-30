@@ -77,7 +77,7 @@ class DataHandler:
         ) = train_test_split(
             train_input_ids,
             train_attention_mask,
-            train_size=(1-self.val_size),
+            train_size=(1 - self.val_size),
             random_state=RANDOM_STATE,
         )
 
@@ -121,7 +121,7 @@ class DataHandler:
         skip_special_tokens=False,
     ) -> List[str]:
         if attention_mask is not None:
-            pad_token_id = self.encoder.inverse_transform([0])[0]
+            pad_token_id = self.encoder.transform([0])[0]
             ids = torch.masked_fill(ids, attention_mask == 0, pad_token_id)
 
         token_ids = self.encoder.inverse_transform(ids.flatten().to("cpu"))
@@ -137,8 +137,11 @@ class DataHandler:
 
     def get_text(self, ids):
         token_list = self.get_tokens(ids)
-        return ((" ".join(token_list)).replace('[PAD]', '')).replace('[SEP]', '').strip()
-
+        return (
+            ((" ".join(token_list)).replace("[PAD]", ""))
+            .replace("[SEP]", "")
+            .strip()
+        )
 
     def encode_tokens(self, tokens):
         ids = self.encoder.transform(tokens)

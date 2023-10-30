@@ -1,5 +1,4 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer, util
 from semantic_communication.models.transceiver import (
     TxRelayChannelModel,
     TxRelayRxChannelModel,
@@ -19,12 +18,12 @@ import argparse
 from torch.nn import functional as F
 
 
-def semantic_similarity_score(target_sentences, received_sentences, sbert):
-    target_emb = sbert.encode(target_sentences)
-    received_emb = sbert.encode(received_sentences)
-    cosine_scores = util.cos_sim(target_emb, received_emb)
+def semantic_similarity_score(target_sentences, received_sentences):
+    target_emb = semantic_encoder(messages=target_sentences)
+    received_emb = semantic_encoder(messages=received_sentences)
+    scores = F.cosine_similarity(target_emb, received_emb)
 
-    return cosine_scores
+    return scores
 
 
 def bleu_1gram(target_sentences, received_sentences):
@@ -78,7 +77,7 @@ def bleu_4gram(target_sentences, received_sentences):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--transceiver-path", type=str)
-    parser.add_argument("--SNR-list", type=list)
+    parser.add_argument("--SNR-list", nargs="+", type=int)
 
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--n-samples", default=10000, type=int)
@@ -93,10 +92,10 @@ if __name__ == "__main__":
     # New args
     parser.add_argument("--val-size", default=0.2, type=float)
     parser.add_argument("--sig-pow", default=1.0, type=float)
-    parser.add_argument("--SNR-min", default=3, type=int)
-    parser.add_argument("--SNR-max", default=24, type=int)
-    parser.add_argument("--SNR-step", default=3, type=int)
-    parser.add_argument("--SNR-window", default=5, type=int)
+    # parser.add_argument("--SNR-min", default=3, type=int)
+    # parser.add_argument("--SNR-max", default=24, type=int)
+    # parser.add_argument("--SNR-step", default=3, type=int)
+    # parser.add_argument("--SNR-window", default=5, type=int)
     parser.add_argument("--SNR-diff", default=3, type=int)
     parser.add_argument("--channel-type", default="AWGN", type=str)
     args = parser.parse_args()
@@ -158,7 +157,9 @@ if __name__ == "__main__":
         tx_relay_channel_model,
         tx_relay_rx_channel_model,
     )
-    transceiver_checkpoint = torch.load(args.transceiver_path)
+    transceiver_checkpoint = torch.load(
+        args.transceiver_path, map_location=device
+    )
     transceiver.load_state_dict(transceiver_checkpoint["model_state_dict"])
 
     semantic_sim = []
@@ -166,7 +167,6 @@ if __name__ == "__main__":
     bleu_2 = []
     bleu_3 = []
     bleu_4 = []
-    sbert = SentenceTransformer("all-MiniLM-L6-v2")
     for SNR in args.SNR_list:
         print("Simulating for SNR: " + str(SNR))
         # Create Channels
@@ -197,40 +197,49 @@ if __name__ == "__main__":
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
+            B, T = xb.shape
+
             with torch.no_grad():
                 logits, _ = transceiver(xb, attention_mask)
                 probs = F.softmax(logits, dim=-1)
-                idx = (torch.argmax(probs, dim=-1)).reshape(
-                    xb.shape[0], args.max_length
+                predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
+                    B, args.max_length
                 )
-                idx = torch.masked_select(
-                    idx,
-                    attention_mask[:, :-1] == 1,
+
+                end_token_id = data_handler.encoder.transform([102])[0]
+                end_prediction_idx = torch.argmax(
+                    predicted_ids.eq(end_token_id).double(), dim=1
                 )
-                predicted_tokens = data_handler.get_tokens(
-                    ids=idx.reshape(-1, 1),
+
+                # zero means no end token prediction
+                end_prediction_idx[end_prediction_idx == 0] = T - 1
+
+                # prediction mask is created based on end token predictions
+                pred_mask = torch.arange(T - 1).le(
+                    end_prediction_idx.view(-1, 1)
+                )
+
+                predicted_sentences = data_handler.get_tokens(
+                    ids=predicted_ids,
+                    attention_mask=pred_mask,
                     skip_special_tokens=True,
                 )
 
-                pred_split_indices = attention_mask[:, :-1].sum(1).cumsum(0)
-                predicted_tokens = np.array_split(
-                    predicted_tokens, pred_split_indices
+                original_sentences = data_handler.get_tokens(
+                    ids=xb,
+                    attention_mask=attention_mask,
+                    skip_special_tokens=True,
                 )
 
-                for sent1, sent2 in zip(xb, predicted_tokens):
-                    grnd = data_handler.get_text(sent1[1:].to("cpu"))
-
-                    # TODO: THIS IS NOT WORKING PROPERLY
-                    recv = " ".join(sent2)
-
+                for s1, s2 in zip(original_sentences, predicted_sentences):
                     cosine_scores.append(
-                        semantic_similarity_score(grnd, recv, sbert)[0][0]
+                        semantic_similarity_score([s1], [s2])[0][0]
                     )
 
-                    bleu1_scores.append(bleu_1gram(grnd, recv))
-                    bleu2_scores.append(bleu_2gram(grnd, recv))
-                    bleu3_scores.append(bleu_3gram(grnd, recv))
-                    bleu4_scores.append(bleu_4gram(grnd, recv))
+                    bleu1_scores.append(bleu_1gram(s1, s2))
+                    bleu2_scores.append(bleu_2gram(s1, s2))
+                    bleu3_scores.append(bleu_3gram(s1, s2))
+                    bleu4_scores.append(bleu_4gram(s1, s2))
 
         semantic_sim.append(np.mean(cosine_scores))
         bleu_1.append(np.mean(bleu1_scores))

@@ -143,7 +143,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
 
         # relay
         x_hat = self.tx_relay_channel_enc_dec(x[:, :-1, :])
-        x_relay = self.relay(x_hat, attention_mask[:, :-1])
+        x_relay = self.relay(x_hat)
 
         # receiver
         x_hat_rcv = self.tx_relay_rx_channel_enc_dec(x[:, 1:, :], x_relay)
@@ -165,21 +165,37 @@ class Relay(nn.Module):
         self.semantic_encoder = semantic_encoder
         self.semantic_decoder = semantic_decoder
 
-    def forward(self, x, attention_mask):
+    def forward(self, x):
+        B, T, C = x.shape
+
         self.semantic_decoder.eval()
         with torch.no_grad():
-            predicted_ids = self.semantic_decoder.generate(x, attention_mask)
+            predicted_ids = self.semantic_decoder.generate(x)
 
-        begin_padding = torch.full((predicted_ids.shape[0], 1), 2).to(get_device())
+        # ids are repeated to generate the embeddings sequentially
+        predicted_ids = torch.repeat_interleave(predicted_ids, T, dim=0)
+
+        # append [CLS] token
+        cls_padding = torch.full((B * T, 1), 2).to(get_device())
         predicted_ids = torch.cat(
-            tensors=(begin_padding, predicted_ids),
+            tensors=(cls_padding, predicted_ids),
             dim=1,
         )
 
-        first_token_attention = torch.full((attention_mask.shape[0], 1), 1).to(get_device())
-        attention_mask = torch.hstack((first_token_attention, attention_mask))
+        # tril mask to generate the embeddings sequentially
+        tril_mask = torch.tril(
+            torch.ones(T, T + 1, dtype=torch.long),
+            diagonal=1,
+        ).repeat(B, 1)
+
         out = self.semantic_encoder(
             input_ids=predicted_ids,
-            attention_mask=attention_mask,
+            attention_mask=tril_mask,
         )
-        return out[:, 1:, :]
+
+        # use eye mask to select the correct embeddings sequentially
+        eye_mask = torch.eye(T).repeat(1, B) == 1
+        out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)
+        out = out.view(B, T, C)
+
+        return out
