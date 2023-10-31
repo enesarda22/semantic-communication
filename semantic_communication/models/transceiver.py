@@ -162,6 +162,7 @@ class Relay(nn.Module):
         semantic_decoder: SemanticDecoder,
     ):
         super().__init__()
+        self.device = get_device()
         self.semantic_encoder = semantic_encoder
         self.semantic_decoder = semantic_decoder
 
@@ -176,17 +177,19 @@ class Relay(nn.Module):
         predicted_ids = torch.repeat_interleave(predicted_ids, T, dim=0)
 
         # append [CLS] token
-        cls_padding = torch.full((B * T, 1), 2).to(get_device())
+        cls_padding = torch.full((B * T, 1), 2).to(self.device)
         predicted_ids = torch.cat(
             tensors=(cls_padding, predicted_ids),
             dim=1,
         )
 
         # tril mask to generate the embeddings sequentially
-        tril_mask = (torch.tril(
-            torch.ones(T, T + 1, dtype=torch.long),
-            diagonal=1,
-        ).repeat(B, 1)).to(get_device())
+        tril_mask = (
+            torch.tril(
+                torch.ones(T, T + 1, dtype=torch.long),
+                diagonal=1,
+            ).repeat(B, 1)
+        ).to(self.device)
 
         out = self.semantic_encoder(
             input_ids=predicted_ids,
@@ -194,7 +197,7 @@ class Relay(nn.Module):
         )
 
         # use eye mask to select the correct embeddings sequentially
-        eye_mask = (torch.eye(T).repeat(1, B) == 1).to(get_device())
+        eye_mask = (torch.eye(T).repeat(1, B) == 1).to(self.device)
         out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)
         out = out.view(B, T, C)
 
