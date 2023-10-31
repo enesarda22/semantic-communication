@@ -1,8 +1,11 @@
 from abc import ABC
+
 import torch
 import numpy as np
+
 import torch.nn.functional as F
-from semantic_communication.utils.general import get_device
+
+from utils.general import get_device
 
 
 class Channel(ABC):
