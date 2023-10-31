@@ -183,10 +183,10 @@ class Relay(nn.Module):
         )
 
         # tril mask to generate the embeddings sequentially
-        tril_mask = torch.tril(
+        tril_mask = (torch.tril(
             torch.ones(T, T + 1, dtype=torch.long),
             diagonal=1,
-        ).repeat(B, 1)
+        ).repeat(B, 1)).to(get_device())
 
         out = self.semantic_encoder(
             input_ids=predicted_ids,
@@ -194,7 +194,7 @@ class Relay(nn.Module):
         )
 
         # use eye mask to select the correct embeddings sequentially
-        eye_mask = torch.eye(T).repeat(1, B) == 1
+        eye_mask = (torch.eye(T).repeat(1, B) == 1).to(get_device())
         out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)
         out = out.view(B, T, C)
 

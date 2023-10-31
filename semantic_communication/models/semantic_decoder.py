@@ -6,6 +6,8 @@ from semantic_communication.models.multi_head_attention import (
     MultiHeadAttention,
 )
 
+from semantic_communication.utils.general import get_device
+
 
 class SemanticDecoder(nn.Module):
     def __init__(self, vocab_size, n_heads, n_embeddings, block_size):
@@ -33,7 +35,7 @@ class SemanticDecoder(nn.Module):
         B, T, C = encoder_output.shape
 
         if attention_mask is None:
-            attention_mask = torch.ones(B, T, dtype=torch.long)
+            attention_mask = torch.ones(B, T, dtype=torch.long).to(get_device())
 
         # residual connection after the layer, norm before the layer
         x = encoder_output + self.sa_heads(

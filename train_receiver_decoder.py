@@ -79,8 +79,7 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             relay_out = relay(
-                x=encoder_output[:, :-1, :],
-                attention_mask=attention_mask[:, :-1],
+                x=encoder_output[:, :-1, :]
             )
             superposed_out = relay_out + encoder_output[:, 1:, :]
             logits, loss = receiver_decoder(
@@ -106,8 +105,7 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             relay_out = relay(
-                x=encoder_output[:, :-1, :],
-                attention_mask=attention_mask[:, :-1],
+                x=encoder_output[:, :-1, :]
             )
             superposed_out = relay_out + encoder_output[:, 1:, :]
 
