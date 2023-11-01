@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--channel-block-latent-dim", default=128, type=int)
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--SNR-min", default=3, type=int)
-    parser.add_argument("--SNR-max", default=24, type=int)
+    parser.add_argument("--SNR-max", default=21, type=int)
     parser.add_argument("--SNR-step", default=3, type=int)
     parser.add_argument("--SNR-window", default=5, type=int)
     parser.add_argument("--SNR-diff", default=3, type=int)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     )
 
     # Initializations
-    SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max, args.SNR_step))
+    SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max + 1, args.SNR_step))
 
     if args.channel_type == "AWGN":
         channel_tx_rx = AWGN(SNR_dB[0] - args.SNR_diff, args.sig_pow)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     criterion = torch.nn.MSELoss()
 
     best_loss = 5
-    cur_win, cur_SNR_index = 0, 1
+    cur_win, cur_SNR_index = 0, 0
 
     for epoch in range(args.n_epochs):
         train_losses = []
