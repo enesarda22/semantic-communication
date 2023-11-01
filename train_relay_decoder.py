@@ -12,6 +12,7 @@ from semantic_communication.utils.general import (
     get_device,
     print_loss,
     create_checkpoint,
+    set_seed,
 )
 
 if __name__ == "__main__":
@@ -30,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-embeddings", default=384, type=int)
     args = parser.parse_args()
 
+    set_seed()
     device = get_device()
 
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
@@ -99,14 +101,24 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
+
+        checkpoint_path = os.path.join(
+            args.checkpoint_path,
+            f"relay-decoder/relay_decoder_{epoch}.pt",
+        )
+
         if mean_loss < best_loss:
             create_checkpoint(
-                path=os.path.join(
-                    args.checkpoint_path,
-                    f"relay-decoder/relay_decoder_{epoch}.pt",
-                ),
+                path=checkpoint_path,
                 model_state_dict=relay_decoder.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )
             best_loss = mean_loss
+        else:
+            create_checkpoint(
+                path=checkpoint_path,
+                model_state_dict=None,
+                optimizer_state_dict=None,
+                mean_val_loss=mean_loss,
+            )
