@@ -20,7 +20,7 @@ batch_size = 64
 ## channel
 n_latent = 128, 256
 min_SNR = 3
-max_SNR = 24
+max_SNR = 21
 SNR_step = 3
 SNR_window = 3
 
