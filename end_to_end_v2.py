@@ -18,7 +18,7 @@ from semantic_communication.utils.general import (
     get_device,
     print_loss,
     create_checkpoint,
-    set_seed
+    set_seed,
 )
 
 if __name__ == "__main__":
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         n_samples=args.n_samples,
         train_size=args.train_size,
-        val_size=args.val_size
+        val_size=args.val_size,
     )
     data_handler.load_data()
 
@@ -98,9 +98,16 @@ if __name__ == "__main__":
     rx_checkpoint = torch.load(args.receiver_decoder_path)
     receiver_decoder.load_state_dict(rx_checkpoint["model_state_dict"])
 
-    tx_relay_channel_model = TxRelayChannelModel(nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=tx_relay_channel).to(device)
+    tx_relay_channel_model = TxRelayChannelModel(
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel=tx_relay_channel,
+    ).to(device)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
-        nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel_tx_rx=tx_rx_channel, channel_rel_rx=relay_rx_channel
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel_tx_rx=tx_rx_channel,
+        channel_rel_rx=relay_rx_channel,
     ).to(device)
 
     tx_relay_channel_model_checkpoint = torch.load(
@@ -142,12 +149,8 @@ if __name__ == "__main__":
                 tx_rx_channel = AWGN(
                     SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
                 )
-                tx_relay_channel = AWGN(
-                    SNR_dB[cur_SNR_index], args.sig_pow
-                )
-                relay_rx_channel = AWGN(
-                    SNR_dB[cur_SNR_index], args.sig_pow
-                )
+                tx_relay_channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
+                relay_rx_channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
 
             else:
                 tx_rx_channel = Rayleigh(
@@ -196,14 +199,24 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
+
+        checkpoint_path = os.path.join(
+            args.checkpoint_path,
+            f"end-to-end-transceiver/end_to_end_transceiver_{epoch}.pt",
+        )
+
         if mean_loss < best_loss:
             create_checkpoint(
-                path=os.path.join(
-                    args.checkpoint_path,
-                    f"end-to-end-transceiver/end_to_end_transceiver_{epoch}.pt",
-                ),
-                model_state_dict=transceiver.state_dict(),
+                path=checkpoint_path,
+                model_state_dict=relay_decoder.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )
             best_loss = mean_loss
+        else:
+            create_checkpoint(
+                path=checkpoint_path,
+                model_state_dict=None,
+                optimizer_state_dict=None,
+                mean_val_loss=mean_loss,
+            )

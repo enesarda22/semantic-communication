@@ -13,7 +13,7 @@ from semantic_communication.utils.general import (
     get_device,
     print_loss,
     create_checkpoint,
-    set_seed
+    set_seed,
 )
 
 if __name__ == "__main__":
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         n_samples=args.n_samples,
         train_size=args.train_size,
-        val_size=args.val_size
+        val_size=args.val_size,
     )
     data_handler.load_data()
 
@@ -61,7 +61,11 @@ if __name__ == "__main__":
     else:
         channel = Rayleigh(SNR_dB[0], args.sig_pow)
 
-    tx_relay_channel_model = TxRelayChannelModel(nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=channel).to(device)
+    tx_relay_channel_model = TxRelayChannelModel(
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel=channel,
+    ).to(device)
 
     optimizer = torch.optim.AdamW(
         params=tx_relay_channel_model.parameters(),
@@ -127,14 +131,23 @@ if __name__ == "__main__":
 
         mean_loss = np.mean(val_losses)
 
+        checkpoint_path = os.path.join(
+            args.checkpoint_path,
+            f"tx-relay-channel/tx_relay_channel_{epoch}.pt",
+        )
+
         if mean_loss < best_loss:
             create_checkpoint(
-                path=os.path.join(
-                    args.checkpoint_path,
-                    f"tx-relay-channel/tx_relay_channel_{epoch}.pt",
-                ),
-                model_state_dict=tx_relay_channel_model.state_dict(),
+                path=checkpoint_path,
+                model_state_dict=relay_decoder.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )
             best_loss = mean_loss
+        else:
+            create_checkpoint(
+                path=checkpoint_path,
+                model_state_dict=None,
+                optimizer_state_dict=None,
+                mean_val_loss=mean_loss,
+            )
