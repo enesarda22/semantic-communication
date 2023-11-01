@@ -9,8 +9,18 @@ from semantic_communication.models.multi_head_attention import (
 from semantic_communication.utils.general import get_device
 
 
-class SemanticDecoder(nn.Module):
-    def __init__(self, vocab_size, n_heads, n_embeddings, block_size):
+class MultiInputSequential(nn.Sequential):
+    def forward(self, *inputs):
+        for module in self._modules.values():
+            if type(inputs) == tuple:
+                inputs = module(*inputs)
+            else:
+                inputs = module(inputs)
+        return inputs
+
+
+class DecoderBlock(nn.Module):
+    def __init__(self, n_heads, n_embeddings, block_size):
         super().__init__()
         self.sa_heads = MultiHeadAttention(
             n_heads=n_heads,
@@ -26,7 +36,31 @@ class SemanticDecoder(nn.Module):
         )
         self.ln1 = nn.LayerNorm(n_embeddings)
         self.ln2 = nn.LayerNorm(n_embeddings)
-        self.ln3 = nn.LayerNorm(n_embeddings)
+
+    def forward(self, x, attention_mask):
+        # residual connection after the layer, norm before the layer
+        x = x + self.sa_heads(self.ln1(x), attention_mask)
+        x = x + self.ff_net(self.ln2(x))
+
+        return x, attention_mask
+
+
+class SemanticDecoder(nn.Module):
+    def __init__(
+        self, vocab_size, n_blocks, n_heads, n_embeddings, block_size
+    ):
+        super().__init__()
+        self.decoder_blocks = MultiInputSequential(
+            *[
+                DecoderBlock(
+                    n_heads=n_heads,
+                    n_embeddings=n_embeddings,
+                    block_size=block_size,
+                )
+                for _ in range(n_blocks)
+            ]
+        )
+        self.ln = nn.LayerNorm(n_embeddings)
         self.lm_head = nn.Linear(n_embeddings, vocab_size)
 
         self.block_size = block_size
@@ -35,14 +69,12 @@ class SemanticDecoder(nn.Module):
         B, T, C = encoder_output.shape
 
         if attention_mask is None:
-            attention_mask = torch.ones(B, T, dtype=torch.long).to(get_device())
+            attention_mask = torch.ones(B, T, dtype=torch.long).to(
+                get_device()
+            )
 
-        # residual connection after the layer, norm before the layer
-        x = encoder_output + self.sa_heads(
-            self.ln1(encoder_output), attention_mask
-        )
-        x = x + self.ff_net(self.ln2(x))
-        logits = self.lm_head(self.ln3(x))
+        x, _ = self.decoder_blocks(encoder_output, attention_mask)
+        logits = self.lm_head(self.ln(x))
 
         if targets is None:
             loss = None

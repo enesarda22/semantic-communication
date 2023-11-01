@@ -15,6 +15,7 @@ from semantic_communication.utils.general import (
 )
 
 if __name__ == "__main__":
+    # TODO: add scheduler
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--n-samples", default=10000, type=int)
@@ -24,6 +25,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
+    parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
     args = parser.parse_args()
@@ -36,12 +38,13 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         n_samples=args.n_samples,
         train_size=args.train_size,
-        val_size=args.val_size
+        val_size=args.val_size,
     )
     data_handler.load_data()
 
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
+        n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
