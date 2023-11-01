@@ -8,7 +8,7 @@ from semantic_communication.models.transceiver import (
 import matplotlib.pyplot as plt
 
 from nltk.translate.bleu_score import sentence_bleu
-from semantic_communication.utils.general import get_device
+from semantic_communication.utils.general import get_device, set_seed
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
@@ -16,6 +16,7 @@ from semantic_communication.utils.channel import AWGN, Rayleigh
 import torch
 import argparse
 from torch.nn import functional as F
+
 
 
 def semantic_similarity_score(target_sentences, received_sentences):
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     device = get_device()
-
+    set_seed()
     # Create Data handler
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(

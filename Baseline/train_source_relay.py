@@ -6,6 +6,7 @@ from utils.general import (
     get_device,
     print_loss,
     create_checkpoint,
+    set_seed
 )
 from utils.channel import AWGN, Rayleigh
 from data_processing.semantic_encoder import SemanticEncoder
@@ -39,6 +40,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     device = get_device()
+    set_seed()
 
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(

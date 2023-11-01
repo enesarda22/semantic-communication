@@ -17,6 +17,7 @@ from semantic_communication.utils.general import (
     get_device,
     print_loss,
     create_checkpoint,
+    set_seed
 )
 
 if __name__ == "__main__":
@@ -47,7 +48,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     device = get_device()
-
+    set_seed()
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
         semantic_encoder=semantic_encoder,
