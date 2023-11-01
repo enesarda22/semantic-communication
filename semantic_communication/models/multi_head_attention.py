@@ -36,10 +36,9 @@ class MultiHeadAttention(nn.Module):
         # attention mask to disable communication with paddings
         extended_mask = attention_mask.unsqueeze(-1).to(torch.float64)
         extended_mask = extended_mask @ extended_mask.transpose(1, 2)
-        wei = wei.masked_fill(extended_mask == 0, -torch.inf)
 
         wei = F.softmax(wei, dim=-1)  # (N,B,T,T)
-        wei = torch.nan_to_num(wei)
+        wei.masked_fill(extended_mask == 0, 0)
 
         wei = self.dropout(wei)
         out = torch.einsum("h b j i, b i h d -> b j h d", wei, V)
