@@ -86,16 +86,15 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
+    parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
 
     # New args
+    parser.add_argument("--channel-block-input-dim", default=384, type=int)
+    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
     parser.add_argument("--val-size", default=0.2, type=float)
     parser.add_argument("--sig-pow", default=1.0, type=float)
-    # parser.add_argument("--SNR-min", default=3, type=int)
-    # parser.add_argument("--SNR-max", default=24, type=int)
-    # parser.add_argument("--SNR-step", default=3, type=int)
-    # parser.add_argument("--SNR-window", default=5, type=int)
     parser.add_argument("--SNR-diff", default=3, type=int)
     parser.add_argument("--channel-type", default="AWGN", type=str)
     args = parser.parse_args()
@@ -131,6 +130,7 @@ if __name__ == "__main__":
     # Create Transceiver
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
+        n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
@@ -138,16 +138,17 @@ if __name__ == "__main__":
 
     receiver_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
+        n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
     ).to(device)
 
     tx_relay_channel_model = TxRelayChannelModel(
-        384, 128, tx_relay_channel
+        nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=tx_relay_channel
     ).to(device)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
-        384, 128, tx_rx_channel, relay_rx_channel
+        nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel_tx_rx=tx_rx_channel, channel_rel_rx=relay_rx_channel
     ).to(device)
 
     transceiver = Transceiver(
@@ -215,7 +216,7 @@ if __name__ == "__main__":
                 end_prediction_idx[end_prediction_idx == 0] = T - 1
 
                 # prediction mask is created based on end token predictions
-                pred_mask = torch.arange(T - 1).le(
+                pred_mask = (torch.arange(T - 1).to(device)).le(
                     end_prediction_idx.view(-1, 1)
                 )
 
@@ -293,3 +294,18 @@ if __name__ == "__main__":
     plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
     plt.title("BLEU 4-gram v. Channel SNR (dB)")
     plt.savefig("BLEU4gram_v_SNR.png", dpi=400)
+
+    with open('semantic_sim.npy', 'wb') as f:
+        np.save(f, semantic_sim)
+
+    with open('bleu_1.npy', 'wb') as f:
+        np.save(f, bleu_1)
+
+    with open('bleu_2.npy', 'wb') as f:
+        np.save(f, bleu_2)
+
+    with open('bleu_3.npy', 'wb') as f:
+        np.save(f, bleu_3)
+
+    with open('bleu_4.npy', 'wb') as f:
+        np.save(f, bleu_4)

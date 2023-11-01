@@ -27,6 +27,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-length", default=30, type=int)
 
     # New args
+    parser.add_argument("--channel-block-input-dim", default=384, type=int)
+    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
+
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--SNR-min", default=3, type=int)
     parser.add_argument("--SNR-max", default=24, type=int)
@@ -48,14 +51,16 @@ if __name__ == "__main__":
 
     data_handler.load_data()
 
+    SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max, args.SNR_step))
+
     if args.channel_type == "AWGN":
-        channel = AWGN(0, args.sig_pow)
+        channel = AWGN(SNR_dB[0], args.sig_pow)
     else:
-        channel = Rayleigh(0, args.sig_pow)
+        channel = Rayleigh(SNR_dB[0], args.sig_pow)
 
     num_classes = data_handler.vocab_size
 
-    tx_relay_model = Tx_Relay(num_classes, 384, 128, channel=channel).to(device)
+    tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=channel).to(device)
 
     optimizer = torch.optim.AdamW(
         params=tx_relay_model.parameters(),
@@ -64,9 +69,26 @@ if __name__ == "__main__":
 
     best_loss = 5
 
+    cur_win, cur_SNR_index = 0, 1
+
     for epoch in range(args.n_epochs):
         train_losses = []
         tx_relay_model.train()
+
+        if cur_win >= args.SNR_window:
+            cur_win = 0
+            if not cur_SNR_index >= len(SNR_dB) - 1:
+                cur_SNR_index += 1
+
+            if args.channel_type == "AWGN":
+                channel = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
+            else:
+                channel = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
+
+            tx_relay_model.channel = channel
+
+        cur_win += 1
+
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)

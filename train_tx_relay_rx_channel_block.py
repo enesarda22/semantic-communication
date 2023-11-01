@@ -30,10 +30,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
+    parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
 
     # New args
+    parser.add_argument("--channel-block-input-dim", default=384, type=int)
+    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--SNR-min", default=3, type=int)
     parser.add_argument("--SNR-max", default=24, type=int)
@@ -57,6 +60,7 @@ if __name__ == "__main__":
 
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
+        n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
@@ -80,8 +84,8 @@ if __name__ == "__main__":
         channel_rel_rx = Rayleigh(SNR_dB[0], args.sig_pow)
 
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
-        nin=384,
-        n_latent=128,
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
         channel_tx_rx=channel_tx_rx,
         channel_rel_rx=channel_rel_rx,
     ).to(device)
@@ -93,35 +97,34 @@ if __name__ == "__main__":
     criterion = torch.nn.MSELoss()
 
     best_loss = 5
-    cur_win, cur_SNR_index = 0, 0
+    cur_win, cur_SNR_index = 0, 1
 
     for epoch in range(args.n_epochs):
         train_losses = []
         tx_relay_rx_channel_model.train()
+        if cur_win >= args.SNR_window:
+            cur_win = 0
+            if not cur_SNR_index >= len(SNR_dB) - 1:
+                cur_SNR_index += 1
+
+            if args.channel_type == "AWGN":
+                channel_tx_rx = AWGN(
+                    SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                )
+                channel_rel_rx = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
+            else:
+                channel_tx_rx = Rayleigh(
+                    SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                )
+                channel_rel_rx = Rayleigh(
+                    SNR_dB[cur_SNR_index], args.sig_pow
+                )
+
+            tx_relay_rx_channel_model.channel_tx_rx = channel_tx_rx
+            tx_relay_rx_channel_model.channel_rel_rx = channel_rel_rx
+
+        cur_win += 1
         for b in tqdm(data_handler.train_dataloader):
-            if cur_win > args.SNR_window:
-                cur_win = 0
-                if not cur_SNR_index >= len(SNR_dB) - 1:
-                    cur_SNR_index += 1
-
-                if args.channel_type == "AWGN":
-                    channel_tx_rx = AWGN(
-                        SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
-                    )
-                    channel_rel_rx = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
-                else:
-                    channel_tx_rx = Rayleigh(
-                        SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
-                    )
-                    channel_rel_rx = Rayleigh(
-                        SNR_dB[cur_SNR_index], args.sig_pow
-                    )
-
-                tx_relay_rx_channel_model.channel_tx_rx = channel_tx_rx
-                tx_relay_rx_channel_model.channel_rel_rx = channel_rel_rx
-
-            cur_win += 1
-
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
@@ -130,8 +133,7 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             relay_out = relay(
-                x=encoder_output[:, :-1, :],
-                attention_mask=attention_mask[:, :-1],
+                x=encoder_output[:, :-1, :]
             )
 
             output_hat = tx_relay_rx_channel_model(
@@ -155,8 +157,7 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             relay_out = relay(
-                x=encoder_output[:, :-1, :],
-                attention_mask=attention_mask[:, :-1],
+                x=encoder_output[:, :-1, :]
             )
 
             with torch.no_grad():

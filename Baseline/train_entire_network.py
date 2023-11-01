@@ -59,6 +59,17 @@ if __name__ == "__main__":
     )
 
     data_handler.load_data()
+    SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max, args.SNR_step))
+
+    if args.channel_type == "AWGN":
+        tx_rx_channel = AWGN(SNR_dB[0] - args.SNR_diff, args.sig_pow)
+        tx_relay_channel = AWGN(SNR_dB[0], args.sig_pow)
+        relay_rx_channel = AWGN(SNR_dB[0], args.sig_pow)
+
+    else:
+        tx_rx_channel = Rayleigh(SNR_dB[0] - args.SNR_diff, args.sig_pow)
+        tx_relay_channel = Rayleigh(SNR_dB[0], args.sig_pow)
+        relay_rx_channel = Rayleigh(SNR_dB[0], args.sig_pow)
 
     num_classes = data_handler.vocab_size
     tx_relay_model = Tx_Relay(num_classes, 384, 128, channel=tx_relay_channel, entire_network_train=1).to(device)
@@ -72,10 +83,43 @@ if __name__ == "__main__":
     )
 
     best_loss = 5
+    cur_win, cur_SNR_index = 0, 1
 
     for epoch in range(args.n_epochs):
         train_losses = []
         tx_relay_rx_model.train()
+        if cur_win >= args.SNR_window:
+            cur_win = 0
+            if not cur_SNR_index >= len(SNR_dB) - 1:
+                cur_SNR_index += 1
+
+            if args.channel_type == "AWGN":
+                tx_rx_channel = AWGN(
+                    SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                )
+                tx_relay_channel = AWGN(
+                    SNR_dB[cur_SNR_index], args.sig_pow
+                )
+                relay_rx_channel = AWGN(
+                    SNR_dB[cur_SNR_index], args.sig_pow
+                )
+
+            else:
+                tx_rx_channel = Rayleigh(
+                    SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
+                )
+                tx_relay_channel = Rayleigh(
+                    SNR_dB[cur_SNR_index], args.sig_pow
+                )
+                relay_rx_channel = Rayleigh(
+                    SNR_dB[cur_SNR_index], args.sig_pow
+                )
+
+            tx_relay_rx_model.tx_rx_channel = tx_rx_channel
+            tx_relay_rx_model.relay_rx_channel = relay_rx_channel
+            tx_relay_rx_model.tx_relay_model.channel = tx_relay_channel
+        cur_win += 1
+
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
