@@ -1,30 +1,26 @@
+import os
 import pickle
 from typing import List
 
 import torch
 
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import (
     TensorDataset,
     RandomSampler,
     DataLoader,
-    SequentialSampler,
 )
 
+from semantic_communication.data_processing.preprocessor import Preprocessor
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.utils.general import RANDOM_STATE
 
 
 class DataHandler:
-    data_filename = "data.pkl"
-
     def __init__(
         self,
         semantic_encoder: SemanticEncoder,
+        data_fp: str,
         batch_size: int,
-        train_size: float,
-        val_size: float,
     ):
         self.semantic_encoder = semantic_encoder
 
@@ -34,68 +30,17 @@ class DataHandler:
         self.val_dataloader = None
         self.test_dataloader = None
 
+        self.data_fp = data_fp
         self.batch_size = batch_size
-        self.train_size = train_size
-        self.val_size = val_size
 
     def load_data(self):
-        messages = self.read_data()
-        tokens = self.semantic_encoder.tokenize(messages=messages)
+        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
+        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
+        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)
 
-        self.encoder = LabelEncoder()
-        self.encoder.fit(tokens["input_ids"].flatten().to("cpu"))
-        self.vocab_size = len(self.encoder.classes_)
-
-        input_ids = self.encode_tokens(tokens["input_ids"].flatten().to("cpu"))
-        attention_mask = tokens["attention_mask"]
-
-        # First
-        (
-            train_input_ids,
-            test_input_ids,
-            train_attention_mask,
-            test_attention_mask,
-        ) = train_test_split(
-            input_ids,
-            attention_mask,
-            train_size=self.train_size,
-            random_state=RANDOM_STATE,
-        )
-
-        # Second
-        (
-            train_input_ids,
-            val_input_ids,
-            train_attention_mask,
-            val_attention_mask,
-        ) = train_test_split(
-            train_input_ids,
-            train_attention_mask,
-            train_size=(1 - self.val_size),
-            random_state=RANDOM_STATE,
-        )
-
-        train_data = TensorDataset(train_input_ids, train_attention_mask)
-        train_sampler = RandomSampler(train_data)
-        self.train_dataloader = DataLoader(
-            train_data, sampler=train_sampler, batch_size=self.batch_size
-        )
-
-        val_data = TensorDataset(val_input_ids, val_attention_mask)
-        val_sampler = SequentialSampler(val_data)
-        self.val_dataloader = DataLoader(
-            val_data, sampler=val_sampler, batch_size=self.batch_size
-        )
-
-        test_data = TensorDataset(test_input_ids, test_attention_mask)
-        test_sampler = SequentialSampler(test_data)
-        self.test_dataloader = DataLoader(
-            test_data, sampler=test_sampler, batch_size=self.batch_size
-        )
-
-    @classmethod
-    def read_data(cls):
-        with open(cls.data_filename, "rb") as f:
+    @staticmethod
+    def read_data(fp):
+        with open(fp, "rb") as f:
             data = pickle.load(f)
 
         return data
@@ -125,3 +70,25 @@ class DataHandler:
         ids = self.encoder.transform(tokens)
         ids = ids.reshape(-1, self.semantic_encoder.max_length)
         return torch.LongTensor(ids)
+
+    def init_dl(self, fn: str):
+        fp = os.path.join(self.data_fp, fn)
+        messages = self.read_data(fp=fp)
+        tokens = self.semantic_encoder.tokenize(messages=messages)
+
+        self.encoder = LabelEncoder()
+        self.encoder.fit(tokens["input_ids"].flatten().to("cpu"))
+        self.vocab_size = len(self.encoder.classes_)
+
+        input_ids = self.encode_tokens(tokens["input_ids"].flatten().to("cpu"))
+        attention_mask = tokens["attention_mask"]
+
+        dataset = TensorDataset(input_ids, attention_mask)
+        sampler = RandomSampler(dataset)
+        dataloader = DataLoader(
+            dataset=dataset,
+            sampler=sampler,
+            batch_size=self.batch_size,
+        )
+
+        return dataloader
