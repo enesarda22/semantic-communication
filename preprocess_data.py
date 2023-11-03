@@ -23,7 +23,7 @@ if __name__ == "__main__":
             m = f.read()
 
         preprocessed_messages.extend(Preprocessor.preprocess(m))
-        if args.n_samples < len(preprocessed_messages):
+        if args.n_samples and (args.n_samples < len(preprocessed_messages)):
             preprocessed_messages = preprocessed_messages[: args.n_samples]
             break
 
