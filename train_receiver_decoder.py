@@ -29,8 +29,7 @@ if __name__ == "__main__":
 
     # data args
     parser.add_argument("--max-length", default=30, type=int)
-    parser.add_argument("--train-size", default=0.9, type=float)
-    parser.add_argument("--val-size", default=0.2, type=float)
+    parser.add_argument("--data-fp", default="", type=str)
 
     # train args
     parser.add_argument("--n-epochs", default=10, type=int)
@@ -46,8 +45,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
-        train_size=args.train_size,
-        val_size=args.val_size,
+        data_fp=args.data_fp,
     )
     data_handler.load_data()
 
