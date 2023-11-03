@@ -19,6 +19,7 @@ from semantic_communication.utils.general import (
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--receiver-decoder-path", default=None, type=str)
     parser.add_argument("--relay-decoder-path", type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--n-samples", default=10000, type=int)
@@ -69,6 +70,11 @@ if __name__ == "__main__":
         block_size=args.max_length,
     ).to(device)
     optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=args.lr)
+
+    if not None == args.receiver_decoder_path:
+        checkpoint = torch.load(args.relay_decoder_path)
+        receiver_decoder.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     best_loss = 5
     for epoch in range(args.n_epochs):
