@@ -18,7 +18,7 @@ if __name__ == "__main__":
     txt_filepaths = sorted(glob.glob(en_fp))
 
     preprocessed_messages = []
-    for txt_fp in tqdm(txt_filepaths):
+    for txt_fp in tqdm(txt_filepaths, "Txt files"):
         with open(txt_fp, "r", encoding="utf-8") as f:
             m = f.read()
 
