@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     # data args
     parser.add_argument("--max-length", default=30, type=int)
-    parser.add_argument("--data_fp", default="", type=str)
+    parser.add_argument("--data-fp", default="", type=str)
 
     # train args
     parser.add_argument("--n-epochs", default=10, type=int)
