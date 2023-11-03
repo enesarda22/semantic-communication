@@ -16,11 +16,9 @@ from semantic_communication.utils.general import (
 )
 
 if __name__ == "__main__":
-    # TODO: add scheduler
     parser = argparse.ArgumentParser()
     parser.add_argument("--relay-decoder-path", default=None, type=str)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--n-samples", default=10000, type=int)
     parser.add_argument("--train-size", default=0.9, type=float)
     parser.add_argument("--val-size", default=0.2, type=float)
     parser.add_argument("--max-length", default=30, type=int)
@@ -39,7 +37,6 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
-        n_samples=args.n_samples,
         train_size=args.train_size,
         val_size=args.val_size,
     )
@@ -54,7 +51,7 @@ if __name__ == "__main__":
     ).to(device)
     optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)
 
-    if not None == args.relay_decoder_path:
+    if args.relay_decoder_path is not None:
         checkpoint = torch.load(args.relay_decoder_path)
         relay_decoder.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

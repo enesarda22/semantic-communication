@@ -1,9 +1,7 @@
-import csv
+import pickle
 from typing import List
 
-import nltk
 import torch
-from w3lib.html import replace_tags
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -19,13 +17,12 @@ from semantic_communication.utils.general import RANDOM_STATE
 
 
 class DataHandler:
-    data_filename = "IMDB Dataset.csv"
+    data_filename = "data.pkl"
 
     def __init__(
         self,
         semantic_encoder: SemanticEncoder,
         batch_size: int,
-        n_samples: int,
         train_size: float,
         val_size: float,
     ):
@@ -38,14 +35,11 @@ class DataHandler:
         self.test_dataloader = None
 
         self.batch_size = batch_size
-        self.n_samples = n_samples
         self.train_size = train_size
         self.val_size = val_size
 
     def load_data(self):
-        messages = self.load_text()
-        messages = self.preprocess_text(messages)
-
+        messages = self.read_data()
         tokens = self.semantic_encoder.tokenize(messages=messages)
 
         self.encoder = LabelEncoder()
@@ -99,20 +93,12 @@ class DataHandler:
             test_data, sampler=test_sampler, batch_size=self.batch_size
         )
 
-    def load_text(self) -> List[str]:
-        with open(self.data_filename, mode="r", encoding="utf-8") as f:
-            text = [next(csv.reader(f))[0] for _ in range(self.n_samples + 1)]
+    @classmethod
+    def read_data(cls):
+        with open(cls.data_filename, "rb") as f:
+            data = pickle.load(f)
 
-        text = text[1:]  # first line is the columns
-        return text
-
-    @staticmethod
-    def preprocess_text(text: List[str]) -> List[str]:
-        sentences_list = [
-            nltk.sent_tokenize(replace_tags(m, " ")) for m in text
-        ]
-        sentences = sum(sentences_list, [])
-        return sentences
+        return data
 
     def get_tokens(
         self,
@@ -134,14 +120,6 @@ class DataHandler:
             for t in token_ids
         ]
         return tokens
-
-    def get_text(self, ids):
-        token_list = self.get_tokens(ids)
-        return (
-            ((" ".join(token_list)).replace("[PAD]", ""))
-            .replace("[SEP]", "")
-            .strip()
-        )
 
     def encode_tokens(self, tokens):
         ids = self.encoder.transform(tokens)
