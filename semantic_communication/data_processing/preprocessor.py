@@ -1,23 +1,19 @@
-import pickle
 import re
 from typing import List
 
 import nltk
-from sklearn.model_selection import train_test_split
 from w3lib.html import replace_tags
+
+from sklearn.model_selection import train_test_split
 
 from semantic_communication.utils.general import RANDOM_STATE
 
 
 class Preprocessor:
-    train_data_fn = "train_data.pkl"
-    val_data_fn = "val_data.pkl"
-    test_data_fn = "test_data.pkl"
-
-    @staticmethod
-    def dump_data(data, fp):
-        with open(fp, "wb") as f:
-            pickle.dump(data, f)
+    encoder_fn = "encoder.pt"
+    train_data_fn = "train_data.pt"
+    val_data_fn = "val_data.pt"
+    test_data_fn = "test_data.pt"
 
     @staticmethod
     def preprocess(m: str) -> List[str]:
@@ -35,17 +31,41 @@ class Preprocessor:
         return sentences
 
     @staticmethod
-    def split_data(messages: List[str], train_size: float, test_size: float):
-        train_messages, temp_messages = train_test_split(
-            messages,
+    def split_data(
+        input_ids,
+        attention_mask,
+        train_size: float,
+        test_size: float,
+    ):
+        (
+            train_input_ids,
+            temp_input_ids,
+            train_attention_mask,
+            temp_attention_mask,
+        ) = train_test_split(
+            input_ids,
+            attention_mask,
             train_size=train_size,
             random_state=RANDOM_STATE,
         )
 
-        test_messages, val_messages = train_test_split(
-            temp_messages,
+        (
+            test_input_ids,
+            val_input_ids,
+            test_attention_mask,
+            val_attention_mask,
+        ) = train_test_split(
+            temp_input_ids,
+            temp_attention_mask,
             train_size=test_size,
             random_state=RANDOM_STATE,
         )
 
-        return train_messages, val_messages, test_messages
+        return (
+            train_input_ids,
+            train_attention_mask,
+            val_input_ids,
+            val_attention_mask,
+            test_input_ids,
+            test_attention_mask,
+        )

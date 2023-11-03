@@ -44,7 +44,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
-    data_handler.load_data()
 
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -72,6 +71,8 @@ if __name__ == "__main__":
                 input_ids=xb,
                 attention_mask=attention_mask,
             )
+
+            xb = data_handler.encode_token_ids(xb)
             logits, loss = relay_decoder(
                 encoder_output=encoder_output[:, :-1, :],
                 attention_mask=attention_mask[:, :-1],
@@ -94,6 +95,7 @@ if __name__ == "__main__":
                 input_ids=xb,
                 attention_mask=attention_mask,
             )
+            xb = data_handler.encode_token_ids(xb)
 
             with torch.no_grad():
                 _, loss = relay_decoder(
