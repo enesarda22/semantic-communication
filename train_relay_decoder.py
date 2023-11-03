@@ -17,17 +17,23 @@ from semantic_communication.utils.general import (
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    # model args
     parser.add_argument("--relay-decoder-path", default=None, type=str)
-    parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--train-size", default=0.9, type=float)
-    parser.add_argument("--val-size", default=0.2, type=float)
-    parser.add_argument("--max-length", default=30, type=int)
-    parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--n-epochs", default=10, type=int)
-    parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
+
+    # data args
+    parser.add_argument("--max-length", default=30, type=int)
+    parser.add_argument("--train-size", default=0.9, type=float)
+    parser.add_argument("--val-size", default=0.2, type=float)
+
+    # train args
+    parser.add_argument("--n-epochs", default=10, type=int)
+    parser.add_argument("--batch-size", default=32, type=int)
+    parser.add_argument("--lr", default=1e-4, type=float)
+    parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     args = parser.parse_args()
 
     set_seed()
