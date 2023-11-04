@@ -36,7 +36,9 @@ python train_receiver_decoder.py \
 --n-epochs 20 \
 --lr 5e-4 \
 --n-blocks 6 \
---n-heads 6
+--n-heads 6 \
+--data-fp /data \
+--checkpoint-path /data/checkpoints
 ```
 
 
