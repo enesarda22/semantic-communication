@@ -62,7 +62,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
-    data_handler.load_data()
 
     # Initializations
     SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max + 1, args.SNR_step))
@@ -84,7 +83,7 @@ if __name__ == "__main__":
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
     ).to(device)
-    relay_checkpoint = torch.load(args.relay_decoder_path)
+    relay_checkpoint = torch.load(args.relay_decoder_path, map_location=device)
     relay_decoder.load_state_dict(relay_checkpoint["model_state_dict"])
 
     receiver_decoder = SemanticDecoder(
@@ -95,7 +94,7 @@ if __name__ == "__main__":
         block_size=args.max_length,
     ).to(device)
 
-    rx_checkpoint = torch.load(args.receiver_decoder_path)
+    rx_checkpoint = torch.load(args.receiver_decoder_path, map_location=device)
     receiver_decoder.load_state_dict(rx_checkpoint["model_state_dict"])
 
     tx_relay_channel_model = TxRelayChannelModel(
@@ -111,14 +110,14 @@ if __name__ == "__main__":
     ).to(device)
 
     tx_relay_channel_model_checkpoint = torch.load(
-        args.tx_relay_channel_model_path
+        args.tx_relay_channel_model_path, map_location=device
     )
     tx_relay_channel_model.load_state_dict(
         tx_relay_channel_model_checkpoint["model_state_dict"]
     )
 
     tx_relay_rx_channel_model_checkpoint = torch.load(
-        args.tx_relay_rx_channel_model_path
+        args.tx_relay_rx_channel_model_path, map_location=device
     )
     tx_relay_rx_channel_model.load_state_dict(
         tx_relay_rx_channel_model_checkpoint["model_state_dict"]
@@ -208,7 +207,7 @@ if __name__ == "__main__":
         if mean_loss < best_loss:
             create_checkpoint(
                 path=checkpoint_path,
-                model_state_dict=relay_decoder.state_dict(),
+                model_state_dict=transceiver.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )

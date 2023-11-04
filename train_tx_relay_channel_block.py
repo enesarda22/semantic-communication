@@ -48,7 +48,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
-    data_handler.load_data()
 
     # Initializations
     SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max + 1, args.SNR_step))
@@ -70,7 +69,7 @@ if __name__ == "__main__":
     )
     criterion = torch.nn.MSELoss()
 
-    best_loss = 5
+    best_loss = torch.inf
     cur_win, cur_SNR_index = 0, 0
 
     for epoch in range(args.n_epochs):
@@ -136,7 +135,7 @@ if __name__ == "__main__":
         if mean_loss < best_loss:
             create_checkpoint(
                 path=checkpoint_path,
-                model_state_dict=relay_decoder.state_dict(),
+                model_state_dict=tx_relay_channel_model.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )

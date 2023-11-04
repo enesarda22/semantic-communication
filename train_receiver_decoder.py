@@ -47,7 +47,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
-    data_handler.load_data()
 
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -56,7 +55,7 @@ if __name__ == "__main__":
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
     ).to(device)
-    checkpoint = torch.load(args.relay_decoder_path)
+    checkpoint = torch.load(args.relay_decoder_path, map_location=device)
     relay_decoder.load_state_dict(checkpoint["model_state_dict"])
     relay_decoder.to(device)
 
@@ -73,12 +72,12 @@ if __name__ == "__main__":
     ).to(device)
     optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=args.lr)
 
-    if not None == args.receiver_decoder_path:
+    if args.receiver_decoder_path is not None:
         checkpoint = torch.load(args.relay_decoder_path)
         receiver_decoder.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-    best_loss = 5
+    best_loss = torch.inf
     for epoch in range(args.n_epochs):
         train_losses = []
         receiver_decoder.train()
@@ -92,6 +91,8 @@ if __name__ == "__main__":
             )
             relay_out = relay(x=encoder_output[:, :-1, :])
             superposed_out = relay_out + encoder_output[:, 1:, :]
+
+            xb = data_handler.encode_token_ids(xb)
             logits, loss = receiver_decoder(
                 encoder_output=superposed_out,
                 attention_mask=attention_mask[:, 1:],
@@ -117,6 +118,7 @@ if __name__ == "__main__":
             relay_out = relay(x=encoder_output[:, :-1, :])
             superposed_out = relay_out + encoder_output[:, 1:, :]
 
+            xb = data_handler.encode_token_ids(xb)
             with torch.no_grad():
                 _, loss = receiver_decoder(
                     encoder_output=superposed_out,
@@ -139,7 +141,7 @@ if __name__ == "__main__":
         if mean_loss < best_loss:
             create_checkpoint(
                 path=checkpoint_path,
-                model_state_dict=relay_decoder.state_dict(),
+                model_state_dict=receiver_decoder.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )

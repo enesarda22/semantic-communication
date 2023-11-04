@@ -57,7 +57,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
-    data_handler.load_data()
 
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -66,7 +65,7 @@ if __name__ == "__main__":
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
     ).to(device)
-    checkpoint = torch.load(args.relay_decoder_path)
+    checkpoint = torch.load(args.relay_decoder_path, map_location=device)
     relay_decoder.load_state_dict(checkpoint["model_state_dict"])
 
     relay = Relay(
@@ -97,7 +96,7 @@ if __name__ == "__main__":
     )
     criterion = torch.nn.MSELoss()
 
-    best_loss = 5
+    best_loss = torch.inf
     cur_win, cur_SNR_index = 0, 0
 
     for epoch in range(args.n_epochs):
@@ -177,7 +176,7 @@ if __name__ == "__main__":
         if mean_loss < best_loss:
             create_checkpoint(
                 path=checkpoint_path,
-                model_state_dict=relay_decoder.state_dict(),
+                model_state_dict=tx_relay_rx_channel_model.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )
