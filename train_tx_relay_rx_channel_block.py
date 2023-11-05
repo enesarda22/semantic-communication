@@ -71,6 +71,7 @@ if __name__ == "__main__":
     relay = Relay(
         semantic_encoder=semantic_encoder,
         semantic_decoder=relay_decoder,
+        encoder=data_handler.encoder,
     )
 
     # Initializations

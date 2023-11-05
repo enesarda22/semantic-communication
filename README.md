@@ -66,7 +66,9 @@ python train_tx_relay_channel_block.py \
 --SNR-max 21 \
 --SNR-step 3 \
 --SNR-window 3 \
---channel-type AWGN
+--channel-type AWGN \
+--data-fp /data \
+--checkpoint-path /data/checkpoints
 ```
 
 
@@ -87,7 +89,9 @@ python train_tx_relay_rx_channel_block.py \
 --SNR-step 3 \
 --SNR-window 3 \
 --channel-type AWGN \
---SNR-diff 3
+--SNR-diff 3 \
+--data-fp /data \
+--checkpoint-path /data/checkpoints
 ```
 
 ## end to end
@@ -111,5 +115,7 @@ python train_tx_relay_rx_channel_block.py \
 --SNR-step 3 \
 --SNR-window 3 \
 --channel-type AWGN \
---SNR-diff 3
+--SNR-diff 3 \
+--data-fp /data \
+--checkpoint-path /data/checkpoints
 ```
