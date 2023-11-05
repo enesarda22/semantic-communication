@@ -69,7 +69,6 @@ if __name__ == "__main__":
     )
     criterion = torch.nn.MSELoss()
 
-    best_loss = torch.inf
     cur_win, cur_SNR_index = 0, 0
 
     for epoch in range(args.n_epochs):
@@ -132,18 +131,9 @@ if __name__ == "__main__":
             f"tx-relay-channel/tx_relay_channel_{epoch}.pt",
         )
 
-        if mean_loss < best_loss:
-            create_checkpoint(
-                path=checkpoint_path,
-                model_state_dict=tx_relay_channel_model.state_dict(),
-                optimizer_state_dict=optimizer.state_dict(),
-                mean_val_loss=mean_loss,
-            )
-            best_loss = mean_loss
-        else:
-            create_checkpoint(
-                path=checkpoint_path,
-                model_state_dict=None,
-                optimizer_state_dict=None,
-                mean_val_loss=mean_loss,
-            )
+        create_checkpoint(
+            path=checkpoint_path,
+            model_state_dict=tx_relay_channel_model.state_dict(),
+            optimizer_state_dict=optimizer.state_dict(),
+            mean_val_loss=mean_loss,
+        )
