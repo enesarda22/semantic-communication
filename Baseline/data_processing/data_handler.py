@@ -1,118 +1,38 @@
-import csv
+import os
 from typing import List
 
-import nltk
 import torch
-from w3lib.html import replace_tags
 
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import (
-    TensorDataset,
     RandomSampler,
     DataLoader,
-    SequentialSampler,
 )
 
+from data_processing.preprocessor import Preprocessor
 from data_processing.semantic_encoder import SemanticEncoder
-from utils.general import RANDOM_STATE
+from utils.general import get_device
 
 
 class DataHandler:
-    data_filename = "IMDB Dataset.csv"
-
     def __init__(
         self,
         semantic_encoder: SemanticEncoder,
+        data_fp: str,
         batch_size: int,
-        n_samples: int,
-        train_size: float,
-        val_size: float,
     ):
+        self.device = get_device()
         self.semantic_encoder = semantic_encoder
-
-        self.vocab_size = None
-        self.encoder = None
-        self.train_dataloader = None
-        self.val_dataloader = None
-        self.test_dataloader = None
-
+        self.data_fp = data_fp
         self.batch_size = batch_size
-        self.n_samples = n_samples
-        self.train_size = train_size
-        self.val_size = val_size
 
-    def load_data(self):
-        messages = self.load_text()
-        messages = self.preprocess_text(messages)
+        encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
+        self.encoder = torch.load(encoder_fp, map_location="cpu")
 
-        tokens = self.semantic_encoder.tokenize(messages=messages)
-
-        self.encoder = LabelEncoder()
-        self.encoder.fit(tokens["input_ids"].flatten().to("cpu"))
         self.vocab_size = len(self.encoder.classes_)
 
-        input_ids = self.encode_tokens(tokens["input_ids"].flatten().to("cpu"))
-        attention_mask = tokens["attention_mask"]
-
-        # First
-        (
-            train_input_ids,
-            test_input_ids,
-            train_attention_mask,
-            test_attention_mask,
-        ) = train_test_split(
-            input_ids,
-            attention_mask,
-            train_size=self.train_size,
-            random_state=RANDOM_STATE,
-        )
-
-        # Second
-        (
-            train_input_ids,
-            val_input_ids,
-            train_attention_mask,
-            val_attention_mask,
-        ) = train_test_split(
-            train_input_ids,
-            train_attention_mask,
-            train_size=(1-self.val_size),
-            random_state=RANDOM_STATE,
-        )
-
-        train_data = TensorDataset(train_input_ids, train_attention_mask)
-        train_sampler = RandomSampler(train_data)
-        self.train_dataloader = DataLoader(
-            train_data, sampler=train_sampler, batch_size=self.batch_size
-        )
-
-        val_data = TensorDataset(val_input_ids, val_attention_mask)
-        val_sampler = SequentialSampler(val_data)
-        self.val_dataloader = DataLoader(
-            val_data, sampler=val_sampler, batch_size=self.batch_size
-        )
-
-        test_data = TensorDataset(test_input_ids, test_attention_mask)
-        test_sampler = SequentialSampler(test_data)
-        self.test_dataloader = DataLoader(
-            test_data, sampler=test_sampler, batch_size=self.batch_size
-        )
-
-    def load_text(self) -> List[str]:
-        with open(self.data_filename, mode="r", encoding="utf-8") as f:
-            text = [next(csv.reader(f))[0] for _ in range(self.n_samples + 1)]
-
-        text = text[1:]  # first line is the columns
-        return text
-
-    @staticmethod
-    def preprocess_text(text: List[str]) -> List[str]:
-        sentences_list = [
-            nltk.sent_tokenize(replace_tags(m, " ")) for m in text
-        ]
-        sentences = sum(sentences_list, [])
-        return sentences
+        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
+        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
+        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)
 
     def get_tokens(
         self,
@@ -121,7 +41,7 @@ class DataHandler:
         skip_special_tokens=False,
     ) -> List[str]:
         if attention_mask is not None:
-            pad_token_id = self.encoder.inverse_transform([0])[0]
+            pad_token_id = self.encoder.transform([0])[0]
             ids = torch.masked_fill(ids, attention_mask == 0, pad_token_id)
 
         token_ids = self.encoder.inverse_transform(ids.flatten().to("cpu"))
@@ -135,12 +55,19 @@ class DataHandler:
         ]
         return tokens
 
-    def get_text(self, ids):
-        token_list = self.get_tokens(ids)
-        return ((" ".join(token_list)).replace('[PAD]', '')).replace('[SEP]', '').strip()
-
-
-    def encode_tokens(self, tokens):
-        ids = self.encoder.transform(tokens)
+    def encode_token_ids(self, token_ids: torch.Tensor):
+        ids = self.encoder.transform(token_ids.flatten().to("cpu"))
         ids = ids.reshape(-1, self.semantic_encoder.max_length)
-        return torch.LongTensor(ids)
+        return torch.LongTensor(ids).to(self.device)
+
+    def init_dl(self, fn: str):
+        fp = os.path.join(self.data_fp, fn)
+
+        dataset = torch.load(fp, map_location=self.device)
+        sampler = RandomSampler(dataset)
+
+        return DataLoader(
+            dataset=dataset,
+            sampler=sampler,
+            batch_size=self.batch_size,
+        )

@@ -18,24 +18,31 @@ import os
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tx-relay-path", type=str)
-    parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--n-samples", default=10000, type=int)
-    parser.add_argument("--train-size", default=0.9, type=float)
-    parser.add_argument("--val-size", default=0.2, type=float)
-    parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--n-epochs", default=10, type=int)
-    parser.add_argument("--lr", default=1e-4, type=float)
-    parser.add_argument("--max-length", default=30, type=int)
 
-    # New args
+    # model args
+    parser.add_argument("--channel-block-input-dim", default=384, type=int)
+    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
+
+    # data args
+    parser.add_argument("--max-length", default=30, type=int)
+    parser.add_argument("--data-fp", default="", type=str)
+
+    # train args
+    parser.add_argument("--n-epochs", default=10, type=int)
+    parser.add_argument("--batch-size", default=32, type=int)
+    parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--sig-pow", default=1.0, type=float)
-    parser.add_argument("--SNR-diff", default=3.0, type=float)
     parser.add_argument("--SNR-min", default=3, type=int)
     parser.add_argument("--SNR-max", default=21, type=int)
     parser.add_argument("--SNR-step", default=3, type=int)
     parser.add_argument("--SNR-window", default=5, type=int)
     parser.add_argument("--channel-type", default="AWGN", type=str)
+    parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
+
+    # New args
+    parser.add_argument("--tx-relay-path", type=str)
+    parser.add_argument("--SNR-diff", default=3.0, type=float)
+
     args = parser.parse_args()
 
     device = get_device()
@@ -55,12 +62,9 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
-        n_samples=args.n_samples,
-        train_size=args.train_size,
-        val_size=args.val_size
+        data_fp=args.data_fp,
     )
 
-    data_handler.load_data()
     SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max + 1, args.SNR_step))
 
     if args.channel_type == "AWGN":
@@ -74,11 +78,11 @@ if __name__ == "__main__":
         relay_rx_channel = Rayleigh(SNR_dB[0], args.sig_pow)
 
     num_classes = data_handler.vocab_size
-    tx_relay_model = Tx_Relay(num_classes, 384, 128, channel=tx_relay_channel, entire_network_train=1).to(device)
+    tx_relay_model = Tx_Relay(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel=tx_relay_channel, entire_network_train=1).to(device)
     checkpoint = torch.load(args.tx_relay_path)
     tx_relay_model.load_state_dict(checkpoint["model_state_dict"])
 
-    tx_relay_rx_model = Tx_Relay_Rx(num_classes, 384, 128, tx_rx_channel, relay_rx_channel,tx_relay_model).to(device)
+    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, tx_rx_channel, relay_rx_channel,tx_relay_model).to(device)
     optimizer = torch.optim.AdamW(
         params=tx_relay_rx_model.parameters(),
         lr=args.lr,
@@ -125,6 +129,7 @@ if __name__ == "__main__":
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
+            xb = data_handler.encode_token_ids(xb)
 
             x_hat, loss = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:])
 
@@ -138,6 +143,7 @@ if __name__ == "__main__":
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
+            xb = data_handler.encode_token_ids(xb)
 
             with torch.no_grad():
                 x_hat, loss = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:])

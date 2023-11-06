@@ -24,7 +24,9 @@ class SemanticEncoder:
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if messages is not None:
-            input_ids = self.tokenize(messages=messages)
+            tokens = self.tokenize(messages=messages)
+            input_ids = tokens["input_ids"]
+            attention_mask = tokens["attention_mask"]
 
         self.bert.eval()
         with torch.no_grad():

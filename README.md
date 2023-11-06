@@ -119,3 +119,34 @@ python train_tx_relay_rx_channel_block.py \
 --data-fp /data \
 --checkpoint-path /data/checkpoints
 ```
+
+## Baseline source-relay
+```
+python train_source_relay.py \
+--batch-size 512 \
+--n-epochs 25 \
+--lr 5e-5 \
+--channel-block-latent-dim 128 \
+--SNR-min 3 \
+--SNR-max 21 \
+--SNR-step 3 \
+--SNR-window 3 \
+--channel-type AWGN  \
+--checkpoint-path /data/checkpoints
+ ```
+
+## Baseline entire network
+```
+python train_entire_network.py \
+--batch-size 512 \
+--n-epochs 25 \
+--lr 5e-5 \
+--channel-block-latent-dim 128 \
+--SNR-min 3 \
+--SNR-max 21 \
+--SNR-step 3 \
+--SNR-window 3 \
+--channel-type AWGN  \
+--checkpoint-path /data/checkpoints  \
+--tx-relay-path /data/checkpoints/baseline-tx-relay/baseline_tx_relay_24.pt
+```
