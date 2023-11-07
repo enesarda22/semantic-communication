@@ -116,14 +116,13 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
-        if mean_loss < best_loss:
-            create_checkpoint(
-                path=os.path.join(
-                    args.checkpoint_path,
-                    f"baseline-tx-relay/baseline_tx_relay_{epoch}.pt",
-                ),
-                model_state_dict=tx_relay_model.state_dict(),
-                optimizer_state_dict=optimizer.state_dict(),
-                mean_val_loss=mean_loss,
-            )
-            best_loss = mean_loss
+
+        create_checkpoint(
+            path=os.path.join(
+                args.checkpoint_path,
+                f"baseline-tx-relay/baseline_tx_relay_{epoch}.pt",
+            ),
+            model_state_dict=tx_relay_model.state_dict(),
+            optimizer_state_dict=optimizer.state_dict(),
+            mean_val_loss=mean_loss,
+        )
