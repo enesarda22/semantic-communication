@@ -198,12 +198,13 @@ if __name__ == "__main__":
         transceiver.eval()
         for b in data_handler.test_dataloader:
             xb = b[0].to(device)
+            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
 
             B, T = xb.shape
 
             with torch.no_grad():
-                logits, _ = transceiver(xb, attention_mask)
+                logits, _ = transceiver(xb, attention_mask, targets[:, 1:])
                 probs = F.softmax(logits, dim=-1)
                 predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
                     B, args.max_length
@@ -229,7 +230,7 @@ if __name__ == "__main__":
                 )
 
                 original_sentences = data_handler.get_tokens(
-                    ids=xb,
+                    ids=targets,
                     attention_mask=attention_mask,
                     skip_special_tokens=True,
                 )

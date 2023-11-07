@@ -136,7 +136,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
-    def forward(self, w, attention_mask):
+    def forward(self, w, attention_mask, targets):
         # transmitter
         x = self.tx_semantic_encoder(
             input_ids=w,
@@ -152,7 +152,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         s_hat = self.rx_semantic_decoder(
             encoder_output=x_hat_rcv,
             attention_mask=attention_mask[:, 1:],
-            targets=w[:, 1:],
+            targets=targets,
         )
         return s_hat
 
