@@ -88,7 +88,7 @@ if __name__ == "__main__":
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         begin_epoch = get_trailing_number(
             args.relay_decoder_path.removesuffix(".pt")
-        )
+        ) + 1
 
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
