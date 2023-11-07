@@ -9,9 +9,9 @@ from torch.utils.data import (
 )
 
 
-from semantic_communication.data_processing.preprocessor import Preprocessor
-from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.utils.general import get_device
+from data_processing.preprocessor import Preprocessor
+from data_processing.semantic_encoder import SemanticEncoder
+from utils.general import get_device
 
 
 class DataHandler:

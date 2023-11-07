@@ -160,7 +160,7 @@ if __name__ == "__main__":
                 args.checkpoint_path,
                 f"baseline-tx-relay-rx/baseline_tx_relay_rx_{epoch}.pt",
             ),
-            model_state_dict=tx_relay_model.state_dict(),
+            model_state_dict=tx_relay_rx_model.state_dict(),
             optimizer_state_dict=optimizer.state_dict(),
             mean_val_loss=mean_loss,
         )
