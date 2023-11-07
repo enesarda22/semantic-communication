@@ -72,7 +72,9 @@ def bleu_4gram(target_sentences, received_sentences):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--transceiver-path", type=str)
+    parser.add_argument("--tx-relay-path", type=str)
+    parser.add_argument("--tx-relay-rx-path", type=str)
+
     parser.add_argument("--SNR-list", nargs="+", type=int)
 
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
