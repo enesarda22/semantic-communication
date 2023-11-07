@@ -175,8 +175,9 @@ if __name__ == "__main__":
 
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
+            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
-            logits, loss = transceiver(xb, attention_mask)
+            logits, loss = transceiver(xb, attention_mask, targets[:, 1:])
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -187,10 +188,11 @@ if __name__ == "__main__":
         transceiver.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
+            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
 
             with torch.no_grad():
-                logits, loss = transceiver(xb, attention_mask)
+                logits, loss = transceiver(xb, attention_mask, targets[:, 1:])
 
             val_losses.append(loss.item())
 
