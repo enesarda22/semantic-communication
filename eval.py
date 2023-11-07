@@ -18,7 +18,6 @@ import argparse
 from torch.nn import functional as F
 
 
-
 def semantic_similarity_score(target_sentences, received_sentences):
     target_emb = semantic_encoder(messages=target_sentences)
     received_emb = semantic_encoder(messages=received_sentences)
@@ -77,27 +76,26 @@ def bleu_4gram(target_sentences, received_sentences):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--transceiver-path", type=str)
-    parser.add_argument("--SNR-list", nargs="+", type=int)
 
-    parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
-    parser.add_argument("--n-samples", default=10000, type=int)
-    parser.add_argument("--train-size", default=0.9, type=float)
-    parser.add_argument("--max-length", default=30, type=int)
-    parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--n-epochs", default=10, type=int)
-    parser.add_argument("--lr", default=1e-4, type=float)
+    # model args
+    parser.add_argument("--transceiver-path", type=str)
     parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
-
-    # New args
     parser.add_argument("--channel-block-input-dim", default=384, type=int)
     parser.add_argument("--channel-block-latent-dim", default=128, type=int)
-    parser.add_argument("--val-size", default=0.2, type=float)
+
+    # data args
+    parser.add_argument("--max-length", default=30, type=int)
+    parser.add_argument("--data-fp", default="", type=str)
+
+    # test args
+    parser.add_argument("--batch-size", default=32, type=int)
+    parser.add_argument("--channel-type", default="AWGN", type=str)
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--SNR-diff", default=3, type=int)
-    parser.add_argument("--channel-type", default="AWGN", type=str)
+    parser.add_argument("--SNR-list", nargs="+", type=int)
+
     args = parser.parse_args()
 
     device = get_device()
@@ -106,12 +104,9 @@ if __name__ == "__main__":
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
         semantic_encoder=semantic_encoder,
+        data_fp=args.data_fp,
         batch_size=args.batch_size,
-        n_samples=args.n_samples,
-        train_size=args.train_size,
-        val_size=args.val_size,
     )
-    data_handler.load_data()
 
     # Create Channels
     if args.channel_type == "AWGN":
@@ -146,10 +141,15 @@ if __name__ == "__main__":
     ).to(device)
 
     tx_relay_channel_model = TxRelayChannelModel(
-        nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=tx_relay_channel
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel=tx_relay_channel,
     ).to(device)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
-        nin=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel_tx_rx=tx_rx_channel, channel_rel_rx=relay_rx_channel
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel_tx_rx=tx_rx_channel,
+        channel_rel_rx=relay_rx_channel,
     ).to(device)
 
     transceiver = Transceiver(
@@ -158,6 +158,7 @@ if __name__ == "__main__":
         receiver_decoder,
         tx_relay_channel_model,
         tx_relay_rx_channel_model,
+        encoder=data_handler.encoder,
     )
     transceiver_checkpoint = torch.load(
         args.transceiver_path, map_location=device
@@ -296,17 +297,9 @@ if __name__ == "__main__":
     plt.title("BLEU 4-gram v. Channel SNR (dB)")
     plt.savefig("BLEU4gram_v_SNR.png", dpi=400)
 
-    with open('semantic_sim.npy', 'wb') as f:
-        np.save(f, semantic_sim)
+    np.save("semantic_sim.npy", semantic_sim)
 
-    with open('bleu_1.npy', 'wb') as f:
-        np.save(f, bleu_1)
-
-    with open('bleu_2.npy', 'wb') as f:
-        np.save(f, bleu_2)
-
-    with open('bleu_3.npy', 'wb') as f:
-        np.save(f, bleu_3)
-
-    with open('bleu_4.npy', 'wb') as f:
-        np.save(f, bleu_4)
+    np.save("bleu_1.npy", bleu_1)
+    np.save("bleu_2.npy", bleu_2)
+    np.save("bleu_3.npy", bleu_3)
+    np.save("bleu_4.npy", bleu_4)
