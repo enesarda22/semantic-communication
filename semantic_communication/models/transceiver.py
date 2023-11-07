@@ -126,10 +126,11 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         rx_semantic_decoder: SemanticDecoder,
         tx_relay_channel_enc_dec: TxRelayChannelModel,
         tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,
+        encoder: LabelEncoder,
     ):
         super().__init__()
         self.tx_semantic_encoder = semantic_encoder
-        self.relay = Relay(semantic_encoder, relay_semantic_decoder)
+        self.relay = Relay(semantic_encoder, relay_semantic_decoder, encoder)
         self.rx_semantic_decoder = rx_semantic_decoder
 
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec

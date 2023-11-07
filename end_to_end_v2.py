@@ -129,6 +129,7 @@ if __name__ == "__main__":
         receiver_decoder,
         tx_relay_channel_model,
         tx_relay_rx_channel_model,
+        data_handler.encoder,
     )
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)

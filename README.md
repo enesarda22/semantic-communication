@@ -99,16 +99,16 @@ lr = 1e-6
 epoch = 15
 
 ```
-python train_tx_relay_rx_channel_block.py \
+python end_to_end_v2.py \
 --relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_19.pt \
+--receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_16.pt \
 --n-blocks 6 \
 --n-heads 6 \
---tx-relay-channel-model-path checkpoints/**.pt \
---tx-relay-rx-channel-model-path checkpoints/**.pt \
+--tx-relay-channel-model-path /data/checkpoints/tx-relay-channel/tx_relay_channel_24.pt \
+--tx-relay-rx-channel-model-path /data/checkpoints/tx-relay-rx-channel/tx_relay_rx_channel_24.pt \
 --batch-size 512 \
 --n-epochs 25 \
---lr 1e-7 \
+--lr 1e-6 \
 --channel-block-latent-dim 128 \
 --SNR-min 3 \
 --SNR-max 21 \
