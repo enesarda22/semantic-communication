@@ -17,6 +17,14 @@ from semantic_communication.utils.general import (
 )
 
 
+import re
+
+
+def get_trailing_number(s):
+    m = re.search(r"\d+$", s)
+    return int(m.group()) if m else None
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -73,10 +81,14 @@ if __name__ == "__main__":
     ).to(device)
     optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=args.lr)
 
+    begin_epoch = 0
     if args.receiver_decoder_path is not None:
         checkpoint = torch.load(args.relay_decoder_path)
         receiver_decoder.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        begin_epoch = get_trailing_number(
+            args.relay_decoder_path.removesuffix(".pt")
+        )
 
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
@@ -136,7 +148,7 @@ if __name__ == "__main__":
 
         checkpoint_path = os.path.join(
             args.checkpoint_path,
-            f"receiver-decoder/receiver_decoder_{epoch}.pt",
+            f"receiver-decoder/receiver_decoder_{epoch+begin_epoch}.pt",
         )
 
         if mean_loss < best_loss:
