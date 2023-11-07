@@ -82,7 +82,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=args.lr)
 
     if args.receiver_decoder_path is not None:
-        checkpoint = torch.load(args.relay_decoder_path)
+        checkpoint = torch.load(args.receiver_decoder_path)
         receiver_decoder.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
