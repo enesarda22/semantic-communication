@@ -1,0 +1,230 @@
+Index: simple_train.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/simple_train.py b/train_relay_decoder.py
+rename from simple_train.py
+rename to train_relay_decoder.py
+--- a/simple_train.py	(revision 572d50eb05c7f3786fc08ab8f7a4c308033f2979)
++++ b/train_relay_decoder.py	(date 1698099300800)
+@@ -24,7 +24,7 @@
+         n_embeddings=384,
+         block_size=data_handler.max_length,
+         device=device,
+-    )
++    ).to(device)
+     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+ 
+     for _ in range(10):
+@@ -48,11 +48,12 @@
+             xb = b[0].to(device)
+             encoder_output = b[1].to(device)
+ 
+-            _, loss = model(encoder_output[:, :-2, :], xb[:, 1:])
++            with torch.no_grad():
++                _, loss = model(encoder_output[:, :-2, :], xb[:, 1:])
+             val_losses.append(loss.item())
+ 
+         print("\n")
+         print_loss(train_losses, "Train")
+         print_loss(val_losses, "Val")
+ 
+-    torch.save(model.state_dict(), "model.pt")
++    torch.save(model.state_dict(), "relay_decoder.pt")
+Index: train_receiver_decoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/train_receiver_decoder.py b/train_receiver_decoder.py
+new file mode 100644
+--- /dev/null	(date 1698163112594)
++++ b/train_receiver_decoder.py	(date 1698163112594)
+@@ -0,0 +1,74 @@
++import torch
++from tqdm import tqdm
++from transformers import AutoModel
++
++from semantic_communication.data_processing.data_handler import DataHandler
++from semantic_communication.models.semantic_decoder import SemanticDecoder
++from train_relay_decoder import print_loss
++
++if __name__ == "__main__":
++    device = torch.device("cpu")
++
++    data_handler = DataHandler(device=device)
++    data_handler.load_data()
++
++    bert = AutoModel.from_pretrained(data_handler.model_name).to(device)
++    relay_decoder = SemanticDecoder(
++        vocab_size=data_handler.vocab_size,
++        n_heads=4,
++        n_embeddings=384,
++        block_size=data_handler.max_length,
++        device=device,
++    ).to(device)
++    relay_decoder.load_state_dict(torch.load("relay_decoder.pt"))
++
++    receiver_decoder = SemanticDecoder(
++        vocab_size=data_handler.vocab_size,
++        n_heads=4,
++        n_embeddings=384,
++        block_size=data_handler.max_length,
++        device=device,
++    ).to(device)
++    optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=1e-4)
++
++    for _ in range(10):
++        train_losses = []
++        receiver_decoder.train()
++        for b in tqdm(data_handler.train_dataloader):
++            xb = b[0].to(device)
++            encoder_output = b[1].to(device)
++
++            # TODO: put inside the relay
++            relay_decoder.eval()
++            with torch.no_grad():
++                predicted_ids = relay_decoder.generate(encoder_output[:, :-2, :])
++            begin_padding = torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
++            end_padding = 2 * torch.ones((predicted_ids.shape[0], 1), dtype=torch.long)
++            predicted_ids = torch.cat(
++                (begin_padding, predicted_ids, end_padding), dim=1
++            )
++            relay_output = bert(input_ids=predicted_ids)
++
++            logits, loss = receiver_decoder(encoder_output[:, :-2, :], xb[:, 1:])
++            optimizer.zero_grad(set_to_none=True)
++
++            loss.backward()
++            optimizer.step()
++
++            train_losses.append(loss.item())
++
++        val_losses = []
++        receiver_decoder.eval()
++        for b in data_handler.val_dataloader:
++            xb = b[0].to(device)
++            encoder_output = b[1].to(device)
++
++            with torch.no_grad():
++                _, loss = receiver_decoder(encoder_output[:, :-2, :], xb[:, 1:])
++            val_losses.append(loss.item())
++
++        print("\n")
++        print_loss(train_losses, "Train")
++        print_loss(val_losses, "Val")
++
++    torch.save(receiver_decoder.state_dict(), "receiver_decoder.pt")
+Index: generate_sequences.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import torch\n\nfrom semantic_communication.data_processing.data_handler import DataHandler\nfrom semantic_communication.model.decoder import Decoder\n\n\ndef generate_text():\n    model.eval()\n    xb, encoder_output = next(iter(data_handler.val_dataloader))\n    B, T = xb.shape\n\n    # TODO: write this smarter\n    for j in range(B):\n        for i in range(T - 2):\n            input_token = data_handler.get_tokens(ids=xb[[j], : i + 1])\n            next_token = data_handler.get_tokens(ids=xb[[j], i + 1])\n\n            predicted_id = model.generate(\n                encoder_output=encoder_output[[j], : i + 1, :],\n                sample=False,\n            )\n            predicted_token = data_handler.get_tokens(ids=predicted_id)\n            print(f\"{input_token[0]} -> {predicted_token[0]} ({next_token[0]})\")\n\n        print(\"\\n\")\n\n\nif __name__ == \"__main__\":\n    device = torch.device(\"cpu\")\n\n    data_handler = DataHandler(device=device)\n    data_handler.load_data()\n\n    model = Decoder(\n        vocab_size=data_handler.vocab_size,\n        n_heads=4,\n        n_embeddings=384,\n        block_size=data_handler.max_length,\n        device=device,\n    )\n    model.load_state_dict(torch.load(\"model.pt\"))\n\n    with torch.no_grad():\n        generate_text()\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/generate_sequences.py b/generate_sequences.py
+--- a/generate_sequences.py	(revision 572d50eb05c7f3786fc08ab8f7a4c308033f2979)
++++ b/generate_sequences.py	(date 1698113474764)
+@@ -1,7 +1,8 @@
++import numpy as np
+ import torch
+ 
+ from semantic_communication.data_processing.data_handler import DataHandler
+-from semantic_communication.model.decoder import Decoder
++from semantic_communication.models.semantic_decoder import SemanticDecoder
+ 
+ 
+ def generate_text():
+@@ -9,19 +10,31 @@
+     xb, encoder_output = next(iter(data_handler.val_dataloader))
+     B, T = xb.shape
+ 
+-    # TODO: write this smarter
+-    for j in range(B):
+-        for i in range(T - 2):
+-            input_token = data_handler.get_tokens(ids=xb[[j], : i + 1])
+-            next_token = data_handler.get_tokens(ids=xb[[j], i + 1])
++    xb = xb.unsqueeze(1).repeat(1, T, 1)
++    mask = torch.tril(torch.ones(B, T, T))
++    masked_ids = xb.masked_fill(mask == 0, 0)
+ 
+-            predicted_id = model.generate(
+-                encoder_output=encoder_output[[j], : i + 1, :],
+-                sample=False,
+-            )
+-            predicted_token = data_handler.get_tokens(ids=predicted_id)
+-            print(f"{input_token[0]} -> {predicted_token[0]} ({next_token[0]})")
++    input_tokens = data_handler.get_tokens(ids=masked_ids.reshape(-1, T))
++    input_tokens = np.array_split(input_tokens, B)
++
++    predicted_ids = model.generate(
++        encoder_output=encoder_output[:, :-2, :],
++        sample=False,
++    )
++    predicted_ids = predicted_ids.unsqueeze(1).repeat(1, T - 1, 1)
++    mask = torch.eye(T - 1).unsqueeze(0).repeat(B, 1, 1)
++    masked_ids = predicted_ids.masked_fill(mask == 0, 0)
+ 
++    predicted_tokens = data_handler.get_tokens(ids=masked_ids.reshape(-1, T - 1))
++    predicted_tokens = np.array_split(predicted_tokens, B)
++
++    for input_b, predicted_b in zip(input_tokens, predicted_tokens):
++        for input_, predicted in zip(input_b, predicted_b):
++            print(
++                f"{input_.replace('[PAD]', '').strip()} -> "
++                f"{predicted.replace('[PAD]', '').strip()}"
++            )
++        print(f"{input_b[-1].replace('[PAD]', '').strip()}")
+         print("\n")
+ 
+ 
+@@ -31,14 +44,14 @@
+     data_handler = DataHandler(device=device)
+     data_handler.load_data()
+ 
+-    model = Decoder(
++    model = SemanticDecoder(
+         vocab_size=data_handler.vocab_size,
+         n_heads=4,
+         n_embeddings=384,
+         block_size=data_handler.max_length,
+         device=device,
+     )
+-    model.load_state_dict(torch.load("model.pt"))
++    model.load_state_dict(torch.load("relay_decoder.pt"))
+ 
+     with torch.no_grad():
+         generate_text()
+Index: semantic_communication/models/semantic_decoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import torch\nimport torch.nn as nn\nfrom torch.nn import functional as F\n\nfrom semantic_communication.models.multi_head_attention import MultiHeadAttention\n\n\nclass SemanticDecoder(nn.Module):\n    def __init__(self, vocab_size, n_heads, n_embeddings, block_size, device):\n        super().__init__()\n        self.sa_heads = MultiHeadAttention(\n            n_heads=n_heads,\n            embedding_size=n_embeddings,\n            head_size=n_embeddings // n_heads,\n            block_size=block_size,\n        )\n        self.ff_net = nn.Sequential(\n            nn.Linear(n_embeddings, 4 * n_embeddings),\n            nn.ReLU(),\n            nn.Linear(4 * n_embeddings, n_embeddings),  # projection\n            nn.Dropout(0.1),\n        )\n        self.ln1 = nn.LayerNorm(n_embeddings)\n        self.ln2 = nn.LayerNorm(n_embeddings)\n        self.ln3 = nn.LayerNorm(n_embeddings)\n        self.lm_head = nn.Linear(n_embeddings, vocab_size)\n\n        self.block_size = block_size\n        self.device = device\n\n    def forward(self, encoder_output, targets=None):\n        # residual connection after the layer, norm before the layer\n        x = encoder_output + self.sa_heads(self.ln1(encoder_output))\n        x = x + self.ff_net(self.ln2(x))\n        logits = self.lm_head(self.ln3(x))\n\n        if targets is None:\n            loss = None\n        else:\n            B, T, C = logits.shape\n            logits = logits.reshape(B * T, C)\n            targets = targets.reshape(B * T)\n            loss = F.cross_entropy(logits, targets)\n\n        return logits, loss\n\n    def generate(self, encoder_output, sample=False):\n        B, T, C = encoder_output.shape\n\n        padded_encoder_output = torch.ones((B, self.block_size, C))\n        padded_encoder_output[:, :T, :] = encoder_output\n\n        # get the predictions\n        logits, _ = self(padded_encoder_output)  # (B, T, C)\n        # generate new token\n        logits = logits[:, T - 1, :]  # (B, C)\n        # apply softmax to get probabilities\n        probs = F.softmax(logits, dim=-1)  # (B, C)\n\n        if sample:\n            idx_next = torch.multinomial(probs, num_samples=1)\n        else:\n            idx_next = torch.argmax(probs, dim=1)\n\n        return idx_next  # (B, 1)\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_decoder.py b/semantic_communication/models/semantic_decoder.py
+--- a/semantic_communication/models/semantic_decoder.py	(revision 572d50eb05c7f3786fc08ab8f7a4c308033f2979)
++++ b/semantic_communication/models/semantic_decoder.py	(date 1698110276906)
+@@ -52,14 +52,16 @@
+ 
+         # get the predictions
+         logits, _ = self(padded_encoder_output)  # (B, T, C)
+-        # generate new token
+-        logits = logits[:, T - 1, :]  # (B, C)
+         # apply softmax to get probabilities
+         probs = F.softmax(logits, dim=-1)  # (B, C)
+ 
+         if sample:
+-            idx_next = torch.multinomial(probs, num_samples=1)
++            idx_next = torch.multinomial(
++                probs.view(B * self.block_size, -1),
++                num_samples=1,
++            )
++            idx_next = idx_next.reshape(B, -1)
+         else:
+-            idx_next = torch.argmax(probs, dim=1)
++            idx_next = torch.argmax(probs, dim=-1)
+ 
+-        return idx_next  # (B, 1)
++        return idx_next[:, :T]  # (B, T)
