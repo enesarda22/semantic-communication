@@ -5,7 +5,10 @@
   </component>
   <component name="BlackConnectSettings" lineLength="79" triggerOnEachSave="true" />
   <component name="ChangeListManager">
-    <list default="true" id="e6c179d3-ca26-4d56-b577-3e033a97c20e" name="Changes" comment="add tests" />
+    <list default="true" id="e6c179d3-ca26-4d56-b577-3e033a97c20e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/end_to_end_v2.py" beforeDir="false" afterPath="$PROJECT_DIR$/train_end_to_end.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -105,28 +108,6 @@
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/semantic_communication/data_processing/data_handler.py" />
       <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="end_to_end_v2" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
-      <module name="semantic-communication" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/end_to_end_v2.py" />
-      <option name="PARAMETERS" value="--relay-decoder-path checkpoints/relay-decoder/relay_decoder_9.pt --receiver-decoder-path checkpoints/receiver-decoder/receiver_decoder_9.pt --tx-relay-channel-model-path checkpoints/tx-relay-channel/tx_relay_channel_9.pt --tx-relay-rx-channel-model-path checkpoints/tx-relay-rx-channel/tx_relay_rx_channel_4.pt" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
@@ -266,6 +247,28 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <configuration name="train_end_to_end" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="semantic-communication" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/train_end_to_end.py" />
+      <option name="PARAMETERS" value="--relay-decoder-path checkpoints/relay-decoder/relay_decoder_9.pt --receiver-decoder-path checkpoints/receiver-decoder/receiver_decoder_9.pt --tx-relay-channel-model-path checkpoints/tx-relay-channel/tx_relay_channel_9.pt --tx-relay-rx-channel-model-path checkpoints/tx-relay-rx-channel/tx_relay_rx_channel_4.pt" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="train_receiver_decoder" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="semantic-communication" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -315,12 +318,12 @@
       <item itemvalue="Python.generate_sequences" />
       <item itemvalue="Python.preprocess_data" />
       <item itemvalue="Python.eval" />
-      <item itemvalue="Python.end_to_end_v2" />
       <item itemvalue="Python.data_handler" />
       <item itemvalue="Python.simple_train" />
       <item itemvalue="Python.train_relay_decoder" />
       <item itemvalue="Python.train_adverarial_agent" />
       <item itemvalue="Python.train_receiver_decoder" />
+      <item itemvalue="Python.train_end_to_end" />
     </list>
     <recent_temporary>
       <list>
