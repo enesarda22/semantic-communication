@@ -61,7 +61,7 @@ if __name__ == "__main__":
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
-        n_embeddings=args.n_embeddings,
+        n_embeddings=args.n_embeddings * 2,
         block_size=args.max_length,
     ).to(device)
     optimizer = torch.optim.AdamW(receiver_decoder.parameters(), lr=args.lr)
@@ -84,11 +84,13 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             relay_out = relay(x=encoder_output[:, :-1, :])
-            superposed_out = relay_out + encoder_output[:, 1:, :]
+            catted_out = torch.cat(
+                [relay_out, encoder_output[:, 1:, :]], dim=-1
+            )
 
             xb = data_handler.encode_token_ids(xb)
             logits, loss = receiver_decoder(
-                encoder_output=superposed_out,
+                encoder_output=catted_out,
                 attention_mask=attention_mask[:, 1:],
                 targets=xb[:, 1:],
             )
@@ -110,12 +112,14 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             relay_out = relay(x=encoder_output[:, :-1, :])
-            superposed_out = relay_out + encoder_output[:, 1:, :]
+            catted_out = torch.cat(
+                [relay_out, encoder_output[:, 1:, :]], dim=-1
+            )
 
             xb = data_handler.encode_token_ids(xb)
             with torch.no_grad():
                 _, loss = receiver_decoder(
-                    encoder_output=superposed_out,
+                    encoder_output=catted_out,
                     attention_mask=attention_mask[:, 1:],
                     targets=xb[:, 1:],
                 )
