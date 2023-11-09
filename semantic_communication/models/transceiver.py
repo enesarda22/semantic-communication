@@ -102,20 +102,20 @@ class TxRelayRxChannelModel(nn.Module):
 
         self.tx_encoder = ChannelEncoder(nin, n_latent)
         self.relay_encoder = ChannelEncoder(nin, n_latent)
-        self.rx_decoder = ChannelDecoder(n_latent, nin)
+        self.rx_decoder = ChannelDecoder(n_latent * 2, nin * 2)
         self.channel_tx_rx = channel_tx_rx
         self.channel_rel_rx = channel_rel_rx
 
     def forward(self, tx_x, rel_x):
-        tx_ch_input = self.tx_encoder(tx_x)
         rel_ch_input = self.relay_encoder(rel_x)
+        tx_ch_input = self.tx_encoder(tx_x)
 
-        # Superpose
-        ch_output = self.channel_tx_rx(tx_ch_input) + self.channel_rel_rx(
-            rel_ch_input
-        )
+        rel_ch_out = self.channel_rel_rx(rel_ch_input)
+        tx_ch_out = self.channel_tx_rx(tx_ch_input)
+
+        ch_output = torch.cat([rel_ch_out, tx_ch_out], dim=-1)  # concatenate
         x_hat = self.rx_decoder(ch_output)
-        return x_hat  # ground truth = tx_x + rel_x
+        return x_hat
 
 
 class Transceiver(nn.Module):  # TODO: find a cooler name

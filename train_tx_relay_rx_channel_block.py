@@ -121,7 +121,10 @@ if __name__ == "__main__":
             output_hat = tx_relay_rx_channel_model(
                 encoder_output[:, 1:, :], relay_out
             )
-            loss = criterion(output_hat, encoder_output[:, 1:, :] + relay_out)
+            ground_truth = torch.cat(
+                [relay_out, encoder_output[:, 1:, :]], dim=-1
+            )
+            loss = criterion(output_hat, ground_truth)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -145,7 +148,10 @@ if __name__ == "__main__":
                     encoder_output[:, 1:, :], relay_out
                 )
 
-            loss = criterion(output_hat, encoder_output[:, 1:, :] + relay_out)
+            ground_truth = torch.cat(
+                [relay_out, encoder_output[:, 1:, :]], dim=-1
+            )
+            loss = criterion(output_hat, ground_truth)
             val_losses.append(loss.item())
 
         print("\n")
