@@ -5,14 +5,7 @@
   </component>
   <component name="BlackConnectSettings" lineLength="79" triggerOnEachSave="true" />
   <component name="ChangeListManager">
-    <list default="true" id="e6c179d3-ca26-4d56-b577-3e033a97c20e" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_1_11_2023,_18_32_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_1_11_2023__18_32__Changes_.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/poetry.lock" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" />
-    </list>
+    <list default="true" id="e6c179d3-ca26-4d56-b577-3e033a97c20e" name="Changes" comment="remove poetry env files and create environment.yml" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -362,14 +355,7 @@
       <workItem from="1699078491047" duration="19000" />
       <workItem from="1699116134327" duration="2076000" />
       <workItem from="1699119118336" duration="35885000" />
-      <workItem from="1699492462988" duration="1601000" />
-    </task>
-    <task id="LOCAL-00035" summary="refactor channel code">
-      <created>1698368273508</created>
-      <option name="number" value="00035" />
-      <option name="presentableId" value="LOCAL-00035" />
-      <option name="project" value="LOCAL" />
-      <updated>1698368273508</updated>
+      <workItem from="1699492462988" duration="2034000" />
     </task>
     <task id="LOCAL-00036" summary="beautify code">
       <created>1698368712956</created>
@@ -707,7 +693,14 @@
       <option name="project" value="LOCAL" />
       <updated>1699482141159</updated>
     </task>
-    <option name="localTasksCounter" value="84" />
+    <task id="LOCAL-00084" summary="remove poetry env files and create environment.yml">
+      <created>1699494295938</created>
+      <option name="number" value="00084" />
+      <option name="presentableId" value="LOCAL-00084" />
+      <option name="project" value="LOCAL" />
+      <updated>1699494295939</updated>
+    </task>
+    <option name="localTasksCounter" value="85" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -725,7 +718,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="structure arguments" />
     <MESSAGE value="set best loss to inf" />
     <MESSAGE value="organize args" />
     <MESSAGE value="split data in preprocessor.py" />
@@ -750,7 +742,8 @@
     <MESSAGE value="update eval" />
     <MESSAGE value="update end_to_end_v2.py" />
     <MESSAGE value="add tests" />
-    <option name="LAST_COMMIT_MESSAGE" value="add tests" />
+    <MESSAGE value="remove poetry env files and create environment.yml" />
+    <option name="LAST_COMMIT_MESSAGE" value="remove poetry env files and create environment.yml" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
