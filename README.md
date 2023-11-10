@@ -101,7 +101,7 @@ python train_end_to_end.py \
 --n-blocks 6 \
 --n-heads 6 \
 --tx-relay-channel-model-path /data/checkpoints/tx-relay-channel/tx_relay_channel_24.pt \
---tx-relay-rx-channel-model-path /data/checkpoints/tx-relay-rx-channel/tx_relay_rx_channel_24.pt \
+--tx-relay-rx-channel-model-path /data/checkpoints/tx-relay-rx-channel/tx_relay_rx_channel_2.pt \
 --batch-size 512 \
 --n-epochs 25 \
 --lr 1e-5 \
