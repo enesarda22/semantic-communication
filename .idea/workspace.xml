@@ -5,13 +5,9 @@
   </component>
   <component name="BlackConnectSettings" lineLength="79" triggerOnEachSave="true" triggerOnReformat="true" />
   <component name="ChangeListManager">
-    <list default="true" id="e6c179d3-ca26-4d56-b577-3e033a97c20e" name="Changes" comment="concat instead of superpose">
+    <list default="true" id="e6c179d3-ca26-4d56-b577-3e033a97c20e" name="Changes" comment="change channel training">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/semantic_communication/models/transceiver.py" beforeDir="false" afterPath="$PROJECT_DIR$/semantic_communication/models/transceiver.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/semantic_communication/utils/channel.py" beforeDir="false" afterPath="$PROJECT_DIR$/semantic_communication/utils/channel.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/semantic_communication/utils/general.py" beforeDir="false" afterPath="$PROJECT_DIR$/semantic_communication/utils/general.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train_tx_relay_channel_block.py" beforeDir="false" afterPath="$PROJECT_DIR$/train_tx_relay_channel_block.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train_tx_relay_rx_channel_block.py" beforeDir="false" afterPath="$PROJECT_DIR$/train_tx_relay_rx_channel_block.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -411,13 +407,6 @@
       <workItem from="1699119118336" duration="35885000" />
       <workItem from="1699492462988" duration="5245000" />
     </task>
-    <task id="LOCAL-00039" summary="remove transmitter and receiver classes">
-      <created>1698381493197</created>
-      <option name="number" value="00039" />
-      <option name="presentableId" value="LOCAL-00039" />
-      <option name="project" value="LOCAL" />
-      <updated>1698381493197</updated>
-    </task>
     <task id="LOCAL-00040" summary="create attention mask in relay">
       <created>1698387273990</created>
       <option name="number" value="00040" />
@@ -754,7 +743,14 @@
       <option name="project" value="LOCAL" />
       <updated>1699496550871</updated>
     </task>
-    <option name="localTasksCounter" value="88" />
+    <task id="LOCAL-00088" summary="change channel training">
+      <created>1699581958021</created>
+      <option name="number" value="00088" />
+      <option name="presentableId" value="LOCAL-00088" />
+      <option name="project" value="LOCAL" />
+      <updated>1699581958021</updated>
+    </task>
+    <option name="localTasksCounter" value="89" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -772,7 +768,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="add data_fp to args" />
     <MESSAGE value="fix typo in arg" />
     <MESSAGE value="change data handling process" />
     <MESSAGE value="update train scripts" />
@@ -797,7 +792,8 @@
     <MESSAGE value="update environment.yml" />
     <MESSAGE value="separate arguments" />
     <MESSAGE value="concat instead of superpose" />
-    <option name="LAST_COMMIT_MESSAGE" value="concat instead of superpose" />
+    <MESSAGE value="change channel training" />
+    <option name="LAST_COMMIT_MESSAGE" value="change channel training" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

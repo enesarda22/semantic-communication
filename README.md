@@ -62,10 +62,8 @@ python train_tx_relay_channel_block.py \
 --n-epochs 25 \
 --lr 5e-5 \
 --channel-block-latent-dim 128 \
---SNR-min 3 \
+--SNR-min -6 \
 --SNR-max 21 \
---SNR-step 3 \
---SNR-window 3 \
 --channel-type AWGN \
 --data-fp /data \
 --checkpoint-path /data/checkpoints
@@ -84,12 +82,10 @@ python train_tx_relay_rx_channel_block.py \
 --n-epochs 25 \
 --lr 5e-5 \
 --channel-block-latent-dim 128 \
---SNR-min 3 \
+--SNR-min -6 \
 --SNR-max 21 \
---SNR-step 3 \
---SNR-window 3 \
---channel-type AWGN \
 --SNR-diff 3 \
+--channel-type AWGN \
 --data-fp /data \
 --checkpoint-path /data/checkpoints
 ```
