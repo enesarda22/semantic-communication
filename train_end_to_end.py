@@ -12,8 +12,6 @@ from semantic_communication.models.transceiver import (
     Transceiver,
 )
 from semantic_communication.utils.channel import (
-    AWGN,
-    Rayleigh,
     init_channel,
     get_SNR,
 )
