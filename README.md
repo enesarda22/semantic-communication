@@ -97,7 +97,7 @@ epoch = 15
 ```
 python train_end_to_end.py \
 --relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_18.pt \
+--receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_10.pt \
 --n-blocks 6 \
 --n-heads 6 \
 --tx-relay-channel-model-path /data/checkpoints/tx-relay-channel/tx_relay_channel_24.pt \

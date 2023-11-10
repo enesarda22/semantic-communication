@@ -69,7 +69,7 @@ if __name__ == "__main__":
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
-        n_embeddings=args.n_embeddings,
+        n_embeddings=args.n_embeddings * 2,
         block_size=args.max_length,
     ).to(device)
     rx_checkpoint = torch.load(args.receiver_decoder_path, map_location=device)
