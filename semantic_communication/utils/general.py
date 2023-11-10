@@ -1,4 +1,3 @@
-import os
 import random
 from pathlib import Path
 
@@ -60,7 +59,5 @@ def add_channel_model_args(parser):
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--SNR-min", default=3, type=int)
     parser.add_argument("--SNR-max", default=21, type=int)
-    parser.add_argument("--SNR-step", default=3, type=int)
-    parser.add_argument("--SNR-window", default=5, type=int)
     parser.add_argument("--SNR-diff", default=3, type=int)
     parser.add_argument("--channel-type", default="AWGN", type=str)

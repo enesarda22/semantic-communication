@@ -11,7 +11,10 @@ from semantic_communication.models.transceiver import (
     TxRelayRxChannelModel,
     Relay,
 )
-from semantic_communication.utils.channel import AWGN, Rayleigh
+from semantic_communication.utils.channel import (
+    init_channel,
+    get_SNR,
+)
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.utils.general import (
     get_device,
@@ -60,21 +63,11 @@ if __name__ == "__main__":
         encoder=data_handler.encoder,
     )
 
-    # Initializations
-    SNR_dB = np.flip(np.arange(args.SNR_min, args.SNR_max + 1, args.SNR_step))
-
-    if args.channel_type == "AWGN":
-        channel_tx_rx = AWGN(SNR_dB[0] - args.SNR_diff, args.sig_pow)
-        channel_rel_rx = AWGN(SNR_dB[0], args.sig_pow)
-    else:
-        channel_tx_rx = Rayleigh(SNR_dB[0] - args.SNR_diff, args.sig_pow)
-        channel_rel_rx = Rayleigh(SNR_dB[0], args.sig_pow)
-
+    channel = init_channel(args.channel_type, args.sig_pow)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
-        channel_tx_rx=channel_tx_rx,
-        channel_rel_rx=channel_rel_rx,
+        channel=channel,
     ).to(device)
 
     optimizer = torch.optim.AdamW(
@@ -83,31 +76,10 @@ if __name__ == "__main__":
     )
     criterion = torch.nn.MSELoss()
 
-    cur_win, cur_SNR_index = 0, 0
-
     for epoch in range(args.n_epochs):
         train_losses = []
         tx_relay_rx_channel_model.train()
-        if cur_win >= args.SNR_window:
-            cur_win = 0
-            if not cur_SNR_index >= len(SNR_dB) - 1:
-                cur_SNR_index += 1
 
-            if args.channel_type == "AWGN":
-                channel_tx_rx = AWGN(
-                    SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
-                )
-                channel_rel_rx = AWGN(SNR_dB[cur_SNR_index], args.sig_pow)
-            else:
-                channel_tx_rx = Rayleigh(
-                    SNR_dB[cur_SNR_index] - args.SNR_diff, args.sig_pow
-                )
-                channel_rel_rx = Rayleigh(SNR_dB[cur_SNR_index], args.sig_pow)
-
-            tx_relay_rx_channel_model.channel_tx_rx = channel_tx_rx
-            tx_relay_rx_channel_model.channel_rel_rx = channel_rel_rx
-
-        cur_win += 1
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
@@ -118,8 +90,10 @@ if __name__ == "__main__":
             )
             relay_out = relay(x=encoder_output[:, :-1, :])
 
+            rel_SNR = get_SNR(args.SNR_min, args.SNR_max)
+            tx_SNR = rel_SNR - args.SNR_diff
             output_hat = tx_relay_rx_channel_model(
-                encoder_output[:, 1:, :], relay_out
+                encoder_output[:, 1:, :], relay_out, tx_SNR, rel_SNR
             )
             ground_truth = torch.cat(
                 [relay_out, encoder_output[:, 1:, :]], dim=-1
@@ -143,9 +117,11 @@ if __name__ == "__main__":
             )
             relay_out = relay(x=encoder_output[:, :-1, :])
 
+            rel_SNR = get_SNR(args.SNR_min, args.SNR_max)
+            tx_SNR = rel_SNR - args.SNR_diff
             with torch.no_grad():
                 output_hat = tx_relay_rx_channel_model(
-                    encoder_output[:, 1:, :], relay_out
+                    encoder_output[:, 1:, :], relay_out, tx_SNR, rel_SNR
                 )
 
             ground_truth = torch.cat(
