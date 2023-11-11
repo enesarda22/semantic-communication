@@ -81,24 +81,28 @@ if __name__ == "__main__":
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
-    tx_relay_channel_model_checkpoint = torch.load(
-        args.tx_relay_channel_model_path, map_location=device
-    )
-    tx_relay_channel_model.load_state_dict(
-        tx_relay_channel_model_checkpoint["model_state_dict"]
-    )
+
+    if args.tx_relay_channel_model_path is not None:
+        tx_relay_channel_model_checkpoint = torch.load(
+            args.tx_relay_channel_model_path, map_location=device
+        )
+        tx_relay_channel_model.load_state_dict(
+            tx_relay_channel_model_checkpoint["model_state_dict"]
+        )
 
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
-    tx_relay_rx_channel_model_checkpoint = torch.load(
-        args.tx_relay_rx_channel_model_path, map_location=device
-    )
-    tx_relay_rx_channel_model.load_state_dict(
-        tx_relay_rx_channel_model_checkpoint["model_state_dict"]
-    )
+
+    if args.tx_relay_rx_channel_model_path is not None:
+        tx_relay_rx_channel_model_checkpoint = torch.load(
+            args.tx_relay_rx_channel_model_path, map_location=device
+        )
+        tx_relay_rx_channel_model.load_state_dict(
+            tx_relay_rx_channel_model_checkpoint["model_state_dict"]
+        )
 
     transceiver = Transceiver(
         semantic_encoder,
