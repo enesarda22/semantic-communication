@@ -30,6 +30,7 @@ from semantic_communication.utils.general import (
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--transceiver-path", type=str)
 
     # semantic decoders
     parser.add_argument("--relay-decoder-path", type=str)
@@ -113,6 +114,10 @@ if __name__ == "__main__":
         data_handler.encoder,
     )
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
+    if args.transceiver_path is not None:
+        checkpoint = torch.load(args.transceiver_path)
+        transceiver.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
