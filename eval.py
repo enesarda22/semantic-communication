@@ -205,13 +205,15 @@ if __name__ == "__main__":
 
                 for s1, s2 in zip(original_sentences, predicted_sentences):
                     cosine_scores.append(
-                        semantic_similarity_score([s1], [s2])[0][0]
+                        semantic_similarity_score([s1], [s2])[0][0].tolist()
                     )
 
                     bleu1_scores.append(bleu_1gram(s1, s2))
                     bleu2_scores.append(bleu_2gram(s1, s2))
                     bleu3_scores.append(bleu_3gram(s1, s2))
                     bleu4_scores.append(bleu_4gram(s1, s2))
+            if len(cosine_scores) > 5000:
+                break
 
         semantic_sim.append(np.mean(cosine_scores))
         bleu_1.append(np.mean(bleu1_scores))
