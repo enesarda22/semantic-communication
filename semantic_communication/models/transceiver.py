@@ -50,8 +50,6 @@ class ChannelEncoder(nn.Module):
 
 
 class ChannelDecoder(nn.Module):
-    # construct the model
-
     def __init__(self, nin, nout):
         super(ChannelDecoder, self).__init__()
         up_dim = int(np.floor(np.log2(nout) / 2))
@@ -83,9 +81,9 @@ class TxRelayChannelModel(nn.Module):
         self.relay_decoder = ChannelDecoder(n_latent, nin)
         self.channel = channel
 
-    def forward(self, x):
+    def forward(self, x, SNR):
         ch_input = self.tx_encoder(x)
-        ch_output = self.channel(ch_input)
+        ch_output = self.channel(ch_input, SNR)
         x_hat = self.relay_decoder(ch_output)
         return x_hat
 
@@ -95,27 +93,25 @@ class TxRelayRxChannelModel(nn.Module):
         self,
         nin,
         n_latent,
-        channel_tx_rx: Channel,
-        channel_rel_rx: Channel,
+        channel: Channel,
     ):
         super(TxRelayRxChannelModel, self).__init__()
 
         self.tx_encoder = ChannelEncoder(nin, n_latent)
         self.relay_encoder = ChannelEncoder(nin, n_latent)
-        self.rx_decoder = ChannelDecoder(n_latent, nin)
-        self.channel_tx_rx = channel_tx_rx
-        self.channel_rel_rx = channel_rel_rx
+        self.rx_decoder = ChannelDecoder(n_latent * 2, nin * 2)
+        self.channel = channel
 
-    def forward(self, tx_x, rel_x):
-        tx_ch_input = self.tx_encoder(tx_x)
+    def forward(self, tx_x, rel_x, tx_SNR, rel_SNR):
         rel_ch_input = self.relay_encoder(rel_x)
+        tx_ch_input = self.tx_encoder(tx_x)
 
-        # Superpose
-        ch_output = self.channel_tx_rx(tx_ch_input) + self.channel_rel_rx(
-            rel_ch_input
-        )
+        rel_ch_out = self.channel(rel_ch_input, rel_SNR)
+        tx_ch_out = self.channel(tx_ch_input, tx_SNR)
+
+        ch_output = torch.cat([rel_ch_out, tx_ch_out], dim=-1)  # concatenate
         x_hat = self.rx_decoder(ch_output)
-        return x_hat  # ground truth = tx_x + rel_x
+        return x_hat
 
 
 class Transceiver(nn.Module):  # TODO: find a cooler name
@@ -136,25 +132,29 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
-    def forward(self, w, attention_mask, targets):
+    def forward(self, w, attention_mask, targets, tx_SNR, rel_SNR):
         # transmitter
-        x = self.tx_semantic_encoder(
+        encoder_output = self.tx_semantic_encoder(
             input_ids=w,
             attention_mask=attention_mask,
         )
 
         # relay
-        x_hat = self.tx_relay_channel_enc_dec(x[:, :-1, :])
-        x_relay = self.relay(x_hat)
+        relay_input = self.tx_relay_channel_enc_dec(
+            encoder_output[:, :-1, :], rel_SNR
+        )
+        relay_output = self.relay(relay_input)
 
         # receiver
-        x_hat_rcv = self.tx_relay_rx_channel_enc_dec(x[:, 1:, :], x_relay)
-        s_hat = self.rx_semantic_decoder(
-            encoder_output=x_hat_rcv,
+        receiver_input = self.tx_relay_rx_channel_enc_dec(
+            encoder_output[:, 1:, :], relay_output, tx_SNR, rel_SNR
+        )
+        receiver_output = self.rx_semantic_decoder(
+            encoder_output=receiver_input,
             attention_mask=attention_mask[:, 1:],
             targets=targets,
         )
-        return s_hat
+        return receiver_output
 
 
 class Relay(nn.Module):

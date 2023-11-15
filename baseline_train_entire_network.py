@@ -1,14 +1,7 @@
 import argparse
-import os
-
-import numpy as np
-import torch
 from tqdm import tqdm
 
-from semantic_communication.data_processing.data_handler import DataHandler
-from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.models.transceiver import TxRelayChannelModel
-from semantic_communication.utils.channel import init_channel, get_SNR
+from semantic_communication.models.baseline_models import Tx_Relay, Tx_Relay_Rx
 from semantic_communication.utils.general import (
     get_device,
     print_loss,
@@ -18,11 +11,17 @@ from semantic_communication.utils.general import (
     add_train_args,
     add_data_args,
 )
+from semantic_communication.utils.channel import init_channel, get_SNR
+from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.data_processing.data_handler import DataHandler
+import torch
+import numpy as np
+import os
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
+    parser.add_argument("--baseline-tx-relay-path", type=str)
     add_channel_model_args(parser)
     add_data_args(parser)
     add_train_args(parser)
@@ -39,34 +38,31 @@ if __name__ == "__main__":
     )
 
     channel = init_channel(args.channel_type, args.sig_pow)
-    tx_relay_channel_model = TxRelayChannelModel(
-        nin=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
-        channel=channel,
-    ).to(device)
+
+    num_classes = data_handler.vocab_size
+    tx_relay_model = Tx_Relay(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel=channel, entire_network_train=1).to(device)
+    checkpoint = torch.load(args.baseline_tx_relay_path)
+    tx_relay_model.load_state_dict(checkpoint["model_state_dict"])
+
+    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel, tx_relay_model).to(device)
 
     optimizer = torch.optim.AdamW(
-        params=tx_relay_channel_model.parameters(),
+        params=tx_relay_rx_model.parameters(),
         lr=args.lr,
     )
-    criterion = torch.nn.MSELoss()
 
     for epoch in range(args.n_epochs):
         train_losses = []
-        tx_relay_channel_model.train()
+        tx_relay_rx_model.train()
 
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(
-                input_ids=xb,
-                attention_mask=attention_mask,
-            )
-
+            xb = data_handler.encode_token_ids(xb)
             SNR = get_SNR(args.SNR_min, args.SNR_max)
-            encoder_output_hat = tx_relay_channel_model(encoder_output, SNR)
-            loss = criterion(encoder_output_hat, encoder_output)
+
+            x_hat, loss = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:], SNR, SNR - args.SNR_diff)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -74,23 +70,17 @@ if __name__ == "__main__":
             train_losses.append(loss.item())
 
         val_losses = []
-        tx_relay_channel_model.eval()
+        tx_relay_rx_model.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
 
-            encoder_output = semantic_encoder(
-                input_ids=xb,
-                attention_mask=attention_mask,
-            )
-
+            xb = data_handler.encode_token_ids(xb)
             SNR = get_SNR(args.SNR_min, args.SNR_max)
-            with torch.no_grad():
-                encoder_output_hat = tx_relay_channel_model(
-                    encoder_output, SNR
-                )
 
-            loss = criterion(encoder_output_hat, encoder_output)
+            with torch.no_grad():
+                x_hat, loss = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:], SNR, SNR - args.SNR_diff)
+
             val_losses.append(loss.item())
 
         print("\n")
@@ -98,15 +88,13 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
-
-        checkpoint_path = os.path.join(
-            args.checkpoint_path,
-            f"tx-relay-channel/tx_relay_channel_{epoch}.pt",
-        )
-
         create_checkpoint(
-            path=checkpoint_path,
-            model_state_dict=tx_relay_channel_model.state_dict(),
+            path=os.path.join(
+                args.checkpoint_path,
+                f"baseline-tx-relay-rx/baseline_tx_relay_rx_{epoch}.pt",
+            ),
+            model_state_dict=tx_relay_rx_model.state_dict(),
             optimizer_state_dict=optimizer.state_dict(),
             mean_val_loss=mean_loss,
         )
+        best_loss = mean_loss

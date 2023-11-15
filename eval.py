@@ -1,21 +1,28 @@
+import argparse
 import numpy as np
+import matplotlib.pyplot as plt
+
+from nltk.translate.bleu_score import sentence_bleu
+
+import torch
+from torch.nn import functional as F
+
 from semantic_communication.models.transceiver import (
     TxRelayChannelModel,
     TxRelayRxChannelModel,
     Transceiver,
 )
-
-import matplotlib.pyplot as plt
-
-from nltk.translate.bleu_score import sentence_bleu
-from semantic_communication.utils.general import get_device, set_seed
+from semantic_communication.utils.general import (
+    get_device,
+    set_seed,
+    add_semantic_decoder_args,
+    add_channel_model_args,
+    add_data_args,
+)
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
-from semantic_communication.utils.channel import AWGN, Rayleigh
-import torch
-import argparse
-from torch.nn import functional as F
+from semantic_communication.utils.channel import init_channel
 
 
 def semantic_similarity_score(target_sentences, received_sentences):
@@ -79,28 +86,18 @@ if __name__ == "__main__":
 
     # model args
     parser.add_argument("--transceiver-path", type=str)
-    parser.add_argument("--n-blocks", default=1, type=int)
-    parser.add_argument("--n-heads", default=4, type=int)
-    parser.add_argument("--n-embeddings", default=384, type=int)
-    parser.add_argument("--channel-block-input-dim", default=384, type=int)
-    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
-
-    # data args
-    parser.add_argument("--max-length", default=30, type=int)
-    parser.add_argument("--data-fp", default="", type=str)
+    add_semantic_decoder_args(parser)
+    add_channel_model_args(parser)
+    add_data_args(parser)
 
     # test args
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--channel-type", default="AWGN", type=str)
-    parser.add_argument("--sig-pow", default=1.0, type=float)
-    parser.add_argument("--SNR-diff", default=3, type=int)
     parser.add_argument("--SNR-list", nargs="+", type=int)
-
     args = parser.parse_args()
 
     device = get_device()
     set_seed()
-    # Create Data handler
+
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
         semantic_encoder=semantic_encoder,
@@ -108,22 +105,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
     )
 
-    # Create Channels
-    if args.channel_type == "AWGN":
-        tx_rx_channel = AWGN(
-            int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow
-        )
-        tx_relay_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)
-        relay_rx_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)
-
-    else:
-        tx_rx_channel = Rayleigh(
-            int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow
-        )
-        tx_relay_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)
-        relay_rx_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)
-
-    # Create Transceiver
+    # initialize models
     relay_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
@@ -136,20 +118,20 @@ if __name__ == "__main__":
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
-        n_embeddings=args.n_embeddings,
+        n_embeddings=args.n_embeddings * 2,
         block_size=args.max_length,
     ).to(device)
 
+    channel = init_channel(args.channel_type, args.sig_pow)
     tx_relay_channel_model = TxRelayChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
-        channel=tx_relay_channel,
+        channel=channel,
     ).to(device)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
-        channel_tx_rx=tx_rx_channel,
-        channel_rel_rx=relay_rx_channel,
+        channel=channel,
     ).to(device)
 
     transceiver = Transceiver(
@@ -172,22 +154,6 @@ if __name__ == "__main__":
     bleu_4 = []
     for SNR in args.SNR_list:
         print("Simulating for SNR: " + str(SNR))
-        # Create Channels
-        if args.channel_type == "AWGN":
-            tx_rx_channel = AWGN(int(SNR) - args.SNR_diff, args.sig_pow)
-            tx_relay_channel = AWGN(int(SNR), args.sig_pow)
-            relay_rx_channel = AWGN(int(SNR), args.sig_pow)
-
-        else:
-            tx_rx_channel = Rayleigh(int(SNR) - args.SNR_diff, args.sig_pow)
-            tx_relay_channel = Rayleigh(int(SNR), args.sig_pow)
-            relay_rx_channel = Rayleigh(int(SNR), args.sig_pow)
-
-        transceiver.tx_relay_channel_enc_dec.channel = tx_relay_channel
-        transceiver.tx_relay_rx_channel_enc_dec.channel_tx_rx = tx_rx_channel
-        transceiver.tx_relay_rx_channel_enc_dec.channel_rel_rx = (
-            relay_rx_channel
-        )
 
         cosine_scores = []
         bleu1_scores = []
@@ -204,7 +170,9 @@ if __name__ == "__main__":
             B, T = xb.shape
 
             with torch.no_grad():
-                logits, _ = transceiver(xb, attention_mask, targets[:, 1:])
+                logits, _ = transceiver(
+                    xb, attention_mask, targets[:, 1:], SNR - 3, SNR
+                )
                 probs = F.softmax(logits, dim=-1)
                 predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
                     B, args.max_length
@@ -237,13 +205,15 @@ if __name__ == "__main__":
 
                 for s1, s2 in zip(original_sentences, predicted_sentences):
                     cosine_scores.append(
-                        semantic_similarity_score([s1], [s2])[0][0]
+                        semantic_similarity_score([s1], [s2])[0][0].tolist()
                     )
 
                     bleu1_scores.append(bleu_1gram(s1, s2))
                     bleu2_scores.append(bleu_2gram(s1, s2))
                     bleu3_scores.append(bleu_3gram(s1, s2))
                     bleu4_scores.append(bleu_4gram(s1, s2))
+            if len(cosine_scores) > 5000:
+                break
 
         semantic_sim.append(np.mean(cosine_scores))
         bleu_1.append(np.mean(bleu1_scores))
