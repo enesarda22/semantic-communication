@@ -132,7 +132,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
-    def forward(self, w, attention_mask, targets, tx_SNR, rel_SNR):
+    def forward(self, w, attention_mask, targets, SD_SNR, SR_SNR, RD_SNR):
         # transmitter
         encoder_output = self.tx_semantic_encoder(
             input_ids=w,
@@ -141,13 +141,13 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
 
         # relay
         relay_input = self.tx_relay_channel_enc_dec(
-            encoder_output[:, :-1, :], rel_SNR
+            encoder_output[:, :-1, :], SR_SNR
         )
         relay_output = self.relay(relay_input)
 
         # receiver
         receiver_input = self.tx_relay_rx_channel_enc_dec(
-            encoder_output[:, 1:, :], relay_output, tx_SNR, rel_SNR
+            encoder_output[:, 1:, :], relay_output, SD_SNR, RD_SNR
         )
         receiver_output = self.rx_semantic_decoder(
             encoder_output=receiver_input,

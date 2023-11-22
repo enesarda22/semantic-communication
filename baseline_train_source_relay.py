@@ -47,7 +47,6 @@ if __name__ == "__main__":
     for epoch in range(args.n_epochs):
         train_losses = []
         tx_relay_model.train()
-
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
@@ -77,6 +76,7 @@ if __name__ == "__main__":
             val_losses.append(loss.item())
 
         print("\n")
+        print("Epoch: " + str(epoch))
         print_loss(train_losses, "Train")
         print_loss(val_losses, "Val")
 

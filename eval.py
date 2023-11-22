@@ -168,10 +168,11 @@ if __name__ == "__main__":
             attention_mask = b[1].to(device)
 
             B, T = xb.shape
-
+            SR_SNR = -15
+            RD_SNR = -9
             with torch.no_grad():
                 logits, _ = transceiver(
-                    xb, attention_mask, targets[:, 1:], SNR - 3, SNR
+                    xb, attention_mask, targets[:, 1:], SNR, SR_SNR, RD_SNR
                 )
                 probs = F.softmax(logits, dim=-1)
                 predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
