@@ -97,18 +97,19 @@ epoch = 15
 ```
 python train_end_to_end.py \
 --relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_10.pt \
+--receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_3.pt \
 --n-blocks 6 \
 --n-heads 6 \
---tx-relay-channel-model-path /data/checkpoints/tx-relay-channel/tx_relay_channel_24.pt \
---tx-relay-rx-channel-model-path /data/checkpoints/tx-relay-rx-channel/tx_relay_rx_channel_2.pt \
---batch-size 512 \
+--batch-size 500 \
 --n-epochs 25 \
 --lr 1e-5 \
---channel-block-latent-dim 128 \
---SNR-min -6 \
---SNR-max 21 \
---SNR-diff 3 \
+--channel-block-latent-dim 256 \
+--alpha 4 \
+--sig-pow 1 \
+--noise-pow 4e-15 \
+--d 7e3 \
+--gamma-min 0.2 \
+--gamma-max 0.8 \
 --channel-type AWGN \
 --data-fp /data \
 --checkpoint-path /data/checkpoints

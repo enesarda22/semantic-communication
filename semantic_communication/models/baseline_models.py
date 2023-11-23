@@ -16,10 +16,10 @@ class Tx_Relay(nn.Module):
         self.channel = channel
         self.entire_network_train = entire_network_train
 
-    def forward(self, x, attention_mask, SNR):
+    def forward(self, x, attention_mask, d_sr):
         embeddings = self.embedding_layer(x)
         ch_input = self.tx_encoder(embeddings)
-        ch_output = self.channel(ch_input, SNR)
+        ch_output = self.channel(ch_input, d_sr)
         x_hat = self.linear(self.relay_decoder(ch_output))
 
         if self.entire_network_train == 0:
@@ -56,15 +56,15 @@ class Tx_Relay_Rx(nn.Module):
         self.linear = nn.Linear(int(2 * n_emb), nin)
         self.channel = channel
 
-    def forward(self, x, attention_mask, SR_SNR, RD_SNR, SD_SNR):
-        x_hat, x1 = self.tx_relay_model(x, attention_mask, SR_SNR)
+    def forward(self, x, attention_mask, d_sd, d_sr, d_rd):
+        x_hat, x1 = self.tx_relay_model(x, attention_mask, d_sr)
 
         x_hard = torch.argmax(x_hat, dim=2)
 
         x_emb = self.relay_embedding(x_hard)
 
-        y2 = self.channel(self.relay_encoder(x_emb), RD_SNR)
-        y1 = self.channel(x1, SD_SNR)
+        y2 = self.channel(self.relay_encoder(x_emb), d_rd)
+        y1 = self.channel(x1, d_sd)
 
         x_hat = torch.cat((self.rx_decoder_1(y1), self.rx_decoder_2(y2)), dim=2)
         x_hat = self.linear(x_hat)

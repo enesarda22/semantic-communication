@@ -2,7 +2,10 @@ import argparse
 from tqdm import tqdm
 
 from semantic_communication.models.baseline_models import Tx_Relay
-from semantic_communication.utils.channel import init_channel, get_SNR
+from semantic_communication.utils.channel import (
+    init_channel,
+    get_distance,
+)
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.data_processing.data_handler import DataHandler
 import torch
@@ -35,7 +38,7 @@ if __name__ == "__main__":
         data_fp=args.data_fp,
     )
 
-    channel = init_channel(args.channel_type, args.sig_pow)
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     num_classes = data_handler.vocab_size
     tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=channel).to(device)
 
@@ -43,6 +46,12 @@ if __name__ == "__main__":
         params=tx_relay_model.parameters(),
         lr=args.lr,
     )
+
+    d_sd = args.d
+    d_min = args.d * args.gamma_min
+    d_max = args.d * args.gamma_max
+
+    best_loss = torch.inf
 
     for epoch in range(args.n_epochs):
         train_losses = []
@@ -52,9 +61,10 @@ if __name__ == "__main__":
             attention_mask = b[1].to(device)
 
             xb = data_handler.encode_token_ids(xb)
-            SNR = get_SNR(args.SNR_min, args.SNR_max)
+            d_sr = get_distance(d_min, d_max)
+            d_rd = d_sd - d_sr
 
-            x_hat, ch_input, loss = tx_relay_model(xb[:, 1:],  attention_mask[:, 1:], SNR)
+            x_hat, ch_input, loss = tx_relay_model(xb[:, 1:],  attention_mask[:, 1:], d_sr)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -68,10 +78,11 @@ if __name__ == "__main__":
             attention_mask = b[1].to(device)
 
             xb = data_handler.encode_token_ids(xb)
-            SNR = get_SNR(args.SNR_min, args.SNR_max)
+            d_sr = get_distance(d_min, d_max)
+            d_rd = d_sd - d_sr
 
             with torch.no_grad():
-                x_hat, ch_input, loss = tx_relay_model(xb[:, 1:], attention_mask[:, 1:], SNR)
+                x_hat, ch_input, loss = tx_relay_model(xb[:, 1:], attention_mask[:, 1:], d_sr)
 
             val_losses.append(loss.item())
 
@@ -81,13 +92,22 @@ if __name__ == "__main__":
         print_loss(val_losses, "Val")
 
         mean_loss = np.mean(val_losses)
-
-        create_checkpoint(
-            path=os.path.join(
+        checkpoint_path = os.path.join(
                 args.checkpoint_path,
-                f"baseline-tx-relay/baseline_tx_relay_{epoch}.pt",
-            ),
-            model_state_dict=tx_relay_model.state_dict(),
-            optimizer_state_dict=optimizer.state_dict(),
-            mean_val_loss=mean_loss,
-        )
+                f"baseline-tx-relay/baseline_tx_relay_{epoch}.pt")
+
+        if mean_loss < best_loss:
+            create_checkpoint(
+                path=checkpoint_path,
+                model_state_dict=tx_relay_model.state_dict(),
+                optimizer_state_dict=optimizer.state_dict(),
+                mean_val_loss=mean_loss,
+            )
+            best_loss = mean_loss
+        else:
+            create_checkpoint(
+                path=checkpoint_path,
+                model_state_dict=None,
+                optimizer_state_dict=None,
+                mean_val_loss=mean_loss,
+            )

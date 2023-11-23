@@ -13,7 +13,7 @@ from semantic_communication.models.transceiver import (
 )
 from semantic_communication.utils.channel import (
     init_channel,
-    get_SNR,
+    get_distance,
 )
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
@@ -26,6 +26,8 @@ from semantic_communication.utils.general import (
     add_channel_model_args,
     add_data_args,
     add_train_args,
+    load_model,
+    load_optimizer,
 )
 
 if __name__ == "__main__":
@@ -63,8 +65,7 @@ if __name__ == "__main__":
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
     ).to(device)
-    relay_checkpoint = torch.load(args.relay_decoder_path, map_location=device)
-    relay_decoder.load_state_dict(relay_checkpoint["model_state_dict"])
+    load_model(relay_decoder, args.relay_decoder_path)
 
     receiver_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -73,37 +74,22 @@ if __name__ == "__main__":
         n_embeddings=args.n_embeddings * 2,
         block_size=args.max_length,
     ).to(device)
-    rx_checkpoint = torch.load(args.receiver_decoder_path, map_location=device)
-    receiver_decoder.load_state_dict(rx_checkpoint["model_state_dict"])
+    load_model(receiver_decoder, args.receiver_decoder_path)
 
-    channel = init_channel(args.channel_type, args.sig_pow)
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     tx_relay_channel_model = TxRelayChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
-
-    if args.tx_relay_channel_model_path is not None:
-        tx_relay_channel_model_checkpoint = torch.load(
-            args.tx_relay_channel_model_path, map_location=device
-        )
-        tx_relay_channel_model.load_state_dict(
-            tx_relay_channel_model_checkpoint["model_state_dict"]
-        )
+    load_model(tx_relay_channel_model, args.tx_relay_channel_model_path)
 
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
-
-    if args.tx_relay_rx_channel_model_path is not None:
-        tx_relay_rx_channel_model_checkpoint = torch.load(
-            args.tx_relay_rx_channel_model_path, map_location=device
-        )
-        tx_relay_rx_channel_model.load_state_dict(
-            tx_relay_rx_channel_model_checkpoint["model_state_dict"]
-        )
+    load_model(tx_relay_rx_channel_model, args.tx_relay_rx_channel_model_path)
 
     transceiver = Transceiver(
         semantic_encoder,
@@ -113,11 +99,14 @@ if __name__ == "__main__":
         tx_relay_rx_channel_model,
         data_handler.encoder,
     )
+    load_model(transceiver, args.transceiver_path)
+
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
-    if args.transceiver_path is not None:
-        checkpoint = torch.load(args.transceiver_path)
-        transceiver.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    load_optimizer(optimizer, args.transceiver_path)
+
+    d_sd = args.d
+    d_min = args.d * args.gamma_min
+    d_max = args.d * args.gamma_max
 
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
@@ -128,10 +117,11 @@ if __name__ == "__main__":
             targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
 
-            rel_SNR = get_SNR(args.SNR_min, args.SNR_max)
-            tx_SNR = rel_SNR - args.SNR_diff
+            d_sr = get_distance(d_min, d_max)
+            d_rd = d_sd - d_sr
+
             logits, loss = transceiver(
-                xb, attention_mask, targets[:, 1:], tx_SNR, rel_SNR
+                xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd
             )
 
             optimizer.zero_grad(set_to_none=True)
@@ -146,11 +136,11 @@ if __name__ == "__main__":
             targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
 
-            rel_SNR = get_SNR(args.SNR_min, args.SNR_max)
-            tx_SNR = rel_SNR - args.SNR_diff
+            d_sr = get_distance(d_min, d_max)
+            d_rd = d_sd - d_sr
             with torch.no_grad():
-                logits, loss = transceiver(
-                    xb, attention_mask, targets[:, 1:], tx_SNR, rel_SNR
+                _, loss = transceiver(
+                    xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd
                 )
 
             val_losses.append(loss.item())
