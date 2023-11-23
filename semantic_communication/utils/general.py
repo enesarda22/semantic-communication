@@ -34,6 +34,18 @@ def create_checkpoint(path, **kwargs):
     torch.save({**kwargs}, p)
 
 
+def load_model(model, state_dict_path):
+    if state_dict_path is not None:
+        checkpoint = torch.load(state_dict_path, map_location=get_device())
+        model.load_state_dict(checkpoint["model_state_dict"])
+
+
+def load_optimizer(optimizer, state_dict_path):
+    if state_dict_path is not None:
+        checkpoint = torch.load(state_dict_path, map_location=get_device())
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+
 def add_semantic_decoder_args(parser):
     parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
@@ -54,10 +66,12 @@ def add_data_args(parser):
 
 def add_channel_model_args(parser):
     parser.add_argument("--channel-block-input-dim", default=384, type=int)
-    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
+    parser.add_argument("--channel-block-latent-dim", default=256, type=int)
 
-    parser.add_argument("--sig-pow", default=1.0, type=float)
-    parser.add_argument("--SNR-min", default=3, type=int)
-    parser.add_argument("--SNR-max", default=21, type=int)
-    parser.add_argument("--SNR-diff", default=3, type=int)
     parser.add_argument("--channel-type", default="AWGN", type=str)
+    parser.add_argument("--alpha", default=4.0, type=float)
+    parser.add_argument("--sig-pow", default=1.0, type=float)
+    parser.add_argument("--noise-pow", default=4e-15, type=float)
+    parser.add_argument("--d", default=7e3, type=float)
+    parser.add_argument("--gamma-min", default=0.2, type=float)
+    parser.add_argument("--gamma-max", default=0.8, type=float)
