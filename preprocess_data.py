@@ -40,10 +40,10 @@ if __name__ == "__main__":
     semantic_encoder = SemanticEncoder(max_length=args.max_length)
     tokens = semantic_encoder.tokenize(messages=preprocessed_messages)
 
-    # train label encoder
-    encoder_fp = os.path.join(args.output_data_fp, Preprocessor.encoder_fn)
-    encoder = LabelEncoder().fit(tokens["input_ids"].flatten().to("cpu"))
-    torch.save(encoder, encoder_fp)
+    # drop sentences shorter than 2 tokens
+    long_sentence_query = tokens["attention_mask"].sum(dim=1) > 4
+    attention_mask = tokens["attention_mask"][long_sentence_query, :]
+    input_ids = tokens["input_ids"][long_sentence_query, :]
 
     (
         train_input_ids,
@@ -53,11 +53,27 @@ if __name__ == "__main__":
         test_input_ids,
         test_attention_mask,
     ) = Preprocessor.split_data(
-        input_ids=tokens["input_ids"],
-        attention_mask=tokens["attention_mask"],
+        input_ids=input_ids,
+        attention_mask=attention_mask,
         train_size=args.train_size,
         test_size=args.test_size,
     )
+
+    # drop the unknown tokens in val/test sets
+    unique_ids = torch.unique(train_input_ids)
+
+    val_query = torch.all(torch.isin(val_input_ids, unique_ids), dim=1)
+    val_input_ids = val_input_ids[val_query, :]
+    val_attention_mask = val_attention_mask[val_query, :]
+
+    test_query = torch.all(torch.isin(test_input_ids, unique_ids), dim=1)
+    test_input_ids = test_input_ids[test_query, :]
+    test_attention_mask = test_attention_mask[test_query, :]
+
+    # train label encoder
+    encoder_fp = os.path.join(args.output_data_fp, Preprocessor.encoder_fn)
+    encoder = LabelEncoder().fit(train_input_ids.flatten().to("cpu"))
+    torch.save(encoder, encoder_fp)
 
     train_dataset = TensorDataset(train_input_ids, train_attention_mask)
     val_dataset = TensorDataset(val_input_ids, val_attention_mask)
