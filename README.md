@@ -97,10 +97,10 @@ epoch = 15
 ```
 python train_end_to_end.py \
 --relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_10.pt \
+--receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_3.pt \
 --n-blocks 6 \
 --n-heads 6 \
---batch-size 512 \
+--batch-size 500 \
 --n-epochs 25 \
 --lr 1e-5 \
 --channel-block-latent-dim 256 \
