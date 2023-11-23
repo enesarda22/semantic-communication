@@ -1,6 +1,5 @@
 from abc import ABC
 import torch
-import numpy as np
 from semantic_communication.utils.general import get_device
 
 
@@ -54,29 +53,24 @@ class Rayleigh(Channel):
         super().__init__(signal_power_constraint, alpha, noise_pow)
 
     def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
-        B, T, C = x.shape
-        x = self.signal_process(x)
+        x = self.signal_process(x, d)
 
-        h_re = torch.div(torch.randn(B, T, device=self.device), 2**0.5)
-        h_im = torch.div(torch.randn(B, T, device=self.device), 2**0.5)
-
-        h_re = h_re.unsqueeze(2).repeat(1, 1, int(C / 2))
-        h_im = h_im.unsqueeze(2).repeat(1, 1, int(C / 2))
-
-        y = torch.zeros(x.shape).to(self.device)
-        y[:, :, 0, :] = x[:, :, 0, :] * h_re - x[:, :, 1, :] * h_im
-        y[:, :, 1, :] = x[:, :, 0, :] * h_im + x[:, :, 1, :] * h_re
-
-        linear_SNR = np.power(10, SNR / 10)
-        noise_var = self.signal_power_constraint / linear_SNR
-        noise = torch.normal(
+        h = torch.normal(
             mean=0.0,
-            std=(noise_var / 2) ** 0.5,
+            std=1.0,
             size=x.shape,
+            dtype=torch.cfloat,
         ).to(self.device)
 
-        y = y + noise
-        return torch.reshape(y, (B, T, C))
+        noise = torch.normal(
+            mean=0.0,
+            std=self.noise_pow**0.5,
+            size=x.shape,
+            dtype=torch.cfloat,
+        ).to(self.device)
+
+        y = h * x + noise
+        return torch.cat((y.real, y.imag), dim=-1)
 
 
 def init_channel(
