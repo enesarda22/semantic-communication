@@ -45,6 +45,8 @@ class AWGN(Channel):
         ).to(self.device)
 
         y = x + noise
+        y = y * ((d**self.alpha)**0.5)
+
         return torch.cat((y.real, y.imag), dim=-1)
 
 
