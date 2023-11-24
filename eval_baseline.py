@@ -205,7 +205,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU3gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.SNR_list, bleu_4)
+    plt.plot(args.distance_list, bleu_4)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 4-gram")
