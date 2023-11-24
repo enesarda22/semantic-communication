@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     # test args
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--distance-list", nargs="+", type=int)
+    parser.add_argument("--distance-list", nargs="+", type=float)
     args = parser.parse_args()
 
     device = get_device()
