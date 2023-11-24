@@ -43,20 +43,29 @@ if __name__ == "__main__":
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
 
     num_classes = data_handler.vocab_size
-    tx_relay_model = Tx_Relay(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel=channel, entire_network_train=1).to(device)
+    tx_relay_model = Tx_Relay(
+        num_classes,
+        args.channel_block_input_dim,
+        args.channel_block_latent_dim,
+        channel=channel,
+        entire_network_train=1,
+    ).to(device)
     checkpoint = torch.load(args.baseline_tx_relay_path)
     tx_relay_model.load_state_dict(checkpoint["model_state_dict"])
 
-    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel, tx_relay_model).to(device)
+    tx_relay_rx_model = Tx_Relay_Rx(
+        num_classes,
+        args.channel_block_input_dim,
+        args.channel_block_latent_dim,
+        channel,
+        tx_relay_model,
+    ).to(device)
 
     optimizer = torch.optim.AdamW(
         params=tx_relay_rx_model.parameters(),
         lr=args.lr,
     )
 
-    d_sd = args.d
-    d_min = args.d * args.gamma_min
-    d_max = args.d * args.gamma_max
     best_loss = torch.inf
 
     for epoch in range(args.n_epochs):
@@ -66,12 +75,15 @@ if __name__ == "__main__":
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
-
             xb = data_handler.encode_token_ids(xb)
-            d_sr = get_distance(d_min, d_max)
+
+            d_sd = get_distance(args.d_min, args.d_max)
+            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
             d_rd = d_sd - d_sr
 
-            x_hat, loss = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd)
+            x_hat, loss = tx_relay_rx_model(
+                xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd
+            )
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -83,13 +95,16 @@ if __name__ == "__main__":
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
             attention_mask = b[1].to(device)
-
             xb = data_handler.encode_token_ids(xb)
-            d_sr = get_distance(d_min, d_max)
+
+            d_sd = get_distance(args.d_min, args.d_max)
+            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
             d_rd = d_sd - d_sr
 
             with torch.no_grad():
-                x_hat, loss = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd)
+                x_hat, loss = tx_relay_rx_model(
+                    xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd
+                )
 
             val_losses.append(loss.item())
 
@@ -99,9 +114,9 @@ if __name__ == "__main__":
 
         mean_loss = np.mean(val_losses)
         checkpoint_path = os.path.join(
-                args.checkpoint_path,
-                f"baseline-tx-relay-rx/baseline_tx_relay_rx_{epoch}.pt",
-            )
+            args.checkpoint_path,
+            f"baseline-tx-relay-rx/baseline_tx_relay_rx_{epoch}.pt",
+        )
 
         if mean_loss < best_loss:
             create_checkpoint(

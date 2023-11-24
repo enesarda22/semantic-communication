@@ -72,6 +72,7 @@ def add_channel_model_args(parser):
     parser.add_argument("--alpha", default=4.0, type=float)
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--noise-pow", default=4e-15, type=float)
-    parser.add_argument("--d", default=3e3, type=float)
+    parser.add_argument("--d_min", default=2e3, type=float)
+    parser.add_argument("--d_max", default=7e3, type=float)
     parser.add_argument("--gamma-min", default=0.2, type=float)
     parser.add_argument("--gamma-max", default=0.8, type=float)

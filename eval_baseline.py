@@ -8,6 +8,7 @@ from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_channel_model_args,
     add_data_args,
+    load_model,
 )
 from semantic_communication.models.baseline_models import Tx_Relay, Tx_Relay_Rx
 from semantic_communication.models.semantic_encoder import SemanticEncoder
@@ -16,7 +17,6 @@ from semantic_communication.utils.channel import init_channel
 import torch
 import argparse
 from torch.nn import functional as F
-
 
 
 def semantic_similarity_score(target_sentences, received_sentences):
@@ -28,27 +28,19 @@ def semantic_similarity_score(target_sentences, received_sentences):
 
 
 def bleu_1gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(1, 0, 0, 0)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(1, 0, 0, 0))
 
 
 def bleu_2gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(0, 1, 0, 0)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 1, 0, 0))
 
 
 def bleu_3gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(0, 0, 1, 0)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 1, 0))
 
 
 def bleu_4gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(0, 0, 0, 1)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 0, 1))
 
 
 if __name__ == "__main__":
@@ -77,17 +69,27 @@ if __name__ == "__main__":
         data_fp=args.data_fp,
     )
 
-    channel = init_channel(args.channel_type, args.sig_pow)
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     num_classes = data_handler.vocab_size
 
     # Create Transceiver
-    tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=channel, entire_network_train=1).to(device)
-    tx_relay_checkpoint = torch.load(args.tx_relay_path)
-    tx_relay_model.load_state_dict(tx_relay_checkpoint["model_state_dict"])
+    tx_relay_model = Tx_Relay(
+        num_classes,
+        n_emb=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel=channel,
+        entire_network_train=1,
+    ).to(device)
+    load_model(tx_relay_model, args.tx_relay_path)
 
-    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel,tx_relay_model).to(device)
-    tx_relay_rx_checkpoint = torch.load(args.tx_relay_rx_path)
-    tx_relay_rx_model.load_state_dict(tx_relay_rx_checkpoint["model_state_dict"])
+    tx_relay_rx_model = Tx_Relay_Rx(
+        num_classes,
+        args.channel_block_input_dim,
+        args.channel_block_latent_dim,
+        channel,
+        tx_relay_model,
+    ).to(device)
+    load_model(tx_relay_rx_model, args.tx_relay_rx_path)
 
     semantic_sim = []
     bleu_1 = []
@@ -116,7 +118,9 @@ if __name__ == "__main__":
 
             B, T = xb.shape
             with torch.no_grad():
-                logits, _ = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd)
+                logits, _ = tx_relay_rx_model(
+                    xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd
+                )
                 probs = F.softmax(logits, dim=-1)
                 predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
                     B, args.max_length
@@ -148,9 +152,7 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(original_sentences, predicted_sentences):
-                    cosine_scores.append(
-                        semantic_similarity_score([s1], [s2])[0][0]
-                    )
+                    cosine_scores.append(semantic_similarity_score([s1], [s2])[0][0])
 
                     bleu1_scores.append(bleu_1gram(s1, s2))
                     bleu2_scores.append(bleu_2gram(s1, s2))

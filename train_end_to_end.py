@@ -104,10 +104,6 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
     load_optimizer(optimizer, args.transceiver_path)
 
-    d_sd = args.d
-    d_min = args.d * args.gamma_min
-    d_max = args.d * args.gamma_max
-
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
         train_losses = []
@@ -117,7 +113,8 @@ if __name__ == "__main__":
             targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
 
-            d_sr = get_distance(d_min, d_max)
+            d_sd = get_distance(args.d_min, args.d_max)
+            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
             d_rd = d_sd - d_sr
 
             logits, loss = transceiver(
@@ -136,7 +133,8 @@ if __name__ == "__main__":
             targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
 
-            d_sr = get_distance(d_min, d_max)
+            d_sd = get_distance(args.d_min, args.d_max)
+            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
             d_rd = d_sd - d_sr
             with torch.no_grad():
                 _, loss = transceiver(
