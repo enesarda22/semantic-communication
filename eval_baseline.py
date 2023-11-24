@@ -2,12 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from nltk.translate.bleu_score import sentence_bleu
-from utils.general import get_device, set_seed
-from baseline_models.tx_relay_rx_models import Tx_Relay, Tx_Relay_Rx
-
-from data_processing.data_handler import DataHandler
-from data_processing.semantic_encoder import SemanticEncoder
-from utils.channel import AWGN, Rayleigh
+from semantic_communication.utils.general import (
+    get_device,
+    set_seed,
+    add_semantic_decoder_args,
+    add_channel_model_args,
+    add_data_args,
+)
+from semantic_communication.models.baseline_models import Tx_Relay, Tx_Relay_Rx
+from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.data_processing.data_handler import DataHandler
+from semantic_communication.utils.channel import init_channel
 import torch
 import argparse
 from torch.nn import functional as F
@@ -23,48 +28,24 @@ def semantic_similarity_score(target_sentences, received_sentences):
 
 
 def bleu_1gram(target_sentences, received_sentences):
-    # score = []
-    # for (sent1, sent2) in zip(target_sentences, received_sentences):
-    #     sent1 = sent1.split()
-    #     sent2 = sent2.split()
-    #     score.append(sentence_bleu([sent1], sent2,
-    #                                weights=(1, 0, 0, 0)))
     return sentence_bleu(
         [target_sentences], received_sentences, weights=(1, 0, 0, 0)
     )
 
 
 def bleu_2gram(target_sentences, received_sentences):
-    # score = []
-    # for (sent1, sent2) in zip(target_sentences, received_sentences):
-    #     sent1 = sent1.split()
-    #     sent2 = sent2.split()
-    #     score.append(sentence_bleu([sent1], sent2,
-    #                                weights=(0, 1, 0, 0)))
     return sentence_bleu(
         [target_sentences], received_sentences, weights=(0, 1, 0, 0)
     )
 
 
 def bleu_3gram(target_sentences, received_sentences):
-    # score = []
-    # for (sent1, sent2) in zip(target_sentences, received_sentences):
-    #     sent1 = sent1.split()
-    #     sent2 = sent2.split()
-    #     score.append(sentence_bleu([sent1], sent2,
-    #                                weights=(0, 0, 1, 0)))
     return sentence_bleu(
         [target_sentences], received_sentences, weights=(0, 0, 1, 0)
     )
 
 
 def bleu_4gram(target_sentences, received_sentences):
-    # score = []
-    # for (sent1, sent2) in zip(target_sentences, received_sentences):
-    #     sent1 = sent1.split()
-    #     sent2 = sent2.split()
-    #     score.append(sentence_bleu([sent1], sent2,
-    #                                weights=(0, 0, 0, 1)))
     return sentence_bleu(
         [target_sentences], received_sentences, weights=(0, 0, 0, 1)
     )
@@ -72,23 +53,18 @@ def bleu_4gram(target_sentences, received_sentences):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    # model args
     parser.add_argument("--tx-relay-path", type=str)
     parser.add_argument("--tx-relay-rx-path", type=str)
 
-    parser.add_argument("--SNR-list", nargs="+", type=int)
-    parser.add_argument("--max-length", default=30, type=int)
-    parser.add_argument("--data-fp", default="", type=str)
+    add_semantic_decoder_args(parser)
+    add_channel_model_args(parser)
+    add_data_args(parser)
 
-    parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
+    # test args
     parser.add_argument("--batch-size", default=32, type=int)
-
-    # New args
-    parser.add_argument("--channel-block-input-dim", default=384, type=int)
-    parser.add_argument("--channel-block-latent-dim", default=128, type=int)
-    parser.add_argument("--val-size", default=0.2, type=float)
-    parser.add_argument("--sig-pow", default=1.0, type=float)
-    parser.add_argument("--SNR-diff", default=3, type=int)
-    parser.add_argument("--channel-type", default="AWGN", type=str)
+    parser.add_argument("--distance-list", nargs="+", type=int)
     args = parser.parse_args()
 
     device = get_device()
@@ -101,29 +77,15 @@ if __name__ == "__main__":
         data_fp=args.data_fp,
     )
 
-    # Create Channels
-    if args.channel_type == "AWGN":
-        tx_rx_channel = AWGN(
-            int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow
-        )
-        tx_relay_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)
-        relay_rx_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)
-
-    else:
-        tx_rx_channel = Rayleigh(
-            int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow
-        )
-        tx_relay_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)
-        relay_rx_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)
-
+    channel = init_channel(args.channel_type, args.sig_pow)
     num_classes = data_handler.vocab_size
 
     # Create Transceiver
-    tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=tx_relay_channel, entire_network_train=1).to(device)
+    tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=channel, entire_network_train=1).to(device)
     tx_relay_checkpoint = torch.load(args.tx_relay_path)
     tx_relay_model.load_state_dict(tx_relay_checkpoint["model_state_dict"])
 
-    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, tx_rx_channel, relay_rx_channel,tx_relay_model).to(device)
+    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, channel,tx_relay_model).to(device)
     tx_relay_rx_checkpoint = torch.load(args.tx_relay_rx_path)
     tx_relay_rx_model.load_state_dict(tx_relay_rx_checkpoint["model_state_dict"])
 
@@ -132,28 +94,19 @@ if __name__ == "__main__":
     bleu_2 = []
     bleu_3 = []
     bleu_4 = []
-    for SNR in args.SNR_list:
-        print("Simulating for SNR: " + str(SNR))
-        # Create Channels
-        if args.channel_type == "AWGN":
-            tx_rx_channel = AWGN(int(SNR) - args.SNR_diff, args.sig_pow)
-            tx_relay_channel = AWGN(int(SNR), args.sig_pow)
-            relay_rx_channel = AWGN(int(SNR), args.sig_pow)
 
-        else:
-            tx_rx_channel = Rayleigh(int(SNR) - args.SNR_diff, args.sig_pow)
-            tx_relay_channel = Rayleigh(int(SNR), args.sig_pow)
-            relay_rx_channel = Rayleigh(int(SNR), args.sig_pow)
+    d_sd = args.d
 
-        tx_relay_rx_model.tx_rx_channel = tx_rx_channel
-        tx_relay_rx_model.relay_rx_channel = relay_rx_channel
-        tx_relay_rx_model.tx_relay_model.channel = tx_relay_channel
+    for distance_ratio in args.distance_list:
+        print("Simulating for distance: " + str(distance_ratio * d_sd))
 
         cosine_scores = []
         bleu1_scores = []
         bleu2_scores = []
         bleu3_scores = []
         bleu4_scores = []
+        d_sr = d_sd * distance_ratio
+        d_rd = d_sd - d_sr
 
         tx_relay_rx_model.eval()
         for b in data_handler.test_dataloader:
@@ -162,9 +115,8 @@ if __name__ == "__main__":
             xb = data_handler.encode_token_ids(xb)
 
             B, T = xb.shape
-
             with torch.no_grad():
-                logits, _ = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:])
+                logits, _ = tx_relay_rx_model(xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd)
                 probs = F.softmax(logits, dim=-1)
                 predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
                     B, args.max_length
@@ -204,6 +156,8 @@ if __name__ == "__main__":
                     bleu2_scores.append(bleu_2gram(s1, s2))
                     bleu3_scores.append(bleu_3gram(s1, s2))
                     bleu4_scores.append(bleu_4gram(s1, s2))
+            if len(cosine_scores) > 5000:
+                break
 
         semantic_sim.append(np.mean([i.tolist() for i in cosine_scores]))
         bleu_1.append(np.mean(bleu1_scores))
@@ -211,64 +165,57 @@ if __name__ == "__main__":
         bleu_3.append(np.mean(bleu3_scores))
         bleu_4.append(np.mean(bleu4_scores))
 
-    snr_np = np.array(args.SNR_list).astype(int)
+    distance_np = np.array(args.distance_list)
+    ticks = 0.2
 
     plt.figure()
-    plt.plot(args.SNR_list, semantic_sim)
+    plt.plot(args.distance_list, semantic_sim)
     plt.grid()
-    plt.xlabel("Channel SNR (dB)")
+    plt.xlabel("Distance Ratio")
     plt.ylabel("Semantic Similarity")
-    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
-    plt.title("Semantic Similarity v. Channel SNR (dB)")
-    plt.savefig("SemanticSimilarty_v_SNR.png", dpi=400)
+    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("Semantic Similarity v. S-R Distance Ratio")
+    plt.savefig("SemanticSimilarty_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.SNR_list, bleu_1)
+    plt.plot(args.distance_list, bleu_1)
     plt.grid()
-    plt.xlabel("Channel SNR (dB)")
+    plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 1-gram")
-    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
-    plt.title("BLEU 1-gram v. Channel SNR (dB)")
-    plt.savefig("BLEU1gram_v_SNR.png", dpi=400)
+    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 1-gram v. S-R Distance Ratio")
+    plt.savefig("BLEU1gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.SNR_list, bleu_2)
+    plt.plot(args.distance_list, bleu_2)
     plt.grid()
-    plt.xlabel("Channel SNR (dB)")
+    plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 2-gram")
-    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
-    plt.title("BLEU 2-gram v. Channel SNR (dB)")
-    plt.savefig("BLEU2gam_v_SNR.png", dpi=400)
+    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 2-gram v. S-R Distance Ratio")
+    plt.savefig("BLEU2gam_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.SNR_list, bleu_3)
+    plt.plot(args.distance_list, bleu_3)
     plt.grid()
-    plt.xlabel("Channel SNR (dB)")
+    plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 3-gram")
-    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
-    plt.title("BLEU 3-gram v. Channel SNR (dB)")
-    plt.savefig("BLEU3gram_v_SNR.png", dpi=400)
+    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 3-gram v. S-R Distance Ratio")
+    plt.savefig("BLEU3gram_v_distance.png", dpi=400)
 
     plt.figure()
     plt.plot(args.SNR_list, bleu_4)
     plt.grid()
-    plt.xlabel("Channel SNR (dB)")
+    plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 4-gram")
-    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))
-    plt.title("BLEU 4-gram v. Channel SNR (dB)")
-    plt.savefig("BLEU4gram_v_SNR.png", dpi=400)
+    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 4-gram v. S-R Distance Ratio")
+    plt.savefig("BLEU4gram_v_distance.png", dpi=400)
 
-    with open('semantic_sim.npy', 'wb') as f:
-        np.save(f, semantic_sim)
+    np.save("conventional_semantic_sim.npy", semantic_sim)
 
-    with open('bleu_1.npy', 'wb') as f:
-        np.save(f, bleu_1)
-
-    with open('bleu_2.npy', 'wb') as f:
-        np.save(f, bleu_2)
-
-    with open('bleu_3.npy', 'wb') as f:
-        np.save(f, bleu_3)
-
-    with open('bleu_4.npy', 'wb') as f:
-        np.save(f, bleu_4)
+    np.save("conventional_bleu_1.npy", bleu_1)
+    np.save("conventional_bleu_2.npy", bleu_2)
+    np.save("conventional_bleu_3.npy", bleu_3)
+    np.save("conventional_bleu_4.npy", bleu_4)

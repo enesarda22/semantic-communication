@@ -19,7 +19,6 @@ class ChannelEncComp(nn.Module):
     def forward(self, x):
         x = self.linear(x).transpose(1, 2)
         x = self.bn(x).transpose(1, 2)
-
         out = self.prelu(x)
         return out
 
@@ -62,6 +61,7 @@ class ChannelDecoder(nn.Module):
         self.linear = nn.Linear(dims[-1], nout)
 
     def forward(self, x):
+        x = x / torch.norm(x, dim=2, keepdim=True)
         for l in self.layers:
             x = l(x)
         return self.linear(x)
