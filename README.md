@@ -96,18 +96,19 @@ epoch = 15
 
 ```
 python train_end_to_end.py \
---relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---receiver-decoder-path /data/checkpoints/receiver-decoder/receiver_decoder_3.pt \
+--relay-decoder-path /data/checkpoints/relay-decoder-prediction-newdata/relay_decoder_19.pt \
+--receiver-decoder-path /data/checkpoints/receiver-decoder-prediction-newdata/receiver_decoder_3.pt \
 --n-blocks 6 \
 --n-heads 6 \
 --batch-size 500 \
 --n-epochs 25 \
---lr 1e-5 \
+--lr 2e-5 \
 --channel-block-latent-dim 256 \
 --alpha 4 \
 --sig-pow 1 \
 --noise-pow 4e-15 \
---d 7e3 \
+--d-min 2e3 \
+--d-max 7e3 \
 --gamma-min 0.2 \
 --gamma-max 0.8 \
 --channel-type AWGN \
