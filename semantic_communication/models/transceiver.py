@@ -181,6 +181,7 @@ class Relay(nn.Module):
 
     def forward(self, x, d_sr):
         B, T, C = x.shape
+        T = T - 1
 
         tx_out, logits, _ = self.relay_channel_block(x, d_sr)
         predicted_ids = torch.argmax(logits, dim=-1)
