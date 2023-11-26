@@ -88,20 +88,21 @@ class TxRelayRxChannelModel(nn.Module):
     ):
         super(TxRelayRxChannelModel, self).__init__()
 
-        self.tx_encoder = ChannelEncoder(nin, n_latent)
         self.relay_encoder = ChannelEncoder(nin, n_latent)
-        self.rx_decoder = ChannelDecoder(n_latent * 2, nin * 2)
+        self.tx_rx_decoder = ChannelDecoder(n_latent, nin)
+        self.relay_rx_decoder = ChannelDecoder(n_latent, nin)
         self.channel = channel
 
-    def forward(self, tx_x, rel_x, d_rd, d_sd):
+    def forward(self, tx_ch_input, rel_x, d_rd, d_sd):
         rel_ch_input = self.relay_encoder(rel_x)
-        tx_ch_input = self.tx_encoder(tx_x)
-
         rel_ch_out = self.channel(rel_ch_input, d_rd)
+
         tx_ch_out = self.channel(tx_ch_input, d_sd)
 
-        ch_output = torch.cat([rel_ch_out, tx_ch_out], dim=-1)  # concatenate
-        x_hat = self.rx_decoder(ch_output)
+        x_hat = torch.cat(
+            [self.relay_rx_decoder(rel_ch_out), self.tx_rx_decoder(tx_ch_out)],
+            dim=-1,
+        )
         return x_hat
 
 
