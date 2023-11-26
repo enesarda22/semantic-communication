@@ -116,6 +116,28 @@ python train_end_to_end.py \
 --checkpoint-path /data/checkpoints
 ```
 
+## Relay Channel Block
+```
+python train_relay_channel_block.py \
+--relay-decoder-path /data/checkpoints/relay-decoder-prediction-newdata/relay_decoder_19.pt \
+--n-blocks 6 \
+--n-heads 6 \
+--batch-size 512 \
+--n-epochs 10 \
+--lr 5e-4 \
+--channel-block-latent-dim 256 \
+--alpha 4 \
+--sig-pow 1 \
+--noise-pow 4e-15 \
+--d-min 2e3 \
+--d-max 7e3 \
+--gamma-min 0.2 \
+--gamma-max 0.8 \
+--channel-type AWGN \
+--data-fp /data \
+--checkpoint-path /data/checkpoints
+```
+
 ## Baseline source-relay
 ```
 python train_source_relay.py \
