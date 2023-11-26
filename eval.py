@@ -11,6 +11,8 @@ from semantic_communication.models.transceiver import (
     TxRelayChannelModel,
     TxRelayRxChannelModel,
     Transceiver,
+    ChannelEncoder,
+    RelayChannelBlock,
 )
 from semantic_communication.utils.general import (
     get_device,
@@ -34,27 +36,19 @@ def semantic_similarity_score(target_sentences, received_sentences):
 
 
 def bleu_1gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(1, 0, 0, 0)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(1, 0, 0, 0))
 
 
 def bleu_2gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(0, 1, 0, 0)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 1, 0, 0))
 
 
 def bleu_3gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(0, 0, 1, 0)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 1, 0))
 
 
 def bleu_4gram(target_sentences, received_sentences):
-    return sentence_bleu(
-        [target_sentences], received_sentences, weights=(0, 0, 0, 1)
-    )
+    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 0, 1))
 
 
 if __name__ == "__main__":
@@ -68,7 +62,7 @@ if __name__ == "__main__":
 
     # test args
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--distance-list", nargs="+", type=float)
+    parser.add_argument("--gamma-list", nargs="+", type=float)
     args = parser.parse_args()
 
     device = get_device()
@@ -90,6 +84,24 @@ if __name__ == "__main__":
         block_size=args.max_length,
     ).to(device)
 
+    tx_channel_enc = ChannelEncoder(
+        nin=args.channel_block_input_dim,
+        nout=args.channel_block_latent_dim,
+    ).to(device)
+
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
+    tx_relay_channel_model = TxRelayChannelModel(
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel=channel,
+    ).to(device)
+
+    relay_channel_block = RelayChannelBlock(
+        semantic_decoder=relay_decoder,
+        tx_channel_enc=tx_channel_enc,
+        tx_relay_channel_enc_dec=tx_relay_channel_model,
+    ).to(device)
+
     receiver_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
@@ -98,12 +110,6 @@ if __name__ == "__main__":
         block_size=args.max_length,
     ).to(device)
 
-    channel = init_channel(args.channel_type, args.sig_pow)
-    tx_relay_channel_model = TxRelayChannelModel(
-        nin=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
-        channel=channel,
-    ).to(device)
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
@@ -111,16 +117,13 @@ if __name__ == "__main__":
     ).to(device)
 
     transceiver = Transceiver(
-        semantic_encoder,
-        relay_decoder,
-        receiver_decoder,
-        tx_relay_channel_model,
-        tx_relay_rx_channel_model,
+        semantic_encoder=semantic_encoder,
+        relay_channel_block=relay_channel_block,
+        rx_semantic_decoder=receiver_decoder,
+        tx_relay_rx_channel_enc_dec=tx_relay_rx_channel_model,
         encoder=data_handler.encoder,
     )
-    transceiver_checkpoint = torch.load(
-        args.transceiver_path, map_location=device
-    )
+    transceiver_checkpoint = torch.load(args.transceiver_path, map_location=device)
     transceiver.load_state_dict(transceiver_checkpoint["model_state_dict"])
 
     semantic_sim = []
@@ -131,15 +134,15 @@ if __name__ == "__main__":
 
     d_sd = args.d
 
-    for distance_ratio in args.distance_list:
-        print("Simulating for distance: " + str(distance_ratio * d_sd))
+    for gamma in args.gamma_list:
+        print("Simulating for distance: " + str(gamma * d_sd))
 
         cosine_scores = []
         bleu1_scores = []
         bleu2_scores = []
         bleu3_scores = []
         bleu4_scores = []
-        d_sr = d_sd * distance_ratio
+        d_sr = d_sd * gamma
         d_rd = d_sd - d_sr
 
         transceiver.eval()
@@ -202,51 +205,51 @@ if __name__ == "__main__":
         bleu_3.append(np.mean(bleu3_scores))
         bleu_4.append(np.mean(bleu4_scores))
 
-    distance_np = np.array(args.distance_list)
+    gamma_np = np.array(args.gamma_list)
     ticks = 0.2
 
     plt.figure()
-    plt.plot(args.distance_list, semantic_sim)
+    plt.plot(args.gamma_list, semantic_sim)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("Semantic Similarity")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.xticks(np.arange(np.min(gamma_np), np.max(gamma_np), ticks))
     plt.title("Semantic Similarity v. S-R Distance Ratio")
     plt.savefig("SemanticSimilarty_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_1)
+    plt.plot(args.gamma_list, bleu_1)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 1-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.xticks(np.arange(np.min(gamma_np), np.max(gamma_np), ticks))
     plt.title("BLEU 1-gram v. S-R Distance Ratio")
     plt.savefig("BLEU1gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_2)
+    plt.plot(args.gamma_list, bleu_2)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 2-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.xticks(np.arange(np.min(gamma_np), np.max(gamma_np), ticks))
     plt.title("BLEU 2-gram v. S-R Distance Ratio")
     plt.savefig("BLEU2gam_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_3)
+    plt.plot(args.gamma_list, bleu_3)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 3-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.xticks(np.arange(np.min(gamma_np), np.max(gamma_np), ticks))
     plt.title("BLEU 3-gram v. S-R Distance Ratio")
     plt.savefig("BLEU3gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_4)
+    plt.plot(args.gamma_list, bleu_4)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 4-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.xticks(np.arange(np.min(gamma_np), np.max(gamma_np), ticks))
     plt.title("BLEU 4-gram v. S-R Distance Ratio")
     plt.savefig("BLEU4gram_v_distance.png", dpi=400)
 
