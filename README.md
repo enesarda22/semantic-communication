@@ -96,13 +96,13 @@ epoch = 15
 
 ```
 python train_end_to_end.py \
---relay-decoder-path /data/checkpoints/relay-decoder-prediction-newdata/relay_decoder_19.pt \
+--relay-channel-block-path /data/checkpoints/relay-channel-block/relay_channel_block_9.pt \
 --receiver-decoder-path /data/checkpoints/receiver-decoder-prediction-newdata/receiver_decoder_3.pt \
 --n-blocks 6 \
 --n-heads 6 \
 --batch-size 500 \
---n-epochs 25 \
---lr 2e-5 \
+--n-epochs 10 \
+--lr 5e-4 \
 --channel-block-latent-dim 256 \
 --alpha 4 \
 --sig-pow 1 \
