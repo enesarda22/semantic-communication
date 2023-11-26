@@ -70,14 +70,11 @@ class ChannelDecoder(nn.Module):
 class TxRelayChannelModel(nn.Module):
     def __init__(self, nin, n_latent, channel: Channel):
         super(TxRelayChannelModel, self).__init__()
-
-        self.tx_encoder = ChannelEncoder(nin, n_latent)
         self.relay_decoder = ChannelDecoder(n_latent, nin)
         self.channel = channel
 
     def forward(self, x, d_sr):
-        ch_input = self.tx_encoder(x)
-        ch_output = self.channel(ch_input, d_sr)
+        ch_output = self.channel(x, d_sr)
         x_hat = self.relay_decoder(ch_output)
         return x_hat
 
@@ -114,6 +111,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         semantic_encoder: SemanticEncoder,
         relay_semantic_decoder: SemanticDecoder,
         rx_semantic_decoder: SemanticDecoder,
+        tx_channel_enc: ChannelEncoder,
         tx_relay_channel_enc_dec: TxRelayChannelModel,
         tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,
         encoder: LabelEncoder,
@@ -123,6 +121,7 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
         self.relay = Relay(semantic_encoder, relay_semantic_decoder, encoder)
         self.rx_semantic_decoder = rx_semantic_decoder
 
+        self.tx_channel_enc = tx_channel_enc
         self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
@@ -132,14 +131,15 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
             input_ids=w,
             attention_mask=attention_mask,
         )
+        source_output = self.tx_channel_enc(encoder_output)
 
         # relay
-        relay_input = self.tx_relay_channel_enc_dec(encoder_output[:, :-1, :], d_sr)
+        relay_input = self.tx_relay_channel_enc_dec(source_output[:, :-1, :], d_sr)
         relay_output = self.relay(relay_input)
 
         # receiver
         receiver_input = self.tx_relay_rx_channel_enc_dec(
-            encoder_output[:, 1:, :], relay_output, d_rd, d_sd
+            source_output[:, 1:, :], relay_output, d_rd, d_sd
         )
         receiver_output = self.rx_semantic_decoder(
             encoder_output=receiver_input,
@@ -165,9 +165,8 @@ class Relay(nn.Module):
     def forward(self, x):
         B, T, C = x.shape
 
-        self.semantic_decoder.eval()
-        with torch.no_grad():
-            predicted_ids = self.semantic_decoder.generate(x)
+        logits, _ = self.semantic_decoder.generate(x)
+        predicted_ids = torch.argmax(logits, dim=-1)
 
         predicted_ids = self.encoder.inverse_transform(
             predicted_ids.flatten().to("cpu")
