@@ -105,6 +105,30 @@ class TxRelayRxChannelModel(nn.Module):
         return x_hat
 
 
+class RelayChannelBlock(nn.Module):
+    def __init__(
+        self,
+        semantic_decoder: SemanticDecoder,
+        tx_channel_enc: ChannelEncoder,
+        tx_relay_channel_enc_dec: TxRelayChannelModel,
+    ):
+        super().__init__()
+        self.semantic_decoder = semantic_decoder
+        self.tx_channel_enc = tx_channel_enc
+        self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
+
+    def forward(self, x, d_sr, attention_mask=None, targets=None):
+        tx_out = self.tx_channel_enc(x)
+        relay_in = self.tx_relay_channel_enc_dec(tx_out[:, :-1, :], d_sr)
+        logits, loss = self.semantic_decoder(
+            encoder_output=relay_in,
+            attention_mask=attention_mask,
+            targets=targets,
+        )
+
+        return tx_out, logits, loss
+
+
 class Transceiver(nn.Module):  # TODO: find a cooler name
     def __init__(
         self,
