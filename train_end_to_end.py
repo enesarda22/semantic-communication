@@ -10,6 +10,8 @@ from semantic_communication.models.transceiver import (
     TxRelayChannelModel,
     TxRelayRxChannelModel,
     Transceiver,
+    RelayChannelBlock,
+    ChannelEncoder,
 )
 from semantic_communication.utils.channel import (
     init_channel,
@@ -35,12 +37,11 @@ if __name__ == "__main__":
     parser.add_argument("--transceiver-path", type=str)
 
     # semantic decoders
-    parser.add_argument("--relay-decoder-path", type=str)
     parser.add_argument("--receiver-decoder-path", type=str)
     add_semantic_decoder_args(parser)
 
     # channel models
-    parser.add_argument("--tx-relay-channel-model-path", type=str)
+    parser.add_argument("--relay-channel-block-path", type=str)
     parser.add_argument("--tx-relay-rx-channel-model-path", type=str)
     add_channel_model_args(parser)
 
@@ -65,7 +66,29 @@ if __name__ == "__main__":
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
     ).to(device)
-    load_model(relay_decoder, args.relay_decoder_path)
+
+    tx_channel_enc = ChannelEncoder(
+        nin=args.channel_block_input_dim,
+        nout=args.channel_block_latent_dim,
+    ).to(device)
+
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
+    tx_relay_channel_model = TxRelayChannelModel(
+        nin=args.channel_block_input_dim,
+        n_latent=args.channel_block_latent_dim,
+        channel=channel,
+    ).to(device)
+
+    relay_channel_block = RelayChannelBlock(
+        semantic_decoder=relay_decoder,
+        tx_channel_enc=tx_channel_enc,
+        tx_relay_channel_enc_dec=tx_relay_channel_model,
+    ).to(device)
+    load_model(relay_channel_block, args.relay_channel_block_path)
+
+    # freeze
+    for param in relay_channel_block.parameters():
+        param.requires_grad = False
 
     receiver_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -76,14 +99,6 @@ if __name__ == "__main__":
     ).to(device)
     load_model(receiver_decoder, args.receiver_decoder_path)
 
-    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
-    tx_relay_channel_model = TxRelayChannelModel(
-        nin=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
-        channel=channel,
-    ).to(device)
-    load_model(tx_relay_channel_model, args.tx_relay_channel_model_path)
-
     tx_relay_rx_channel_model = TxRelayRxChannelModel(
         nin=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
@@ -92,17 +107,21 @@ if __name__ == "__main__":
     load_model(tx_relay_rx_channel_model, args.tx_relay_rx_channel_model_path)
 
     transceiver = Transceiver(
-        semantic_encoder,
-        relay_decoder,
-        receiver_decoder,
-        tx_relay_channel_model,
-        tx_relay_rx_channel_model,
-        data_handler.encoder,
+        semantic_encoder=semantic_encoder,
+        relay_channel_block=relay_channel_block,
+        rx_semantic_decoder=receiver_decoder,
+        tx_relay_rx_channel_enc_dec=tx_relay_rx_channel_model,
+        encoder=data_handler.encoder,
     )
     load_model(transceiver, args.transceiver_path)
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
     load_optimizer(optimizer, args.transceiver_path)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer=optimizer,
+        max_lr=args.lr,
+        total_steps=args.n_epochs,
+    )
 
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
@@ -125,6 +144,8 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             train_losses.append(loss.item())
+
+        scheduler.step()
 
         val_losses = []
         transceiver.eval()

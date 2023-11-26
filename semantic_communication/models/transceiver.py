@@ -133,20 +133,15 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
     def __init__(
         self,
         semantic_encoder: SemanticEncoder,
-        relay_semantic_decoder: SemanticDecoder,
+        relay_channel_block: RelayChannelBlock,
         rx_semantic_decoder: SemanticDecoder,
-        tx_channel_enc: ChannelEncoder,
-        tx_relay_channel_enc_dec: TxRelayChannelModel,
         tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,
         encoder: LabelEncoder,
     ):
         super().__init__()
         self.tx_semantic_encoder = semantic_encoder
-        self.relay = Relay(semantic_encoder, relay_semantic_decoder, encoder)
+        self.relay = Relay(semantic_encoder, relay_channel_block, encoder)
         self.rx_semantic_decoder = rx_semantic_decoder
-
-        self.tx_channel_enc = tx_channel_enc
-        self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
         self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
 
     def forward(self, w, attention_mask, targets, d_sd, d_sr, d_rd):
@@ -155,11 +150,9 @@ class Transceiver(nn.Module):  # TODO: find a cooler name
             input_ids=w,
             attention_mask=attention_mask,
         )
-        source_output = self.tx_channel_enc(encoder_output)
 
         # relay
-        relay_input = self.tx_relay_channel_enc_dec(source_output[:, :-1, :], d_sr)
-        relay_output = self.relay(relay_input)
+        source_output, relay_output = self.relay(encoder_output, d_sr)
 
         # receiver
         receiver_input = self.tx_relay_rx_channel_enc_dec(
@@ -177,19 +170,19 @@ class Relay(nn.Module):
     def __init__(
         self,
         semantic_encoder: SemanticEncoder,
-        semantic_decoder: SemanticDecoder,
+        relay_channel_block: RelayChannelBlock,
         encoder: LabelEncoder,
     ):
         super().__init__()
         self.device = get_device()
         self.semantic_encoder = semantic_encoder
-        self.semantic_decoder = semantic_decoder
+        self.relay_channel_block = relay_channel_block
         self.encoder = encoder
 
-    def forward(self, x):
+    def forward(self, x, d_sr):
         B, T, C = x.shape
 
-        logits, _ = self.semantic_decoder.generate(x)
+        tx_out, logits, _ = self.relay_channel_block(x, d_sr)
         predicted_ids = torch.argmax(logits, dim=-1)
 
         predicted_ids = self.encoder.inverse_transform(
@@ -225,4 +218,4 @@ class Relay(nn.Module):
         out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)
         out = out.view(B, T, C)
 
-        return out
+        return tx_out, out

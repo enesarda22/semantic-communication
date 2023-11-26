@@ -58,7 +58,7 @@ if __name__ == "__main__":
     tx_channel_enc = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
-    )
+    ).to(device)
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     tx_relay_channel_enc_dec = TxRelayChannelModel(

@@ -38,6 +38,9 @@ def load_model(model, state_dict_path):
     if state_dict_path is not None:
         checkpoint = torch.load(state_dict_path, map_location=get_device())
         model.load_state_dict(checkpoint["model_state_dict"])
+        print(f"{state_dict_path} is loaded.")
+    else:
+        print("state_dict_path is None!")
 
 
 def load_optimizer(optimizer, state_dict_path):
