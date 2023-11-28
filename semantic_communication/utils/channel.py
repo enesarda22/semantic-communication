@@ -5,10 +5,10 @@ from semantic_communication.utils.general import get_device
 
 class Channel(ABC):
     def __init__(
-            self,
-            signal_power_constraint: float,
-            alpha: float,
-            noise_pow: float,
+        self,
+        signal_power_constraint: float,
+        alpha: float,
+        noise_pow: float,
     ):
         self.signal_power_constraint = signal_power_constraint
         self.alpha = alpha
@@ -27,8 +27,8 @@ class Channel(ABC):
             x = x / h
 
         # normalize
-        sig_pow = self.signal_power_constraint / (d ** self.alpha)
-        x = (x / torch.abs(x)) * (sig_pow ** 0.5)
+        sig_pow = self.signal_power_constraint / (d**self.alpha)
+        x = (x / torch.abs(x)) * (sig_pow**0.5)
 
         return x
 
@@ -42,7 +42,7 @@ class AWGN(Channel):
 
         noise = torch.normal(
             mean=0.0,
-            std=self.noise_pow ** 0.5,
+            std=self.noise_pow**0.5,
             size=x.shape,
             dtype=torch.cfloat,
         ).to(self.device)
@@ -58,7 +58,7 @@ class Rayleigh(Channel):
     def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
         h = torch.normal(
             mean=0.0,
-            std=1.0,
+            std=0.5**0.5,
             size=x.shape,
             dtype=torch.float,
         ).to(self.device)
@@ -70,7 +70,7 @@ class Rayleigh(Channel):
 
         noise = torch.normal(
             mean=0.0,
-            std=self.noise_pow ** 0.5,
+            std=self.noise_pow**0.5,
             size=x.shape,
             dtype=torch.cfloat,
         ).to(self.device)
@@ -80,10 +80,10 @@ class Rayleigh(Channel):
 
 
 def init_channel(
-        channel_type: str,
-        signal_power_constraint: float,
-        alpha: float,
-        noise_pow: float,
+    channel_type: str,
+    signal_power_constraint: float,
+    alpha: float,
+    noise_pow: float,
 ) -> Channel:
     if channel_type == "AWGN":
         return AWGN(signal_power_constraint, alpha, noise_pow)
