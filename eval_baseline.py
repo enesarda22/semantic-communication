@@ -56,7 +56,9 @@ if __name__ == "__main__":
 
     # test args
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--distance-list", nargs="+", type=float)
+    parser.add_argument("--gamma-list", nargs="+", type=float)
+    parser.add_argument("--d", type=float)
+
     args = parser.parse_args()
 
     device = get_device()
@@ -99,7 +101,7 @@ if __name__ == "__main__":
 
     d_sd = args.d
 
-    for distance_ratio in args.distance_list:
+    for distance_ratio in args.gamma_list:
         print("Simulating for distance: " + str(distance_ratio * d_sd))
 
         cosine_scores = []
