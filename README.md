@@ -96,7 +96,7 @@ epoch = 15
 
 ```
 python train_end_to_end.py \
---relay-channel-block-path /data/checkpoints/relay-channel-block/relay_channel_block_9.pt \
+--relay-channel-block-path /data/checkpoints/relay-channel-block/relay_channel_block_8.pt \
 --receiver-decoder-path /data/checkpoints/receiver-decoder-prediction-newdata/receiver_decoder_3.pt \
 --n-blocks 6 \
 --n-heads 6 \
@@ -111,7 +111,7 @@ python train_end_to_end.py \
 --d-max 7e3 \
 --gamma-min 0.2 \
 --gamma-max 0.8 \
---channel-type AWGN \
+--channel-type Rayleigh \
 --data-fp /data \
 --checkpoint-path /data/checkpoints
 ```
@@ -133,7 +133,7 @@ python train_relay_channel_block.py \
 --d-max 7e3 \
 --gamma-min 0.2 \
 --gamma-max 0.8 \
---channel-type AWGN \
+--channel-type Rayleigh \
 --data-fp /data \
 --checkpoint-path /data/checkpoints
 ```
