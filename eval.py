@@ -134,17 +134,16 @@ if __name__ == "__main__":
     bleu_3 = []
     bleu_4 = []
 
-    d_sd = args.d
-
     for gamma in args.gamma_list:
-        print("Simulating for distance: " + str(gamma * d_sd))
+        print("Simulating for distance: " + str(gamma * args.d))
 
         cosine_scores = []
         bleu1_scores = []
         bleu2_scores = []
         bleu3_scores = []
         bleu4_scores = []
-        d_sr = d_sd * gamma
+        d_sd = args.d * gamma
+        d_sr = d_sd / 2
         d_rd = d_sd - d_sr
 
         transceiver.eval()
@@ -207,11 +206,11 @@ if __name__ == "__main__":
         bleu_3.append(np.mean(bleu3_scores))
         bleu_4.append(np.mean(bleu4_scores))
 
-    gamma_np = np.array(args.gamma_list)
+    gamma_np = np.array(args.gamma_list) * args.d
     ticks = 0.2
 
     plt.figure()
-    plt.plot(args.gamma_list, semantic_sim)
+    plt.plot(gamma_np, semantic_sim)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("Semantic Similarity")
@@ -220,7 +219,7 @@ if __name__ == "__main__":
     plt.savefig("SemanticSimilarty_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_1)
+    plt.plot(gamma_np, bleu_1)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 1-gram")
@@ -229,7 +228,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU1gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_2)
+    plt.plot(gamma_np, bleu_2)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 2-gram")
@@ -238,7 +237,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU2gam_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_3)
+    plt.plot(gamma_np, bleu_3)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 3-gram")
@@ -247,7 +246,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU3gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_4)
+    plt.plot(gamma_np, bleu_4)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 4-gram")
