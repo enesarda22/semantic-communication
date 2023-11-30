@@ -63,6 +63,8 @@ if __name__ == "__main__":
     # test args
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--gamma-list", nargs="+", type=float)
+    parser.add_argument("--d", type=float)
+
     args = parser.parse_args()
 
     device = get_device()
