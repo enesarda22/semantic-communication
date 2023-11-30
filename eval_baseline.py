@@ -99,6 +99,8 @@ if __name__ == "__main__":
     bleu_3 = []
     bleu_4 = []
 
+    d_sd = args.d
+
     for gamma in args.gamma_list:
         print("Simulating for distance: " + str(gamma * args.d))
 
@@ -107,8 +109,8 @@ if __name__ == "__main__":
         bleu2_scores = []
         bleu3_scores = []
         bleu4_scores = []
-        d_sd = args.d * gamma
-        d_sr = d_sd / 2
+
+        d_sr = d_sd * gamma
         d_rd = d_sd - d_sr
 
         tx_relay_rx_model.eval()
@@ -168,52 +170,52 @@ if __name__ == "__main__":
         bleu_3.append(np.mean(bleu3_scores))
         bleu_4.append(np.mean(bleu4_scores))
 
-    distance_np = np.array(args.gamma_list)
+    d_sr_np = np.array(args.gamma_list) * args.d
     ticks = 0.2
 
     plt.figure()
-    plt.plot(args.gamma_list, semantic_sim)
+    plt.plot(d_sr_np, semantic_sim)
     plt.grid()
-    plt.xlabel("Distance Ratio")
+    plt.xlabel("S-R Distance")
     plt.ylabel("Semantic Similarity")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    # plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
     plt.title("Semantic Similarity v. S-R Distance Ratio")
     plt.savefig("SemanticSimilarty_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_1)
+    plt.plot(d_sr_np, bleu_1)
     plt.grid()
-    plt.xlabel("Distance Ratio")
+    plt.xlabel("S-R Distance")
     plt.ylabel("BLEU 1-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
-    plt.title("BLEU 1-gram v. S-R Distance Ratio")
+    # plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 1-gram v. S-R Distance")
     plt.savefig("BLEU1gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_2)
+    plt.plot(d_sr_np, bleu_2)
     plt.grid()
-    plt.xlabel("Distance Ratio")
+    plt.xlabel("S-R Distance")
     plt.ylabel("BLEU 2-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
-    plt.title("BLEU 2-gram v. S-R Distance Ratio")
+    # plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 2-gram v. S-R Distance")
     plt.savefig("BLEU2gam_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_3)
+    plt.plot(d_sr_np, bleu_3)
     plt.grid()
-    plt.xlabel("Distance Ratio")
+    plt.xlabel("S-R Distance")
     plt.ylabel("BLEU 3-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
-    plt.title("BLEU 3-gram v. S-R Distance Ratio")
+    # plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 3-gram v. S-R Distance")
     plt.savefig("BLEU3gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.gamma_list, bleu_4)
+    plt.plot(d_sr_np, bleu_4)
     plt.grid()
-    plt.xlabel("Distance Ratio")
+    plt.xlabel("S-R Distance")
     plt.ylabel("BLEU 4-gram")
-    plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
-    plt.title("BLEU 4-gram v. S-R Distance Ratio")
+    # plt.xticks(np.arange(np.min(distance_np), np.max(distance_np), ticks))
+    plt.title("BLEU 4-gram v. S-R Distance")
     plt.savefig("BLEU4gram_v_distance.png", dpi=400)
 
     np.save("conventional_semantic_sim.npy", semantic_sim)
