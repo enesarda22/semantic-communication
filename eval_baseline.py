@@ -99,17 +99,16 @@ if __name__ == "__main__":
     bleu_3 = []
     bleu_4 = []
 
-    d_sd = args.d
-
-    for distance_ratio in args.gamma_list:
-        print("Simulating for distance: " + str(distance_ratio * d_sd))
+    for gamma in args.gamma_list:
+        print("Simulating for distance: " + str(gamma * args.d))
 
         cosine_scores = []
         bleu1_scores = []
         bleu2_scores = []
         bleu3_scores = []
         bleu4_scores = []
-        d_sr = d_sd * distance_ratio
+        d_sd = args.d * gamma
+        d_sr = d_sd / 2
         d_rd = d_sd - d_sr
 
         tx_relay_rx_model.eval()

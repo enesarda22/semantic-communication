@@ -65,6 +65,11 @@ if __name__ == "__main__":
         params=tx_relay_rx_model.parameters(),
         lr=args.lr,
     )
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer=optimizer,
+        max_lr=args.lr,
+        total_steps=args.n_epochs,
+    )
 
     best_loss = torch.inf
 
@@ -89,6 +94,8 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             train_losses.append(loss.item())
+
+        scheduler.step()
 
         val_losses = []
         tx_relay_rx_model.eval()
