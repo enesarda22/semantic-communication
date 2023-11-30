@@ -169,11 +169,11 @@ if __name__ == "__main__":
         bleu_3.append(np.mean(bleu3_scores))
         bleu_4.append(np.mean(bleu4_scores))
 
-    distance_np = np.array(args.distance_list)
+    distance_np = np.array(args.gamma_list)
     ticks = 0.2
 
     plt.figure()
-    plt.plot(args.distance_list, semantic_sim)
+    plt.plot(args.gamma_list, semantic_sim)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("Semantic Similarity")
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     plt.savefig("SemanticSimilarty_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_1)
+    plt.plot(args.gamma_list, bleu_1)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 1-gram")
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU1gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_2)
+    plt.plot(args.gamma_list, bleu_2)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 2-gram")
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU2gam_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_3)
+    plt.plot(args.gamma_list, bleu_3)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 3-gram")
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     plt.savefig("BLEU3gram_v_distance.png", dpi=400)
 
     plt.figure()
-    plt.plot(args.distance_list, bleu_4)
+    plt.plot(args.gamma_list, bleu_4)
     plt.grid()
     plt.xlabel("Distance Ratio")
     plt.ylabel("BLEU 4-gram")
