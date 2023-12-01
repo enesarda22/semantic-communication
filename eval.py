@@ -174,7 +174,7 @@ if __name__ == "__main__":
                 xb = b[0].to(device)
                 targets = data_handler.encode_token_ids(xb)
                 attention_mask = b[1].to(device)
-                time_slot += torch.sum(attention_mask).item()
+                time_slot += (torch.sum(attention_mask) - attention_mask.shape[0]).item()
 
                 B, T = xb.shape
                 with torch.no_grad():
