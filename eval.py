@@ -67,9 +67,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-test", default=10000, type=int)
     parser.add_argument("--semantic-similarity-threshold", default=0.8, type=float)
     parser.add_argument("--bleu-1-threshold", default=0.5, type=float)
-    parser.add_argument("--bleu-2-threshold", default=0.5, type=float)
     parser.add_argument("--bleu-3-threshold", default=0.5, type=float)
-    parser.add_argument("--bleu-4-threshold", default=0.5, type=float)
 
     args = parser.parse_args()
     device = get_device()
