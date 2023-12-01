@@ -231,29 +231,30 @@ if __name__ == "__main__":
                 if len(cosine_scores) > args.n_test:
                     break
 
-            time_slot = time_slot + args.n_test
+            n_test_samples = len(cosine_scores)
+
+            time_slot = time_slot + n_test_samples
 
             semantic_sim_efficiency[
                 distance_index, gamma_index] = semantic_similarity_num_correct_sentences / time_slot
             bleu_1_efficiency[distance_index, gamma_index] = bleu_1_num_correct_sentences / time_slot
             bleu_3_efficiency[distance_index, gamma_index] = bleu_3_num_correct_sentences / time_slot
 
-            semantic_sim_efficiency_se[distance_index, gamma_index] = ((args.n_test ** 0.5) / time_slot) * (
-                    1 - semantic_similarity_num_correct_sentences / args.n_test)
-            bleu_1_efficiency_se[distance_index, gamma_index] = ((args.n_test ** 0.5) / time_slot) * (
-                    1 - bleu_1_num_correct_sentences / args.n_test)
-            bleu_3_efficiency_se[distance_index, gamma_index] = ((args.n_test ** 0.5) / time_slot) * (
-                    1 - bleu_3_num_correct_sentences / args.n_test)
+            semantic_sim_efficiency_se[distance_index, gamma_index] = ((n_test_samples ** 0.5) / time_slot) * (
+                    1 - semantic_similarity_num_correct_sentences / n_test_samples)
+            bleu_1_efficiency_se[distance_index, gamma_index] = ((n_test_samples ** 0.5) / time_slot) * (
+                    1 - bleu_1_num_correct_sentences / n_test_samples)
+            bleu_3_efficiency_se[distance_index, gamma_index] = ((n_test_samples ** 0.5) / time_slot) * (
+                    1 - bleu_3_num_correct_sentences / n_test_samples)
 
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)
 
-            std_semantic_sim[distance_index, gamma_index] = np.std(cosine_scores, ddof=1) / np.sqrt(
-                len(cosine_scores))
-            std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(len(bleu1_scores))
-            std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(len(bleu3_scores))
+            std_semantic_sim[distance_index, gamma_index] = np.std(cosine_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(n_test_samples)
 
     np.save("conventional_mean_semantic_sim.npy", mean_semantic_sim)
     np.save("conventional_mean_bleu_1.npy", mean_bleu_1)
