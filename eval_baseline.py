@@ -196,16 +196,42 @@ if __name__ == "__main__":
             n_test_samples = len(cosine_scores)
             time_slot = time_slot * 2
 
-            semantic_sim_efficiency[distance_index, gamma_index] = semantic_similarity_num_correct_sentences / time_slot
-            bleu_1_efficiency[distance_index, gamma_index] = bleu_1_num_correct_sentences / time_slot
-            bleu_3_efficiency[distance_index, gamma_index] = bleu_3_num_correct_sentences / time_slot
+            semantic_sim_efficiency[distance_index, gamma_index] = (
+                    semantic_similarity_num_correct_sentences / time_slot
+            )
+            bleu_1_efficiency[distance_index, gamma_index] = (
+                    bleu_1_num_correct_sentences / time_slot
+            )
+            bleu_3_efficiency[distance_index, gamma_index] = (
+                    bleu_3_num_correct_sentences / time_slot
+            )
 
-            semantic_sim_efficiency_se[distance_index, gamma_index] = ((n_test_samples ** 0.5) / time_slot) * (
-                        1 - semantic_similarity_num_correct_sentences / n_test_samples)
-            bleu_1_efficiency_se[distance_index, gamma_index] = ((n_test_samples ** 0.5) / time_slot) * (
-                        1 - bleu_1_num_correct_sentences / n_test_samples)
-            bleu_3_efficiency_se[distance_index, gamma_index] = ((n_test_samples ** 0.5) / time_slot) * (
-                        1 - bleu_3_num_correct_sentences / n_test_samples)
+            semantic_sim_efficiency_se[distance_index, gamma_index] = (
+                (n_test_samples**0.5) / time_slot
+            ) * (
+                semantic_similarity_num_correct_sentences
+                * (1 - semantic_similarity_num_correct_sentences / n_test_samples) ** 2
+                + (n_test_samples - semantic_similarity_num_correct_sentences)
+                * (semantic_similarity_num_correct_sentences / n_test_samples) ** 2
+            ) ** 0.5
+
+            bleu_1_efficiency_se[distance_index, gamma_index] = (
+                (n_test_samples**0.5) / time_slot
+            ) * (
+                bleu_1_num_correct_sentences
+                * (1 - bleu_1_num_correct_sentences / n_test_samples) ** 2
+                + (n_test_samples - bleu_1_num_correct_sentences)
+                * (bleu_1_num_correct_sentences / n_test_samples) ** 2
+            ) ** 0.5
+
+            bleu_3_efficiency_se[distance_index, gamma_index] = (
+                (n_test_samples**0.5) / time_slot
+            ) * (
+                bleu_3_num_correct_sentences
+                * (1 - bleu_3_num_correct_sentences / n_test_samples) ** 2
+                + (n_test_samples - bleu_3_num_correct_sentences)
+                * (bleu_3_num_correct_sentences / n_test_samples) ** 2
+            ) ** 0.5
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)

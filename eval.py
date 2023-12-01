@@ -287,21 +287,21 @@ if __name__ == "__main__":
                 bleu3_scores, ddof=1
             ) / np.sqrt(n_test_samples)
 
-    np.save("conventional_mean_semantic_sim.npy", mean_semantic_sim)
-    np.save("conventional_mean_bleu_1.npy", mean_bleu_1)
-    np.save("conventional_mean_bleu_3.npy", mean_bleu_3)
+    np.save("spf_mean_semantic_sim.npy", mean_semantic_sim)
+    np.save("spf_mean_bleu_1.npy", mean_bleu_1)
+    np.save("spf_mean_bleu_3.npy", mean_bleu_3)
 
-    np.save("conventional_std_semantic_sim.npy", std_semantic_sim)
-    np.save("conventional_std_bleu_1.npy", std_bleu_1)
-    np.save("conventional_std_bleu_3.npy", std_bleu_3)
+    np.save("spf_std_semantic_sim.npy", std_semantic_sim)
+    np.save("spf_std_bleu_1.npy", std_bleu_1)
+    np.save("spf_std_bleu_3.npy", std_bleu_3)
 
-    np.save("conventional_efficiency_semantic_sim.npy", semantic_sim_efficiency)
-    np.save("conventional_efficiency_bleu_1.npy", bleu_1_efficiency)
-    np.save("conventional_efficiency_bleu_3.npy", bleu_3_efficiency)
+    np.save("spf_efficiency_semantic_sim.npy", semantic_sim_efficiency)
+    np.save("spf_efficiency_bleu_1.npy", bleu_1_efficiency)
+    np.save("spf_efficiency_bleu_3.npy", bleu_3_efficiency)
 
-    np.save("conventional_efficiency_semantic_sim_se.npy", semantic_sim_efficiency_se)
-    np.save("conventional_efficiency_bleu_1_se.npy", bleu_1_efficiency_se)
-    np.save("conventional_efficiency_bleu_3_se.npy", bleu_3_efficiency_se)
+    np.save("spf_efficiency_semantic_sim_se.npy", semantic_sim_efficiency_se)
+    np.save("spf_efficiency_bleu_1_se.npy", bleu_1_efficiency_se)
+    np.save("spf_efficiency_bleu_3_se.npy", bleu_3_efficiency_se)
 
     # d_sr_np = np.array(args.gamma_list) * args.d
     #
