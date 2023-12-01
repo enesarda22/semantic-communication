@@ -58,6 +58,11 @@ if __name__ == "__main__":
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
     parser.add_argument("--n-test", default=20000, type=int)
+    parser.add_argument("--semantic-similarity-threshold", default=0.8, type=float)
+    parser.add_argument("--bleu-1-threshold", default=0.5, type=float)
+    parser.add_argument("--bleu-2-threshold", default=0.5, type=float)
+    parser.add_argument("--bleu-3-threshold", default=0.5, type=float)
+    parser.add_argument("--bleu-4-threshold", default=0.5, type=float)
 
     args = parser.parse_args()
     device = get_device()
@@ -98,12 +103,17 @@ if __name__ == "__main__":
     mean_bleu_3 = np.zeros((len(args.d_list), len(args.gamma_list)))
     mean_bleu_4 = np.zeros((len(args.d_list), len(args.gamma_list)))
 
-
     std_semantic_sim = np.zeros((len(args.d_list), len(args.gamma_list)))
     std_bleu_1 = np.zeros((len(args.d_list), len(args.gamma_list)))
     std_bleu_2 = np.zeros((len(args.d_list), len(args.gamma_list)))
     std_bleu_3 = np.zeros((len(args.d_list), len(args.gamma_list)))
     std_bleu_4 = np.zeros((len(args.d_list), len(args.gamma_list)))
+
+    semantic_sim_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
+    bleu_1_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
+    bleu_2_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
+    bleu_3_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
+    bleu_4_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
 
     # For each d_sd
     for distance_index, d_sd in enumerate(args.d_list):
@@ -122,10 +132,19 @@ if __name__ == "__main__":
             d_rd = d_sd - d_sr
 
             tx_relay_rx_model.eval()
+
+            time_slot = 0
+            semantic_similarity_num_correct_sentences = 0
+            bleu_1_num_correct_sentences = 0
+            bleu_2_num_correct_sentences = 0
+            bleu_3_num_correct_sentences = 0
+            bleu_4_num_correct_sentences = 0
+
             for b in data_handler.test_dataloader:
                 xb = b[0].to(device)
                 attention_mask = b[1].to(device)
                 xb = data_handler.encode_token_ids(xb)
+                time_slot += torch.sum(attention_mask).item()
 
                 B, T = xb.shape
                 with torch.no_grad():
@@ -163,14 +182,42 @@ if __name__ == "__main__":
                     )
 
                     for s1, s2 in zip(original_sentences, predicted_sentences):
-                        cosine_scores.append(semantic_similarity_score([s1], [s2])[0][0]. item())
+                        cosine_score = semantic_similarity_score([s1], [s2])[0][0]. item()
+                        bleu1_score = bleu_1gram(s1, s2)
+                        bleu2_score = bleu_2gram(s1, s2)
+                        bleu3_score = bleu_3gram(s1, s2)
+                        bleu4_score = bleu_4gram(s1, s2)
 
-                        bleu1_scores.append(bleu_1gram(s1, s2))
-                        bleu2_scores.append(bleu_2gram(s1, s2))
-                        bleu3_scores.append(bleu_3gram(s1, s2))
-                        bleu4_scores.append(bleu_4gram(s1, s2))
+                        if args.semantic_similarity_threshold <= cosine_score:
+                            semantic_similarity_num_correct_sentences += 1
+
+                        if args.bleu_1_threshold <= bleu1_score:
+                            bleu_1_num_correct_sentences += 1
+
+                        if args.bleu_2_threshold <= bleu2_score:
+                            bleu_2_num_correct_sentences += 1
+
+                        if args.bleu_3_threshold <= bleu3_score:
+                            bleu_3_num_correct_sentences += 1
+
+                        if args.bleu_4_threshold <= bleu4_score:
+                            bleu_4_num_correct_sentences += 1
+
+                        cosine_scores.append(cosine_score)
+                        bleu1_scores.append(bleu1_score)
+                        bleu2_scores.append(bleu2_score)
+                        bleu3_scores.append(bleu3_score)
+                        bleu4_scores.append(bleu4_score)
                 if len(cosine_scores) > args.n_test:
                     break
+
+            time_slot = time_slot * 2
+
+            semantic_sim_efficiency[distance_index, gamma_index] = semantic_similarity_num_correct_sentences / time_slot
+            bleu_1_efficiency[distance_index, gamma_index] = bleu_1_num_correct_sentences / time_slot
+            bleu_2_efficiency[distance_index, gamma_index] = bleu_2_num_correct_sentences / time_slot
+            bleu_3_efficiency[distance_index, gamma_index] = bleu_3_num_correct_sentences / time_slot
+            bleu_4_efficiency[distance_index, gamma_index] = bleu_4_num_correct_sentences / time_slot
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
@@ -184,7 +231,6 @@ if __name__ == "__main__":
             std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(len(bleu3_scores))
             std_bleu_4[distance_index, gamma_index] = np.std(bleu4_scores, ddof=1) / np.sqrt(len(bleu4_scores))
 
-
     np.save("conventional_mean_semantic_sim.npy", mean_semantic_sim)
     np.save("conventional_mean_bleu_1.npy", mean_bleu_1)
     np.save("conventional_mean_bleu_2.npy", mean_bleu_2)
@@ -196,7 +242,13 @@ if __name__ == "__main__":
     np.save("conventional_std_bleu_2.npy", std_bleu_2)
     np.save("conventional_std_bleu_3.npy", std_bleu_3)
     np.save("conventional_std_bleu_4.npy", std_bleu_4)
-    #
+
+    np.save("conventional_efficiency_semantic_sim.npy", semantic_sim_efficiency)
+    np.save("conventional_efficiency_bleu_1.npy", bleu_1_efficiency)
+    np.save("conventional_efficiency_bleu_2.npy", bleu_2_efficiency)
+    np.save("conventional_efficiency_bleu_3.npy", bleu_3_efficiency)
+    np.save("conventional_efficiency_bleu_4.npy", bleu_4_efficiency)
+
     # d_sr_np = np.array(args.gamma_list) * args.d
     #
     # plt.figure()
