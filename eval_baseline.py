@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=128, type=int)
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
-    parser.add_argument("--n-test", default=500, type=int)
+    parser.add_argument("--n-test", default=10000, type=int)
     parser.add_argument("--semantic-similarity-threshold", default=0.8, type=float)
     parser.add_argument("--bleu-1-threshold", default=0.5, type=float)
     parser.add_argument("--bleu-3-threshold", default=0.5, type=float)
