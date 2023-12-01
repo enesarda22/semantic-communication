@@ -257,10 +257,21 @@ if __name__ == "__main__":
 
             bleu_1_efficiency_se[distance_index, gamma_index] = (
                 (n_test_samples**0.5) / time_slot
-            ) * (1 - bleu_1_num_correct_sentences / n_test_samples)
+            ) * (
+                bleu_1_num_correct_sentences
+                * (1 - bleu_1_num_correct_sentences / n_test_samples) ** 2
+                + (n_test_samples - bleu_1_num_correct_sentences)
+                * (bleu_1_num_correct_sentences / n_test_samples) ** 2
+            ) ** 0.5
+
             bleu_3_efficiency_se[distance_index, gamma_index] = (
                 (n_test_samples**0.5) / time_slot
-            ) * (1 - bleu_3_num_correct_sentences / n_test_samples)
+            ) * (
+                bleu_3_num_correct_sentences
+                * (1 - bleu_3_num_correct_sentences / n_test_samples) ** 2
+                + (n_test_samples - bleu_3_num_correct_sentences)
+                * (bleu_3_num_correct_sentences / n_test_samples) ** 2
+            ) ** 0.5
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
