@@ -266,9 +266,9 @@ if __name__ == "__main__":
     np.save("conventional_efficiency_bleu_1.npy", bleu_1_efficiency)
     np.save("conventional_efficiency_bleu_3.npy", bleu_3_efficiency)
 
-    np.save("conventional_efficiency_semantic_sim.npy", semantic_sim_efficiency_se)
-    np.save("conventional_efficiency_bleu_1.npy", bleu_1_efficiency_se)
-    np.save("conventional_efficiency_bleu_3.npy", bleu_3_efficiency_se)
+    np.save("conventional_efficiency_semantic_sim_se.npy", semantic_sim_efficiency_se)
+    np.save("conventional_efficiency_bleu_1_se.npy", bleu_1_efficiency_se)
+    np.save("conventional_efficiency_bleu_3_se.npy", bleu_3_efficiency_se)
 
     # d_sr_np = np.array(args.gamma_list) * args.d
     #
