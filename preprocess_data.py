@@ -6,10 +6,10 @@ from tqdm import tqdm
 
 import torch
 from torch.utils.data import TensorDataset
-from sklearn.preprocessing import LabelEncoder
 
 from semantic_communication.data_processing.preprocessor import Preprocessor
 from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # train label encoder
     encoder_fp = os.path.join(args.output_data_fp, Preprocessor.encoder_fn)
-    encoder = LabelEncoder().fit(train_input_ids.flatten().to("cpu"))
+    encoder = TensorLabelEncoder().fit(train_input_ids)
     torch.save(encoder, encoder_fp)
 
     train_dataset = TensorDataset(train_input_ids, train_attention_mask)

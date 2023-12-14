@@ -7,11 +7,11 @@ from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.transceiver import (
-    TxRelayChannelModel,
-    TxRelayRxChannelModel,
     Transceiver,
     RelayChannelBlock,
     ChannelEncoder,
+    SrcRelayChannelModel,
+    SrcRelayDstChannelModel,
 )
 from semantic_communication.utils.channel import (
     init_channel,
@@ -37,12 +37,12 @@ if __name__ == "__main__":
     parser.add_argument("--transceiver-path", type=str)
 
     # semantic decoders
-    parser.add_argument("--receiver-decoder-path", type=str)
+    parser.add_argument("--dst-decoder-path", type=str)
     add_semantic_decoder_args(parser)
 
     # channel models
     parser.add_argument("--relay-channel-block-path", type=str)
-    parser.add_argument("--tx-relay-rx-channel-model-path", type=str)
+    parser.add_argument("--src-relay-dst-channel-model-path", type=str)
     add_channel_model_args(parser)
 
     add_data_args(parser)
@@ -67,22 +67,22 @@ if __name__ == "__main__":
         block_size=args.max_length,
     ).to(device)
 
-    tx_channel_enc = ChannelEncoder(
+    src_channel_enc = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
-    tx_relay_channel_model = TxRelayChannelModel(
-        nin=args.channel_block_input_dim,
+    src_relay_channel_model = SrcRelayChannelModel(
+        n_in=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
 
     relay_channel_block = RelayChannelBlock(
+        source_channel_encoder=src_channel_enc,
+        src_relay_channel_model=src_relay_channel_model,
         semantic_decoder=relay_decoder,
-        tx_channel_enc=tx_channel_enc,
-        tx_relay_channel_enc_dec=tx_relay_channel_model,
     ).to(device)
     load_model(relay_channel_block, args.relay_channel_block_path)
 
@@ -90,28 +90,28 @@ if __name__ == "__main__":
     for param in relay_channel_block.parameters():
         param.requires_grad = False
 
-    receiver_decoder = SemanticDecoder(
+    dst_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings * 2,
         block_size=args.max_length,
     ).to(device)
-    load_model(receiver_decoder, args.receiver_decoder_path)
+    load_model(dst_decoder, args.dst_decoder_path)
 
-    tx_relay_rx_channel_model = TxRelayRxChannelModel(
-        nin=args.channel_block_input_dim,
+    src_relay_dst_channel_model = SrcRelayDstChannelModel(
+        n_in=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
-    load_model(tx_relay_rx_channel_model, args.tx_relay_rx_channel_model_path)
+    load_model(src_relay_dst_channel_model, args.src_relay_dst_channel_model_path)
 
     transceiver = Transceiver(
         semantic_encoder=semantic_encoder,
         relay_channel_block=relay_channel_block,
-        rx_semantic_decoder=receiver_decoder,
-        tx_relay_rx_channel_enc_dec=tx_relay_rx_channel_model,
-        encoder=data_handler.encoder,
+        dst_semantic_decoder=dst_decoder,
+        src_relay_dst_channel_model=src_relay_dst_channel_model,
+        label_encoder=data_handler.label_encoder,
     )
     load_model(transceiver, args.transceiver_path)
 
@@ -129,16 +129,14 @@ if __name__ == "__main__":
         transceiver.train()
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
-            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
+            targets = data_handler.label_encoder.transform(xb)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
             d_rd = d_sd - d_sr
 
-            logits, loss = transceiver(
-                xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd
-            )
+            _, loss = transceiver(xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -151,8 +149,8 @@ if __name__ == "__main__":
         transceiver.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
-            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
+            targets = data_handler.label_encoder.transform(xb)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)

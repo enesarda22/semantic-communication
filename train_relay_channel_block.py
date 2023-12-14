@@ -10,8 +10,8 @@ from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.models.transceiver import (
     RelayChannelBlock,
-    TxRelayChannelModel,
     ChannelEncoder,
+    SrcRelayChannelModel,
 )
 from semantic_communication.utils.channel import init_channel, get_distance
 from semantic_communication.utils.general import (
@@ -55,22 +55,22 @@ if __name__ == "__main__":
     ).to(device)
     load_model(relay_decoder, args.relay_decoder_path)
 
-    tx_channel_enc = ChannelEncoder(
+    src_channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
-    tx_relay_channel_enc_dec = TxRelayChannelModel(
-        nin=args.channel_block_input_dim,
+    src_relay_channel_model = SrcRelayChannelModel(
+        n_in=args.channel_block_input_dim,
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
 
     relay_channel_block = RelayChannelBlock(
+        source_channel_encoder=src_channel_encoder,
+        src_relay_channel_model=src_relay_channel_model,
         semantic_decoder=relay_decoder,
-        tx_channel_enc=tx_channel_enc,
-        tx_relay_channel_enc_dec=tx_relay_channel_enc_dec,
     ).to(device)
 
     optimizer = torch.optim.AdamW(relay_channel_block.parameters(), lr=args.lr)
@@ -86,8 +86,8 @@ if __name__ == "__main__":
         relay_channel_block.train()
         for b in tqdm(data_handler.train_dataloader):
             xb = b[0].to(device)
-            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
+            targets = data_handler.label_encoder.transform(xb)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
 
-            _, _, loss = relay_channel_block(
+            _, loss = relay_channel_block(
                 x=encoder_output,
                 d_sr=d_sr,
                 attention_mask=attention_mask[:, :-1],
@@ -116,8 +116,8 @@ if __name__ == "__main__":
         relay_channel_block.eval()
         for b in data_handler.val_dataloader:
             xb = b[0].to(device)
-            targets = data_handler.encode_token_ids(xb)
             attention_mask = b[1].to(device)
+            targets = data_handler.label_encoder.transform(xb)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
@@ -128,7 +128,7 @@ if __name__ == "__main__":
             )
 
             with torch.no_grad():
-                _, _, loss = relay_channel_block(
+                _, loss = relay_channel_block(
                     x=encoder_output,
                     d_sr=d_sr,
                     attention_mask=attention_mask[:, :-1],

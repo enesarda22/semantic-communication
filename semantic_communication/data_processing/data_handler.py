@@ -25,10 +25,10 @@ class DataHandler:
         self.data_fp = data_fp
         self.batch_size = batch_size
 
-        encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
-        self.encoder = torch.load(encoder_fp, map_location="cpu")
+        label_encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
+        self.label_encoder = torch.load(label_encoder_fp)
 
-        self.vocab_size = len(self.encoder.classes_)
+        self.vocab_size = len(self.label_encoder.classes)
 
         self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
         self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
@@ -41,12 +41,10 @@ class DataHandler:
         skip_special_tokens=False,
     ) -> List[str]:
         if attention_mask is not None:
-            pad_token_id = self.encoder.transform([0])[0]
-            ids = torch.masked_fill(ids, attention_mask == 0, pad_token_id)
+            pad_id = self.label_encoder.pad_id
+            ids = torch.masked_fill(ids, attention_mask == 0, pad_id)
 
-        token_ids = self.encoder.inverse_transform(ids.flatten().to("cpu"))
-        token_ids = token_ids.reshape(ids.shape)
-
+        token_ids = self.label_encoder.inverse_transform(ids)
         tokens = [
             self.semantic_encoder.tokenizer.decode(
                 t, skip_special_tokens=skip_special_tokens
@@ -54,11 +52,6 @@ class DataHandler:
             for t in token_ids
         ]
         return tokens
-
-    def encode_token_ids(self, token_ids: torch.Tensor):
-        ids = self.encoder.transform(token_ids.flatten().to("cpu"))
-        ids = ids.reshape(-1, self.semantic_encoder.max_length)
-        return torch.LongTensor(ids).to(self.device)
 
     def init_dl(self, fn: str):
         fp = os.path.join(self.data_fp, fn)

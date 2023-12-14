@@ -64,8 +64,8 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
 
-            xb = data_handler.encode_token_ids(xb)
-            logits, loss = relay_decoder(
+            xb = data_handler.label_encoder.transform(xb)
+            _, loss = relay_decoder(
                 encoder_output=encoder_output[:, :-1, :],
                 attention_mask=attention_mask[:, :-1],
                 targets=xb[:, 1:],
@@ -87,7 +87,7 @@ if __name__ == "__main__":
                 input_ids=xb,
                 attention_mask=attention_mask,
             )
-            xb = data_handler.encode_token_ids(xb)
+            xb = data_handler.label_encoder.transform(xb)
 
             with torch.no_grad():
                 _, loss = relay_decoder(
