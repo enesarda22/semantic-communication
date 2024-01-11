@@ -16,6 +16,9 @@ from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_data_args,
     add_train_args,
+    shift_inputs,
+    load_model,
+    load_optimizer,
 )
 
 if __name__ == "__main__":
@@ -43,13 +46,13 @@ if __name__ == "__main__":
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
+        semantic_encoder=semantic_encoder,
+        label_encoder=data_handler.label_encoder,
     ).to(device)
-    optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)
+    load_model(relay_decoder, args.relay_decoder_path)
 
-    if args.relay_decoder_path is not None:
-        checkpoint = torch.load(args.relay_decoder_path)
-        relay_decoder.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)
+    load_optimizer(optimizer, args.relay_decoder_path)
 
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
@@ -63,12 +66,18 @@ if __name__ == "__main__":
                 input_ids=xb,
                 attention_mask=attention_mask,
             )
-
             xb = data_handler.label_encoder.transform(xb)
+            idx, encoder_output, attention_mask, targets = shift_inputs(
+                xb=xb,
+                encoder_output=encoder_output,
+                attention_mask=attention_mask,
+                mode=args.mode,
+            )
             _, loss = relay_decoder(
-                encoder_output=encoder_output[:, :-1, :],
-                attention_mask=attention_mask[:, :-1],
-                targets=xb[:, 1:],
+                idx=idx,
+                encoder_output=encoder_output,
+                attention_mask=attention_mask,
+                targets=targets,
             )
 
             optimizer.zero_grad(set_to_none=True)
@@ -88,12 +97,19 @@ if __name__ == "__main__":
                 attention_mask=attention_mask,
             )
             xb = data_handler.label_encoder.transform(xb)
+            idx, encoder_output, attention_mask, targets = shift_inputs(
+                xb=xb,
+                encoder_output=encoder_output,
+                attention_mask=attention_mask,
+                mode=args.mode,
+            )
 
             with torch.no_grad():
                 _, loss = relay_decoder(
-                    encoder_output=encoder_output[:, :-1, :],
-                    attention_mask=attention_mask[:, :-1],
-                    targets=xb[:, 1:],
+                    idx=idx,
+                    encoder_output=encoder_output,
+                    attention_mask=attention_mask,
+                    targets=targets,
                 )
             val_losses.append(loss.item())
 

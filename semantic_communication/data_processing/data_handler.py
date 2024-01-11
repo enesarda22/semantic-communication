@@ -36,15 +36,17 @@ class DataHandler:
 
     def get_tokens(
         self,
-        ids,
+        ids=None,
+        token_ids=None,
         attention_mask=None,
         skip_special_tokens=False,
     ) -> List[str]:
-        if attention_mask is not None:
-            pad_id = self.label_encoder.pad_id
-            ids = torch.masked_fill(ids, attention_mask == 0, pad_id)
+        if token_ids is None:
+            token_ids = self.label_encoder.inverse_transform(ids)
 
-        token_ids = self.label_encoder.inverse_transform(ids)
+        if attention_mask is not None:
+            token_ids = torch.masked_fill(token_ids, attention_mask == 0, 0)
+
         tokens = [
             self.semantic_encoder.tokenizer.decode(
                 t, skip_special_tokens=skip_special_tokens

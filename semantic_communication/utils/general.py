@@ -53,6 +53,7 @@ def add_semantic_decoder_args(parser):
     parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
+    parser.add_argument("--mode", default="predict", type=str)
 
 
 def add_train_args(parser):
@@ -79,3 +80,20 @@ def add_channel_model_args(parser):
     parser.add_argument("--d-max", default=7e3, type=float)
     parser.add_argument("--gamma-min", default=0.2, type=float)
     parser.add_argument("--gamma-max", default=0.8, type=float)
+
+
+def shift_inputs(xb, encoder_output, attention_mask, mode):
+    if mode == "predict":
+        idx = xb[:, :-1]
+        encoder_output = encoder_output[:, :-1, :]
+        attention_mask = attention_mask[:, :-1]
+        targets = xb[:, 1:]
+    elif mode == "forward":
+        idx = xb[:, :-1]
+        encoder_output = encoder_output[:, 1:, :]
+        attention_mask = attention_mask[:, 1:]
+        targets = xb[:, 1:]
+    else:
+        raise ValueError("Mode needs to be 'predict' or 'forward'.")
+
+    return idx, encoder_output, attention_mask, targets

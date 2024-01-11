@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from torch.utils.data import TensorDataset, DataLoader
 
-from semantic_communication.models.multi_head_attention import (
-    MultiHeadAttention,
-)
+from tqdm import tqdm
 
 from semantic_communication.utils.general import get_device
 
@@ -22,12 +21,19 @@ class MultiInputSequential(nn.Sequential):
 class DecoderBlock(nn.Module):
     def __init__(self, n_heads, n_embeddings, block_size):
         super().__init__()
-        self.sa_heads = MultiHeadAttention(
-            n_heads=n_heads,
-            embedding_size=n_embeddings,
-            head_size=n_embeddings // n_heads,
-            block_size=block_size,
+        self.sa_heads = nn.MultiheadAttention(
+            embed_dim=n_embeddings,
+            num_heads=n_heads,
+            dropout=0.1,
+            batch_first=True,
         )
+        self.ca_heads = nn.MultiheadAttention(
+            embed_dim=n_embeddings,
+            num_heads=n_heads,
+            dropout=0.1,
+            batch_first=True,
+        )
+
         self.ff_net = nn.Sequential(
             nn.Linear(n_embeddings, 4 * n_embeddings),
             nn.ReLU(),
@@ -36,20 +42,60 @@ class DecoderBlock(nn.Module):
         )
         self.ln1 = nn.LayerNorm(n_embeddings)
         self.ln2 = nn.LayerNorm(n_embeddings)
+        self.ln3 = nn.LayerNorm(n_embeddings)
 
-    def forward(self, x, attention_mask):
-        # residual connection after the layer, norm before the layer
-        x = x + self.sa_heads(self.ln1(x), attention_mask)
-        x = x + self.ff_net(self.ln2(x))
+        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
 
-        return x, attention_mask
+    def forward(self, x, encoder_output, attention_mask):
+        # norm before the layer, residual connection after the layer
+        x_normed = self.ln1(x)
+        attention_out = self.sa_heads(
+            query=x_normed,
+            key=x_normed,
+            value=x_normed,
+            key_padding_mask=(attention_mask == 0),
+            need_weights=False,
+            attn_mask=(self.tril == 0),
+            is_causal=True,
+        )[0]
+        x = x + attention_out
+
+        x_normed = self.ln2(x)
+        attention_out = self.ca_heads(
+            query=x_normed,
+            key=encoder_output,
+            value=encoder_output,
+            key_padding_mask=(attention_mask == 0),
+            need_weights=False,
+            attn_mask=(self.tril == 0),
+            is_causal=True,
+        )[0]
+        x = x + attention_out
+
+        x = x + self.ff_net(self.ln3(x))
+        return x, encoder_output, attention_mask
 
 
 class SemanticDecoder(nn.Module):
     def __init__(
-        self, vocab_size, n_blocks, n_heads, n_embeddings, block_size
+        self,
+        vocab_size,
+        n_blocks,
+        n_heads,
+        n_embeddings,
+        block_size,
+        semantic_encoder,
+        label_encoder,
     ):
         super().__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
+        self.token_embedding_table.weight = nn.Parameter(
+            semantic_encoder.bert.embeddings.word_embeddings.weight[
+                label_encoder.classes, :
+            ]
+        )
+        self.position_embedding_table = nn.Embedding(block_size, n_embeddings)
+
         self.decoder_blocks = MultiInputSequential(
             *[
                 DecoderBlock(
@@ -61,19 +107,24 @@ class SemanticDecoder(nn.Module):
             ]
         )
         self.ln = nn.LayerNorm(n_embeddings)
-        self.lm_head = nn.Linear(n_embeddings, vocab_size)
+        self.lm_head = nn.Linear(n_embeddings, vocab_size, bias=False)
+        self.lm_head.weight = self.token_embedding_table.weight
 
-        self.block_size = block_size
+        self.device = get_device()
 
-    def forward(self, encoder_output, attention_mask=None, targets=None):
+    def forward(self, idx, encoder_output, attention_mask=None, targets=None):
         B, T, C = encoder_output.shape
 
-        if attention_mask is None:
-            attention_mask = torch.ones(B, T, dtype=torch.long).to(
-                get_device()
-            )
+        token_embeddings = self.token_embedding_table(idx)  # (B,T,C)
+        pos_embeddings = self.position_embedding_table(
+            torch.arange(T, device=self.device)
+        )  # (T,C)
+        x = token_embeddings + pos_embeddings
 
-        x, _ = self.decoder_blocks(encoder_output, attention_mask)
+        if attention_mask is None:
+            attention_mask = torch.ones(B, T, dtype=torch.long).to(self.device)
+
+        x, _, _ = self.decoder_blocks(x, encoder_output, attention_mask)
         logits = self.lm_head(self.ln(x))
 
         if targets is None:
@@ -83,17 +134,93 @@ class SemanticDecoder(nn.Module):
             targets = targets.reshape(B * T)
             attention_mask = attention_mask.flatten() == 1
 
-            loss = F.cross_entropy(
-                logits[attention_mask, :], targets[attention_mask]
-            )
+            loss = F.cross_entropy(logits[attention_mask, :], targets[attention_mask])
 
         return logits, loss
 
-    def generate(self, encoder_output, attention_mask=None, sample=False):
+    def generate(
+        self,
+        encoder_output,
+        beam_width=5,
+        max_length=20,
+    ):
+        B, T, _ = encoder_output.shape
+
+        with torch.no_grad():
+            Y = torch.zeros(B, T).to(self.device).long()
+            Y[:, 0] = 1
+
+            attn_mask = torch.zeros(B, T).to(self.device).long()
+            attn_mask[:, 0] = 1
+
+            next_logits, _ = self(Y, encoder_output, attn_mask)
+            next_logits = next_logits[:, 0, :]
+            vocab_size = next_logits.shape[-1]
+
+            probabilities, next_chars = F.log_softmax(next_logits, dim=-1).topk(
+                k=beam_width, dim=-1
+            )
+
+            Y = Y.repeat((beam_width, 1))
+            Y[:, 1] = next_chars
+
+            for i in tqdm(range(1, max_length)):
+                attn_mask[:, i] = 1
+
+                dataset = TensorDataset(
+                    Y[:, -max_length:],
+                    encoder_output.repeat((beam_width, 1, 1, 1))
+                    .transpose(0, 1)
+                    .flatten(end_dim=1),
+                    attn_mask.repeat((beam_width, 1)),
+                )
+                dl = DataLoader(dataset, batch_size=32)
+                next_probabilities = []
+
+                for x, e, mask in tqdm(dl):
+                    next_logits, _ = self(x, e, mask)
+                    next_logits = next_logits[:, i, :]
+                    next_probabilities.append(F.log_softmax(next_logits, dim=-1))
+
+                next_probabilities = torch.cat(next_probabilities, axis=0)
+                next_probabilities = next_probabilities.reshape(
+                    (-1, beam_width, next_probabilities.shape[-1])
+                )
+                probabilities = probabilities.unsqueeze(-1) + next_probabilities
+                probabilities = probabilities.flatten(start_dim=1)
+                probabilities, idx = probabilities.topk(k=beam_width, axis=-1)
+                next_chars = torch.remainder(idx, vocab_size).flatten().unsqueeze(-1)
+
+                best_candidates = (idx / vocab_size).long()
+                best_candidates += (
+                    torch.arange(
+                        Y.shape[0] // beam_width, device=self.device
+                    ).unsqueeze(-1)
+                    * beam_width
+                )
+
+                Y = Y[best_candidates].flatten(end_dim=-2)
+                Y[:, [i + 1]] = next_chars
+
+                if torch.all(torch.any(Y == 2, dim=1)):
+                    break
+
+            best_indices = torch.argmax(probabilities, dim=1)
+            Y = Y.reshape(-1, beam_width, Y.shape[-1])[:, best_indices, :].squeeze(1)
+
+            return Y
+
+    def generate_next(
+        self,
+        idx,
+        encoder_output,
+        attention_mask=None,
+        sample=False,
+    ):
         B, T, C = encoder_output.shape
 
         # get the predictions
-        logits, _ = self(encoder_output, attention_mask)  # (B, T, C)
+        logits, _ = self(idx, encoder_output, attention_mask)  # (B, T, C)
         # apply softmax to get probabilities
         probs = F.softmax(logits, dim=-1)  # (B, C)
 

@@ -1,6 +1,5 @@
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 
 from nltk.translate.bleu_score import sentence_bleu
 
