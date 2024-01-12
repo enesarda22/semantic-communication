@@ -49,7 +49,6 @@ def generate_text():
     )
 
     if args.mode == "sentence":
-
         predicted_ids = model.generate(
             encoder_output=encoder_output,
             max_length=args.max_length,
