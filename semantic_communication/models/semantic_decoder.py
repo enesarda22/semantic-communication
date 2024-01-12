@@ -61,14 +61,26 @@ class DecoderBlock(nn.Module):
         x = x + attention_out
 
         x_normed = self.ln2(x)
+
+        if encoder_output.shape[1] == self.tril.shape[1]:
+            attn_mask = self.tril == 0
+            key_padding_mask = attention_mask == 0
+            is_causal = True
+        else:
+            attn_mask = torch.zeros(
+                (self.tril.shape[0], encoder_output.shape[1]), dtype=torch.bool
+            )
+            key_padding_mask = torch.zeros((encoder_output.shape[:2]), dtype=torch.bool)
+            is_causal = False
+
         attention_out = self.ca_heads(
             query=x_normed,
             key=encoder_output,
             value=encoder_output,
-            key_padding_mask=(attention_mask == 0),
+            key_padding_mask=key_padding_mask,
             need_weights=False,
-            attn_mask=(self.tril == 0),
-            is_causal=True,
+            attn_mask=attn_mask,
+            is_causal=is_causal,
         )[0]
         x = x + attention_out
 
@@ -113,7 +125,7 @@ class SemanticDecoder(nn.Module):
         self.device = get_device()
 
     def forward(self, idx, encoder_output, attention_mask=None, targets=None):
-        B, T, C = encoder_output.shape
+        B, T = idx.shape
 
         token_embeddings = self.token_embedding_table(idx)  # (B,T,C)
         pos_embeddings = self.position_embedding_table(
@@ -144,7 +156,8 @@ class SemanticDecoder(nn.Module):
         beam_width=5,
         max_length=20,
     ):
-        B, T, _ = encoder_output.shape
+        B = encoder_output.shape[0]
+        T = max_length
 
         with torch.no_grad():
             Y = torch.zeros(B, T).to(self.device).long()
@@ -162,9 +175,9 @@ class SemanticDecoder(nn.Module):
             )
 
             Y = Y.repeat((beam_width, 1))
-            Y[:, 1] = next_chars
+            Y[:, 1] = next_chars.flatten()
 
-            for i in tqdm(range(1, max_length)):
+            for i in tqdm(range(1, max_length - 1)):
                 attn_mask[:, i] = 1
 
                 dataset = TensorDataset(
@@ -200,13 +213,17 @@ class SemanticDecoder(nn.Module):
                 )
 
                 Y = Y[best_candidates].flatten(end_dim=-2)
-                Y[:, [i + 1]] = next_chars
+                Y[:, i + 1] = next_chars.flatten()
 
                 if torch.all(torch.any(Y == 2, dim=1)):
                     break
 
             best_indices = torch.argmax(probabilities, dim=1)
-            Y = Y.reshape(-1, beam_width, Y.shape[-1])[:, best_indices, :].squeeze(1)
+            Y = torch.gather(
+                Y.reshape(-1, beam_width, Y.shape[-1]),
+                1,
+                best_indices.reshape(-1, 1, 1).repeat((1, 1, Y.shape[-1])),
+            ).squeeze(1)
 
             return Y
 

@@ -47,33 +47,53 @@ def generate_text():
     idx, encoder_output, attention_mask, targets = shift_inputs(
         xb_ids, encoder_output, attention_mask, args.mode
     )
-    predicted_ids = model.generate_next(
-        idx=idx,
-        encoder_output=encoder_output,
-        attention_mask=attention_mask,
-        sample=False,
-    )
-    # only keep non-padding ids
-    predicted_ids = torch.masked_select(
-        predicted_ids,
-        attention_mask == 1,
-    )
-    predicted_tokens = data_handler.get_tokens(
-        ids=predicted_ids.reshape(-1, 1),
-        skip_special_tokens=True,
-    )
 
-    # find split indices based on number of paddings
-    input_split_indices = pad_occurrence.cumsum(0)
-    input_tokens = np.array_split(input_tokens, input_split_indices)
+    if args.mode == "sentence":
 
-    pred_split_indices = attention_mask.sum(1).cumsum(0)
-    predicted_tokens = np.array_split(predicted_tokens, pred_split_indices)
+        predicted_ids = model.generate(
+            encoder_output=encoder_output,
+            max_length=args.max_length,
+        )
+        predicted_tokens = data_handler.get_tokens(
+            ids=predicted_ids,
+            skip_special_tokens=True,
+        )
+        input_tokens = data_handler.get_tokens(
+            ids=idx,
+            skip_special_tokens=True,
+        )
 
-    for input_b, predicted_b in zip(input_tokens, predicted_tokens):
-        for input_, predicted in zip(input_b, predicted_b):
-            print(f"{input_} -> {predicted}")
-        print("\n")
+        for input_, predicted in zip(input_tokens, predicted_tokens):
+            print(f"{input_}\n{predicted}\n")
+
+    else:
+        predicted_ids = model.generate_next(
+            idx=idx,
+            encoder_output=encoder_output,
+            attention_mask=attention_mask,
+            sample=False,
+        )
+        # only keep non-padding ids
+        predicted_ids = torch.masked_select(
+            predicted_ids,
+            attention_mask == 1,
+        )
+        predicted_tokens = data_handler.get_tokens(
+            ids=predicted_ids.reshape(-1, 1),
+            skip_special_tokens=True,
+        )
+
+        # find split indices based on number of paddings
+        input_split_indices = pad_occurrence.cumsum(0)
+        input_tokens = np.array_split(input_tokens, input_split_indices)
+
+        pred_split_indices = attention_mask.sum(1).cumsum(0)
+        predicted_tokens = np.array_split(predicted_tokens, pred_split_indices)
+
+        for input_b, predicted_b in zip(input_tokens, predicted_tokens):
+            for input_, predicted in zip(input_b, predicted_b):
+                print(f"{input_} -> {predicted}")
+            print("\n")
 
 
 if __name__ == "__main__":

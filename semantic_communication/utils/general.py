@@ -93,7 +93,12 @@ def shift_inputs(xb, encoder_output, attention_mask, mode):
         encoder_output = encoder_output[:, 1:, :]
         attention_mask = attention_mask[:, 1:]
         targets = xb[:, 1:]
+    elif mode == "sentence":
+        idx = xb[:, :-1]
+        encoder_output = encoder_output[:, [0], :]
+        attention_mask = attention_mask[:, 1:]
+        targets = xb[:, 1:]
     else:
-        raise ValueError("Mode needs to be 'predict' or 'forward'.")
+        raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
     return idx, encoder_output, attention_mask, targets
