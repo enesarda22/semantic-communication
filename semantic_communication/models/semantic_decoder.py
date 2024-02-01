@@ -21,6 +21,7 @@ class MultiInputSequential(nn.Sequential):
 class DecoderBlock(nn.Module):
     def __init__(self, n_heads, n_embeddings, block_size):
         super().__init__()
+        self.device = get_device()
         self.sa_heads = nn.MultiheadAttention(
             embed_dim=n_embeddings,
             num_heads=n_heads,
@@ -44,7 +45,9 @@ class DecoderBlock(nn.Module):
         self.ln2 = nn.LayerNorm(n_embeddings)
         self.ln3 = nn.LayerNorm(n_embeddings)
 
-        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
+        self.register_buffer(
+            "tril", torch.tril(torch.ones(block_size, block_size, device=self.device))
+        )
 
     def forward(self, x, encoder_output, attention_mask):
         # norm before the layer, residual connection after the layer
@@ -68,9 +71,13 @@ class DecoderBlock(nn.Module):
             is_causal = True
         else:
             attn_mask = torch.zeros(
-                (self.tril.shape[0], encoder_output.shape[1]), dtype=torch.bool
+                (self.tril.shape[0], encoder_output.shape[1]),
+                dtype=torch.bool,
+                device=self.device,
             )
-            key_padding_mask = torch.zeros((encoder_output.shape[:2]), dtype=torch.bool)
+            key_padding_mask = torch.zeros(
+                (encoder_output.shape[:2]), dtype=torch.bool, device=self.device
+            )
             is_causal = False
 
         attention_out = self.ca_heads(
