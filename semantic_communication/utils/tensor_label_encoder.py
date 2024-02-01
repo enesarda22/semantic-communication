@@ -8,7 +8,6 @@ class TensorLabelEncoder:
         self.classes = None
         self.pad_id = None
         self.cls_id = None
-        self.device = get_device()
 
     def fit(self, x):
         self.classes = torch.unique(x)
@@ -18,7 +17,7 @@ class TensorLabelEncoder:
 
     def transform(self, x):
         bool_tensor = torch.eq(
-            x.reshape(1, -1), self.classes.reshape(-1, 1).to(self.device)
+            x.reshape(1, -1), self.classes.reshape(-1, 1).to(x.device)
         )
         indices = torch.argmax(bool_tensor.to(torch.int8), dim=0)
         return indices.view(x.shape)
