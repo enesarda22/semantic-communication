@@ -49,6 +49,20 @@ def load_optimizer(optimizer, state_dict_path):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
 
+def load_scheduler(scheduler, state_dict_path):
+    if state_dict_path is not None:
+        checkpoint = torch.load(state_dict_path, map_location=get_device())
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
+
+def get_start_epoch(state_dict_path):
+    if state_dict_path is not None:
+        checkpoint = torch.load(state_dict_path, map_location=get_device())
+        return checkpoint["epoch"] + 1
+    else:
+        return 1
+
+
 def add_semantic_decoder_args(parser):
     parser.add_argument("--n-blocks", default=1, type=int)
     parser.add_argument("--n-heads", default=4, type=int)

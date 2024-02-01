@@ -19,6 +19,8 @@ from semantic_communication.utils.general import (
     shift_inputs,
     load_model,
     load_optimizer,
+    load_scheduler,
+    get_start_epoch,
 )
 
 if __name__ == "__main__":
@@ -60,9 +62,11 @@ if __name__ == "__main__":
         steps_per_epoch=len(data_handler.train_dataloader),
         epochs=args.n_epochs,
     )
+    load_scheduler(scheduler, args.relay_decoder_path)
 
+    start_epoch = get_start_epoch(args.relay_decoder_path)
     best_loss = torch.inf
-    for epoch in range(args.n_epochs):
+    for epoch in range(start_epoch, args.n_epochs + 1):
         train_losses = []
         relay_decoder.train()
         for b in tqdm(data_handler.train_dataloader):
@@ -137,7 +141,9 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=relay_decoder.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
+                scheduler_state_dict=scheduler.state_dict(),
                 mean_val_loss=mean_loss,
+                epoch=epoch,
             )
             best_loss = mean_loss
         else:
@@ -145,5 +151,7 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=None,
                 optimizer_state_dict=None,
+                scheduler_state_dict=None,
                 mean_val_loss=mean_loss,
+                epoch=epoch,
             )
