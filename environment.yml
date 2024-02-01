@@ -59,7 +59,6 @@ dependencies:
   - libev=4.33
   - libevent=2.1.12
   - libffi=3.4.4
-  - libgfortran=5.0.0
   - libgfortran5=11.3.0
   - libiconv=1.16
   - libjpeg-turbo=2.0.0
