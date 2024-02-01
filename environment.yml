@@ -1,7 +1,6 @@
 name: semantic-communication
 channels:
   - pytorch
-  - conda-forge
   - defaults
 dependencies:
   - abseil-cpp=20230802.0
