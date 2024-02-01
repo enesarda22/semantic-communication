@@ -1,11 +1,14 @@
 import torch
 
+from semantic_communication.utils.general import get_device
+
 
 class TensorLabelEncoder:
     def __init__(self):
         self.classes = None
         self.pad_id = None
         self.cls_id = None
+        self.device = get_device()
 
     def fit(self, x):
         self.classes = torch.unique(x)
@@ -14,7 +17,9 @@ class TensorLabelEncoder:
         return self
 
     def transform(self, x):
-        bool_tensor = torch.eq(x.reshape(1, -1), self.classes.reshape(-1, 1))
+        bool_tensor = torch.eq(
+            x.reshape(1, -1), self.classes.reshape(-1, 1).to(self.device)
+        )
         indices = torch.argmax(bool_tensor.to(torch.int8), dim=0)
         return indices.view(x.shape)
 
