@@ -54,6 +54,13 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)
     load_optimizer(optimizer, args.relay_decoder_path)
 
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=args.lr,
+        steps_per_epoch=len(data_handler.train_dataloader),
+        epochs=args.n_epochs,
+    )
+
     best_loss = torch.inf
     for epoch in range(args.n_epochs):
         train_losses = []
@@ -83,6 +90,7 @@ if __name__ == "__main__":
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             train_losses.append(loss.item())
 
