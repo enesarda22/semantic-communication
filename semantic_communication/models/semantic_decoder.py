@@ -65,6 +65,7 @@ class DecoderBlock(nn.Module):
 
         x_normed = self.ln2(x)
 
+        # prepare masks for cross attention heads
         if encoder_output.shape[1] == self.tril.shape[1]:
             attn_mask = self.tril == 0
             key_padding_mask = attention_mask == 0
@@ -76,7 +77,9 @@ class DecoderBlock(nn.Module):
                 device=self.device,
             )
             key_padding_mask = torch.zeros(
-                (encoder_output.shape[:2]), dtype=torch.bool, device=self.device
+                (encoder_output.shape[:2]),
+                dtype=torch.bool,
+                device=self.device,
             )
             is_causal = False
 
