@@ -25,12 +25,12 @@ def generate_text():
         max_length=args.max_length,
     )
 
-    predicted_tokens = data_handler.get_tokens(
+    predicted_tokens = semantic_encoder.get_tokens(
         ids=predicted_ids,
         skip_special_tokens=True,
     )
 
-    input_tokens = data_handler.get_tokens(
+    input_tokens = semantic_encoder.get_tokens(
         token_ids=encoder_idx,
         skip_special_tokens=True,
     )
@@ -50,11 +50,15 @@ if __name__ == "__main__":
     set_seed()
     device = get_device()
 
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
-        semantic_encoder=semantic_encoder,
         data_fp=args.data_fp,
         batch_size=args.batch_size,
+    )
+
+    semantic_encoder = SemanticEncoder(
+        label_encoder=data_handler.label_encoder,
+        max_length=args.max_length,
+        mode=args.mode,
     )
 
     semantic_decoder = SemanticDecoder(
@@ -63,8 +67,7 @@ if __name__ == "__main__":
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
-        semantic_encoder=semantic_encoder,
-        label_encoder=data_handler.label_encoder,
+        bert=semantic_encoder.bert,
     ).to(device)
 
     semantic_transformer = SemanticTransformer(

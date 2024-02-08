@@ -18,7 +18,6 @@ class SemanticTransformer(nn.Module):
 
     def forward(
         self,
-        decoder_idx,
         encoder_idx,
         encoder_attention_mask,
     ):
@@ -28,7 +27,7 @@ class SemanticTransformer(nn.Module):
         )
 
         decoder_idx, decoder_attention_mask, targets = shift_inputs(
-            xb=decoder_idx,
+            xb=encoder_idx,
             attention_mask=encoder_attention_mask,
             mode=self.mode,
         )

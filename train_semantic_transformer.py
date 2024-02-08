@@ -36,11 +36,15 @@ if __name__ == "__main__":
     set_seed()
     device = get_device()
 
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
-        semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
         data_fp=args.data_fp,
+    )
+
+    semantic_encoder = SemanticEncoder(
+        label_encoder=data_handler.label_encoder,
+        max_length=args.max_length,
+        mode=args.mode,
     )
 
     semantic_decoder = SemanticDecoder(
@@ -49,8 +53,7 @@ if __name__ == "__main__":
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
-        semantic_encoder=semantic_encoder,
-        label_encoder=data_handler.label_encoder,
+        bert=semantic_encoder.bert,
     ).to(device)
     load_model(semantic_decoder, args.semantic_decoder_path)
 
@@ -81,10 +84,9 @@ if __name__ == "__main__":
             encoder_idx = b[0].to(device)
             encoder_attention_mask = b[1].to(device)
 
-            decoder_idx = data_handler.label_encoder.transform(encoder_idx)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             _, loss = semantic_transformer(
-                decoder_idx=decoder_idx,
                 encoder_idx=encoder_idx,
                 encoder_attention_mask=encoder_attention_mask,
             )
@@ -102,11 +104,10 @@ if __name__ == "__main__":
             encoder_idx = b[0].to(device)
             encoder_attention_mask = b[1].to(device)
 
-            decoder_idx = data_handler.label_encoder.transform(encoder_idx)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             with torch.no_grad():
                 _, loss = semantic_transformer(
-                    decoder_idx=decoder_idx,
                     encoder_idx=encoder_idx,
                     encoder_attention_mask=encoder_attention_mask,
                 )
