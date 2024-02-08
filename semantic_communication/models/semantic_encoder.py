@@ -8,10 +8,11 @@ from transformers import AutoTokenizer, AutoModel
 from semantic_communication.utils.general import get_device
 
 
-class SemanticEncoder:
+class SemanticEncoder(nn.Module):
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
 
-    def __init__(self, label_encoder, max_length: int, mode: str):
+    def __init__(self, label_encoder, max_length, mode):
+        super().__init__()
         self.device = get_device()
 
         self.label_encoder = label_encoder
@@ -24,7 +25,7 @@ class SemanticEncoder:
             self.bert.embeddings.word_embeddings.weight[label_encoder.classes, :]
         )
 
-    def __call__(
+    def forward(
         self,
         messages: Optional[List[str]] = None,
         input_ids: Optional[torch.Tensor] = None,
@@ -36,14 +37,31 @@ class SemanticEncoder:
             attention_mask = tokens["attention_mask"]
 
         input_ids = self.label_encoder.transform(input_ids)
+        encoder_lhs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )["last_hidden_state"]
 
-        self.bert.eval()
-        with torch.no_grad():
-            bert_out = self.bert(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-            )
-        return bert_out
+        encoder_output = self.mean_pooling(
+            bert_lhs=encoder_lhs,
+            attention_mask=attention_mask,
+        )
+
+        encoder_output = torch.cat(
+            tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),
+            dim=1,
+        )
+
+        if self.mode == "predict":
+            encoder_output = encoder_output[:, :-1, :]
+        elif self.mode == "forward":
+            encoder_output = encoder_output[:, 1:, :]
+        elif self.mode == "sentence":
+            encoder_output = encoder_output[:, [0], :]
+        else:
+            raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
+
+        return encoder_output
 
     def tokenize(self, messages: List[str]):
         return self.tokenizer(

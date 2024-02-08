@@ -23,6 +23,7 @@ from semantic_communication.utils.general import (
     print_loss,
 )
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -58,9 +59,8 @@ if __name__ == "__main__":
     load_model(semantic_decoder, args.semantic_decoder_path)
 
     semantic_transformer = SemanticTransformer(
-        semantic_encoder=semantic_encoder.bert,
+        semantic_encoder=semantic_encoder,
         semantic_decoder=semantic_decoder,
-        mode=args.mode,
     )
     load_model(semantic_transformer, args.semantic_transformer_path)
 
@@ -87,8 +87,8 @@ if __name__ == "__main__":
             encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             _, loss = semantic_transformer(
-                encoder_idx=encoder_idx,
-                encoder_attention_mask=encoder_attention_mask,
+                input_ids=encoder_idx,
+                attention_mask=encoder_attention_mask,
             )
 
             optimizer.zero_grad(set_to_none=True)
@@ -108,8 +108,8 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 _, loss = semantic_transformer(
-                    encoder_idx=encoder_idx,
-                    encoder_attention_mask=encoder_attention_mask,
+                    input_ids=encoder_idx,
+                    attention_mask=encoder_attention_mask,
                 )
             val_losses.append(loss.item())
 

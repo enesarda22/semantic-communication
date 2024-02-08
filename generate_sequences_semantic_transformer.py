@@ -58,7 +58,6 @@ if __name__ == "__main__":
     semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
-        mode=args.mode,
     )
 
     semantic_decoder = SemanticDecoder(

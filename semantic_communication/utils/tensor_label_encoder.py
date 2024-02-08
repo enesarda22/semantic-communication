@@ -1,7 +1,5 @@
 import torch
 
-from semantic_communication.utils.general import get_device
-
 
 class TensorLabelEncoder:
     def __init__(self):
