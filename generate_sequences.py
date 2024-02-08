@@ -17,7 +17,7 @@ from semantic_communication.utils.general import (
 
 def generate_text():
     model.eval()
-    xb, attention_mask = next(iter(data_handler.train_dataloader))
+    xb, attention_mask = next(iter(data_handler.test_dataloader))
     xb = xb.to(device)
     attention_mask = attention_mask.to(device)
     B, T = xb.shape

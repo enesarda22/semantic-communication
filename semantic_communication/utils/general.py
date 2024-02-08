@@ -1,4 +1,5 @@
 import random
+import warnings
 from pathlib import Path
 
 import torch
@@ -37,8 +38,16 @@ def create_checkpoint(path, **kwargs):
 def load_model(model, state_dict_path):
     if state_dict_path is not None:
         checkpoint = torch.load(state_dict_path, map_location=get_device())
-        model.load_state_dict(checkpoint["model_state_dict"])
-        print(f"{state_dict_path} is loaded.")
+        missing_keys, unexpected_keys = model.load_state_dict(
+            state_dict=checkpoint["model_state_dict"],
+            strict=False,
+        )
+        if len(missing_keys) > 0:
+            raise RuntimeError(f"{missing_keys} are missing!")
+        elif len(unexpected_keys) > 0:
+            warnings.warn(f"{unexpected_keys} are unexpected!")
+        else:
+            print(f"{state_dict_path} is loaded.")
     else:
         print("state_dict_path is None!")
 
@@ -96,23 +105,20 @@ def add_channel_model_args(parser):
     parser.add_argument("--gamma-max", default=0.8, type=float)
 
 
-def shift_inputs(xb, encoder_output, attention_mask, mode):
+def shift_inputs(xb, attention_mask, mode):
     if mode == "predict":
         idx = xb[:, :-1]
-        encoder_output = encoder_output[:, :-1, :]
         attention_mask = attention_mask[:, :-1]
         targets = xb[:, 1:]
     elif mode == "forward":
         idx = xb[:, :-1]
-        encoder_output = encoder_output[:, 1:, :]
         attention_mask = attention_mask[:, 1:]
         targets = xb[:, 1:]
     elif mode == "sentence":
         idx = xb[:, :-1]
-        encoder_output = encoder_output[:, [0], :]
         attention_mask = attention_mask[:, 1:]
         targets = xb[:, 1:]
     else:
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
-    return idx, encoder_output, attention_mask, targets
+    return idx, attention_mask, targets
