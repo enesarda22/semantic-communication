@@ -36,7 +36,6 @@ class SemanticEncoder(nn.Module):
             input_ids = tokens["input_ids"]
             attention_mask = tokens["attention_mask"]
 
-        input_ids = self.label_encoder.transform(input_ids)
         encoder_lhs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask,
