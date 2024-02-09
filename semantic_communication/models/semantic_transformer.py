@@ -21,7 +21,6 @@ class SemanticTransformer(nn.Module):
         self.semantic_encoder = semantic_encoder
         self.semantic_decoder = semantic_decoder
         self.mode = semantic_encoder.mode
-        self.device = get_device()
 
     def forward(
         self,
