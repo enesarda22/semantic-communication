@@ -1,0 +1,72 @@
+Index: semantic_communication/utils/channel.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from abc import ABC\nimport torch\nimport numpy as np\nimport torch.nn.functional as F\nfrom semantic_communication.utils.general import get_device\n\n\nclass Channel(ABC):\n    def __init__(self, signal_power_constraint: float = 1.0):\n        self.signal_power_constraint = signal_power_constraint\n        self.device = get_device()\n\n    def __call__(self, x: torch.Tensor, SNR: float) -> torch.Tensor:\n        pass\n\n    def signal_process(self, x: torch.Tensor):\n        B, T, C = x.shape\n\n        # Average power constraint, normalize to signal power constraint\n        x = ((self.signal_power_constraint * C / 2) ** 0.5) * F.normalize(\n            x, dim=2, p=2\n        )\n\n        # Transform to complex (Batch, 2B) -> (Batch, 2, B)\n        n_d = int(C / 2)\n        x = torch.reshape(x, (B, T, 2, n_d))\n        return x\n\n\nclass AWGN(Channel):\n    def __init__(self, signal_power_constraint):\n        super().__init__(signal_power_constraint)\n\n    def __call__(self, x: torch.Tensor, SNR: float) -> torch.Tensor:\n        B, T, C = x.shape\n        x = self.signal_process(x)\n\n        linear_SNR = np.power(10, SNR / 10)\n        noise_var = self.signal_power_constraint / linear_SNR\n        noise = torch.normal(\n            mean=0.0,\n            std=(noise_var / 2) ** 0.5,\n            size=x.shape,\n        ).to(self.device)\n\n        y = x + noise\n        return torch.reshape(y, (B, T, C))\n\n\nclass Rayleigh(Channel):\n    def __init__(self, signal_power_constraint):\n        super().__init__(signal_power_constraint)\n\n    def __call__(self, x: torch.Tensor, SNR: float) -> torch.Tensor:\n        B, T, C = x.shape\n        x = self.signal_process(x)\n\n        h_re = torch.div(torch.randn(B, T, device=self.device), 2**0.5)\n        h_im = torch.div(torch.randn(B, T, device=self.device), 2**0.5)\n\n        h_re = h_re.unsqueeze(2).repeat(1, 1, int(C / 2))\n        h_im = h_im.unsqueeze(2).repeat(1, 1, int(C / 2))\n\n        y = torch.zeros(x.shape).to(self.device)\n        y[:, :, 0, :] = x[:, :, 0, :] * h_re - x[:, :, 1, :] * h_im\n        y[:, :, 1, :] = x[:, :, 0, :] * h_im + x[:, :, 1, :] * h_re\n\n        linear_SNR = np.power(10, SNR / 10)\n        noise_var = self.signal_power_constraint / linear_SNR\n        noise = torch.normal(\n            mean=0.0,\n            std=(noise_var / 2) ** 0.5,\n            size=x.shape,\n        ).to(self.device)\n\n        y = y + noise\n        return torch.reshape(y, (B, T, C))\n\n\ndef init_channel(channel_type: str, signal_power_constraint: float) -> Channel:\n    if channel_type == \"AWGN\":\n        return AWGN(signal_power_constraint)\n    elif channel_type == \"Rayleigh\":\n        return Rayleigh(signal_power_constraint)\n    else:\n        raise ValueError(\"Channel type should be AWGN or Rayleigh!\")\n\n\ndef get_SNR(SNR_min, SNR_max):\n    return (torch.rand(1) * (SNR_max - SNR_min) + SNR_min).item()\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/utils/channel.py b/semantic_communication/utils/channel.py
+--- a/semantic_communication/utils/channel.py	(revision 156047e32aa0a46bba926e9f43b773c68565afeb)
++++ b/semantic_communication/utils/channel.py	(date 1700700276565)
+@@ -6,20 +6,25 @@
+ 
+ 
+ class Channel(ABC):
+-    def __init__(self, signal_power_constraint: float = 1.0):
++    def __init__(
++        self,
++        signal_power_constraint: float = 1.0,
++        alpha: float = 3.0,
++        noise_pow: float = 1e-6,
++    ):
+         self.signal_power_constraint = signal_power_constraint
++        self.alpha = alpha
++        self.noise_pow = noise_pow
+         self.device = get_device()
+ 
+-    def __call__(self, x: torch.Tensor, SNR: float) -> torch.Tensor:
++    def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
+         pass
+ 
+-    def signal_process(self, x: torch.Tensor):
++    def signal_process(self, x: torch.Tensor, d: float):
+         B, T, C = x.shape
+ 
+         # Average power constraint, normalize to signal power constraint
+-        x = ((self.signal_power_constraint * C / 2) ** 0.5) * F.normalize(
+-            x, dim=2, p=2
+-        )
++        x = ((self.signal_power_constraint * C / 2) ** 0.5) * F.normalize(x, dim=2, p=2)
+ 
+         # Transform to complex (Batch, 2B) -> (Batch, 2, B)
+         n_d = int(C / 2)
+@@ -31,16 +36,15 @@
+     def __init__(self, signal_power_constraint):
+         super().__init__(signal_power_constraint)
+ 
+-    def __call__(self, x: torch.Tensor, SNR: float) -> torch.Tensor:
++    def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
+         B, T, C = x.shape
+-        x = self.signal_process(x)
++        x = self.signal_process(x, d)
+ 
+-        linear_SNR = np.power(10, SNR / 10)
+-        noise_var = self.signal_power_constraint / linear_SNR
+         noise = torch.normal(
+             mean=0.0,
+-            std=(noise_var / 2) ** 0.5,
++            std=self.noise_pow**0.5,
+             size=x.shape,
++            dtype=torch.complex128,
+         ).to(self.device)
+ 
+         y = x + noise
+@@ -51,7 +55,7 @@
+     def __init__(self, signal_power_constraint):
+         super().__init__(signal_power_constraint)
+ 
+-    def __call__(self, x: torch.Tensor, SNR: float) -> torch.Tensor:
++    def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
+         B, T, C = x.shape
+         x = self.signal_process(x)
+ 

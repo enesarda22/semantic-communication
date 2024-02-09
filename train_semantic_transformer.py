@@ -46,7 +46,7 @@ if __name__ == "__main__":
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
         mode=args.mode,
-    )
+    ).to(device)
 
     semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     semantic_transformer = SemanticTransformer(
         semantic_encoder=semantic_encoder,
         semantic_decoder=semantic_decoder,
-    )
+    ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
 
     optimizer = torch.optim.AdamW(semantic_transformer.parameters(), lr=args.lr)

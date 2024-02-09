@@ -14,29 +14,30 @@ from semantic_communication.utils.general import (
 
 
 def generate_text():
-    encoder_idx, encoder_attention_mask = next(iter(data_handler.test_dataloader))
+    for b in data_handler.test_dataloader:
+        encoder_idx = b[0].to(device)
+        encoder_attention_mask = b[1].to(device)
 
-    encoder_idx = encoder_idx.to(device)
-    encoder_attention_mask = encoder_attention_mask.to(device)
+        encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-    predicted_ids = semantic_transformer.generate(
-        encoder_idx=encoder_idx,
-        encoder_attention_mask=encoder_attention_mask,
-        max_length=args.max_length,
-    )
+        predicted_ids = semantic_transformer.generate(
+            input_ids=encoder_idx,
+            attention_mask=encoder_attention_mask,
+            max_length=args.max_length,
+        )
 
-    predicted_tokens = semantic_encoder.get_tokens(
-        ids=predicted_ids,
-        skip_special_tokens=True,
-    )
+        predicted_tokens = semantic_encoder.get_tokens(
+            ids=predicted_ids,
+            skip_special_tokens=True,
+        )
 
-    input_tokens = semantic_encoder.get_tokens(
-        token_ids=encoder_idx,
-        skip_special_tokens=True,
-    )
+        input_tokens = semantic_encoder.get_tokens(
+            ids=encoder_idx,
+            skip_special_tokens=True,
+        )
 
-    for input_, predicted in zip(input_tokens, predicted_tokens):
-        print(f"{input_}\n{predicted}\n")
+        for input_, predicted in zip(input_tokens, predicted_tokens):
+            print(f"{input_}\n{predicted}\n")
 
 
 if __name__ == "__main__":
@@ -51,14 +52,15 @@ if __name__ == "__main__":
     device = get_device()
 
     data_handler = DataHandler(
-        data_fp=args.data_fp,
         batch_size=args.batch_size,
+        data_fp=args.data_fp,
     )
 
     semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
-    )
+        mode=args.mode,
+    ).to(device)
 
     semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -70,9 +72,8 @@ if __name__ == "__main__":
     ).to(device)
 
     semantic_transformer = SemanticTransformer(
-        semantic_encoder=semantic_encoder.bert,
+        semantic_encoder=semantic_encoder,
         semantic_decoder=semantic_decoder,
-        mode=args.mode,
     ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
 

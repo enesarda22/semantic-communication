@@ -1,0 +1,73 @@
+Index: semantic_communication/models/semantic_decoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import torch\nimport torch.nn as nn\nfrom torch.nn import functional as F\nfrom torch.utils.data import TensorDataset, DataLoader\n\nfrom tqdm import tqdm\n\nfrom semantic_communication.utils.general import get_device\n\n\nclass MultiInputSequential(nn.Sequential):\n    def forward(self, *inputs):\n        for module in self._modules.values():\n            if type(inputs) == tuple:\n                inputs = module(*inputs)\n            else:\n                inputs = module(inputs)\n        return inputs\n\n\nclass DecoderBlock(nn.Module):\n    def __init__(self, n_heads, n_embeddings, block_size):\n        super().__init__()\n        self.sa_heads = nn.MultiheadAttention(\n            embed_dim=n_embeddings,\n            num_heads=n_heads,\n            dropout=0.1,\n            batch_first=True,\n        )\n        self.ca_heads = nn.MultiheadAttention(\n            embed_dim=n_embeddings,\n            num_heads=n_heads,\n            dropout=0.1,\n            batch_first=True,\n        )\n\n        self.ff_net = nn.Sequential(\n            nn.Linear(n_embeddings, 4 * n_embeddings),\n            nn.ReLU(),\n            nn.Linear(4 * n_embeddings, n_embeddings),  # projection\n            nn.Dropout(0.1),\n        )\n        self.ln1 = nn.LayerNorm(n_embeddings)\n        self.ln2 = nn.LayerNorm(n_embeddings)\n        self.ln3 = nn.LayerNorm(n_embeddings)\n\n        self.register_buffer(\"tril\", torch.tril(torch.ones(block_size, block_size)))\n\n    def forward(self, x, encoder_output, attention_mask):\n        # norm before the layer, residual connection after the layer\n        x_normed = self.ln1(x)\n        attention_out = self.sa_heads(\n            query=x_normed,\n            key=x_normed,\n            value=x_normed,\n            key_padding_mask=(attention_mask == 0),\n            need_weights=False,\n            attn_mask=(self.tril == 0),\n            is_causal=True,\n        )[0]\n        x = x + attention_out\n\n        x_normed = self.ln2(x)\n\n        if encoder_output.shape[1] == self.tril.shape[1]:\n            attn_mask = self.tril == 0\n            key_padding_mask = attention_mask == 0\n            is_causal = True\n        else:\n            attn_mask = torch.zeros(\n                (self.tril.shape[0], encoder_output.shape[1]), dtype=torch.bool\n            )\n            key_padding_mask = torch.zeros((encoder_output.shape[:2]), dtype=torch.bool)\n            is_causal = False\n\n        attention_out = self.ca_heads(\n            query=x_normed,\n            key=encoder_output,\n            value=encoder_output,\n            key_padding_mask=key_padding_mask,\n            need_weights=False,\n            attn_mask=attn_mask,\n            is_causal=is_causal,\n        )[0]\n        x = x + attention_out\n\n        x = x + self.ff_net(self.ln3(x))\n        return x, encoder_output, attention_mask\n\n\nclass SemanticDecoder(nn.Module):\n    def __init__(\n        self,\n        vocab_size,\n        n_blocks,\n        n_heads,\n        n_embeddings,\n        block_size,\n        semantic_encoder,\n        label_encoder,\n    ):\n        super().__init__()\n        self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)\n        self.token_embedding_table.weight = nn.Parameter(\n            semantic_encoder.bert.embeddings.word_embeddings.weight[\n                label_encoder.classes, :\n            ]\n        )\n        self.position_embedding_table = nn.Embedding(block_size, n_embeddings)\n\n        self.decoder_blocks = MultiInputSequential(\n            *[\n                DecoderBlock(\n                    n_heads=n_heads,\n                    n_embeddings=n_embeddings,\n                    block_size=block_size,\n                )\n                for _ in range(n_blocks)\n            ]\n        )\n        self.ln = nn.LayerNorm(n_embeddings)\n        self.lm_head = nn.Linear(n_embeddings, vocab_size, bias=False)\n        self.lm_head.weight = self.token_embedding_table.weight\n\n        self.device = get_device()\n\n    def forward(self, idx, encoder_output, attention_mask=None, targets=None):\n        B, T = idx.shape\n\n        token_embeddings = self.token_embedding_table(idx)  # (B,T,C)\n        pos_embeddings = self.position_embedding_table(\n            torch.arange(T, device=self.device)\n        )  # (T,C)\n        x = token_embeddings + pos_embeddings\n\n        if attention_mask is None:\n            attention_mask = torch.ones(B, T, dtype=torch.long).to(self.device)\n\n        x, _, _ = self.decoder_blocks(x, encoder_output, attention_mask)\n        logits = self.lm_head(self.ln(x))\n\n        if targets is None:\n            loss = None\n        else:\n            logits = logits.reshape(B * T, -1)\n            targets = targets.reshape(B * T)\n            attention_mask = attention_mask.flatten() == 1\n\n            loss = F.cross_entropy(logits[attention_mask, :], targets[attention_mask])\n\n        return logits, loss\n\n    def generate(\n        self,\n        encoder_output,\n        beam_width=5,\n        max_length=20,\n    ):\n        B = encoder_output.shape[0]\n        T = max_length\n\n        with torch.no_grad():\n            Y = torch.zeros(B, T).to(self.device).long()\n            Y[:, 0] = 1\n\n            attn_mask = torch.zeros(B, T).to(self.device).long()\n            attn_mask[:, 0] = 1\n\n            next_logits, _ = self(Y, encoder_output, attn_mask)\n            next_logits = next_logits[:, 0, :]\n            vocab_size = next_logits.shape[-1]\n\n            probabilities, next_chars = F.log_softmax(next_logits, dim=-1).topk(\n                k=beam_width, dim=-1\n            )\n\n            Y = Y.repeat((beam_width, 1))\n            Y[:, 1] = next_chars.flatten()\n\n            for i in tqdm(range(1, max_length - 1)):\n                attn_mask[:, i] = 1\n\n                dataset = TensorDataset(\n                    Y[:, -max_length:],\n                    encoder_output.repeat((beam_width, 1, 1, 1))\n                    .transpose(0, 1)\n                    .flatten(end_dim=1),\n                    attn_mask.repeat((beam_width, 1)),\n                )\n                dl = DataLoader(dataset, batch_size=32)\n                next_probabilities = []\n\n                for x, e, mask in tqdm(dl):\n                    next_logits, _ = self(x, e, mask)\n                    next_logits = next_logits[:, i, :]\n                    next_probabilities.append(F.log_softmax(next_logits, dim=-1))\n\n                next_probabilities = torch.cat(next_probabilities, axis=0)\n                next_probabilities = next_probabilities.reshape(\n                    (-1, beam_width, next_probabilities.shape[-1])\n                )\n                probabilities = probabilities.unsqueeze(-1) + next_probabilities\n                probabilities = probabilities.flatten(start_dim=1)\n                probabilities, idx = probabilities.topk(k=beam_width, axis=-1)\n                next_chars = torch.remainder(idx, vocab_size).flatten().unsqueeze(-1)\n\n                best_candidates = (idx / vocab_size).long()\n                best_candidates += (\n                    torch.arange(\n                        Y.shape[0] // beam_width, device=self.device\n                    ).unsqueeze(-1)\n                    * beam_width\n                )\n\n                Y = Y[best_candidates].flatten(end_dim=-2)\n                Y[:, i + 1] = next_chars.flatten()\n\n                if torch.all(torch.any(Y == 2, dim=1)):\n                    break\n\n            best_indices = torch.argmax(probabilities, dim=1)\n            Y = torch.gather(\n                Y.reshape(-1, beam_width, Y.shape[-1]),\n                1,\n                best_indices.reshape(-1, 1, 1).repeat((1, 1, Y.shape[-1])),\n            ).squeeze(1)\n\n            return Y\n\n    def generate_next(\n        self,\n        idx,\n        encoder_output,\n        attention_mask=None,\n        sample=False,\n    ):\n        B, T, C = encoder_output.shape\n\n        # get the predictions\n        logits, _ = self(idx, encoder_output, attention_mask)  # (B, T, C)\n        # apply softmax to get probabilities\n        probs = F.softmax(logits, dim=-1)  # (B, C)\n\n        if sample:\n            idx_next = torch.multinomial(\n                probs.view(B * self.block_size, -1),\n                num_samples=1,\n            )\n            idx_next = idx_next.reshape(B, -1)\n        else:\n            idx_next = torch.argmax(probs, dim=-1)\n\n        return idx_next  # (B, T)\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_decoder.py b/semantic_communication/models/semantic_decoder.py
+--- a/semantic_communication/models/semantic_decoder.py	(revision 3a4bd47bcbd61b25d50224e6445046c2a3894465)
++++ b/semantic_communication/models/semantic_decoder.py	(date 1705091030627)
+@@ -58,30 +58,30 @@
+             attn_mask=(self.tril == 0),
+             is_causal=True,
+         )[0]
+-        x = x + attention_out
+-
+-        x_normed = self.ln2(x)
+-
+-        if encoder_output.shape[1] == self.tril.shape[1]:
+-            attn_mask = self.tril == 0
+-            key_padding_mask = attention_mask == 0
+-            is_causal = True
+-        else:
+-            attn_mask = torch.zeros(
+-                (self.tril.shape[0], encoder_output.shape[1]), dtype=torch.bool
+-            )
+-            key_padding_mask = torch.zeros((encoder_output.shape[:2]), dtype=torch.bool)
+-            is_causal = False
+-
+-        attention_out = self.ca_heads(
+-            query=x_normed,
+-            key=encoder_output,
+-            value=encoder_output,
+-            key_padding_mask=key_padding_mask,
+-            need_weights=False,
+-            attn_mask=attn_mask,
+-            is_causal=is_causal,
+-        )[0]
++        # x = x + attention_out
++        #
++        # x_normed = self.ln2(x)
++        #
++        # if encoder_output.shape[1] == self.tril.shape[1]:
++        #     attn_mask = self.tril == 0
++        #     key_padding_mask = attention_mask == 0
++        #     is_causal = True
++        # else:
++        #     attn_mask = torch.zeros(
++        #         (self.tril.shape[0], encoder_output.shape[1]), dtype=torch.bool
++        #     )
++        #     key_padding_mask = torch.zeros((encoder_output.shape[:2]), dtype=torch.bool)
++        #     is_causal = False
++        #
++        # attention_out = self.ca_heads(
++        #     query=x_normed,
++        #     key=encoder_output,
++        #     value=encoder_output,
++        #     key_padding_mask=key_padding_mask,
++        #     need_weights=False,
++        #     attn_mask=attn_mask,
++        #     is_causal=is_causal,
++        # )[0]
+         x = x + attention_out
+ 
+         x = x + self.ff_net(self.ln3(x))
+@@ -132,6 +132,7 @@
+             torch.arange(T, device=self.device)
+         )  # (T,C)
+         x = token_embeddings + pos_embeddings
++        x[:, 0, :] = encoder_output[:, 0, :]
+ 
+         if attention_mask is None:
+             attention_mask = torch.ones(B, T, dtype=torch.long).to(self.device)

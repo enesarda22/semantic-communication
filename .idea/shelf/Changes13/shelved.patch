@@ -1,0 +1,345 @@
+Index: .idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023,_17_20_[Changes]/shelved.patch
+===================================================================
+diff --git a/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023,_17_20_[Changes]/shelved.patch b/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023,_17_20_[Changes]/shelved.patch
+deleted file mode 100644
+--- a/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023,_17_20_[Changes]/shelved.patch	(revision d45336c0ee138979084452bf2780538c9349fd9c)
++++ /dev/null	(revision d45336c0ee138979084452bf2780538c9349fd9c)
+@@ -1,105 +0,0 @@
+-Index: Baseline/eval_baseline.py
+-IDEA additional info:
+-Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+-<+>import numpy as np\nimport matplotlib.pyplot as plt\n\nfrom nltk.translate.bleu_score import sentence_bleu\nfrom utils.general import get_device, set_seed\nfrom baseline_models.tx_relay_rx_models import Tx_Relay, Tx_Relay_Rx\n\nfrom data_processing.data_handler import DataHandler\nfrom data_processing.semantic_encoder import SemanticEncoder\nfrom utils.channel import AWGN, Rayleigh\nimport torch\nimport argparse\nfrom torch.nn import functional as F\n\n\n\ndef semantic_similarity_score(target_sentences, received_sentences):\n    target_emb = semantic_encoder(messages=target_sentences)\n    received_emb = semantic_encoder(messages=received_sentences)\n    scores = F.cosine_similarity(target_emb, received_emb)\n\n    return scores\n\n\ndef bleu_1gram(target_sentences, received_sentences):\n    # score = []\n    # for (sent1, sent2) in zip(target_sentences, received_sentences):\n    #     sent1 = sent1.split()\n    #     sent2 = sent2.split()\n    #     score.append(sentence_bleu([sent1], sent2,\n    #                                weights=(1, 0, 0, 0)))\n    return sentence_bleu(\n        [target_sentences], received_sentences, weights=(1, 0, 0, 0)\n    )\n\n\ndef bleu_2gram(target_sentences, received_sentences):\n    # score = []\n    # for (sent1, sent2) in zip(target_sentences, received_sentences):\n    #     sent1 = sent1.split()\n    #     sent2 = sent2.split()\n    #     score.append(sentence_bleu([sent1], sent2,\n    #                                weights=(0, 1, 0, 0)))\n    return sentence_bleu(\n        [target_sentences], received_sentences, weights=(0, 1, 0, 0)\n    )\n\n\ndef bleu_3gram(target_sentences, received_sentences):\n    # score = []\n    # for (sent1, sent2) in zip(target_sentences, received_sentences):\n    #     sent1 = sent1.split()\n    #     sent2 = sent2.split()\n    #     score.append(sentence_bleu([sent1], sent2,\n    #                                weights=(0, 0, 1, 0)))\n    return sentence_bleu(\n        [target_sentences], received_sentences, weights=(0, 0, 1, 0)\n    )\n\n\ndef bleu_4gram(target_sentences, received_sentences):\n    # score = []\n    # for (sent1, sent2) in zip(target_sentences, received_sentences):\n    #     sent1 = sent1.split()\n    #     sent2 = sent2.split()\n    #     score.append(sentence_bleu([sent1], sent2,\n    #                                weights=(0, 0, 0, 1)))\n    return sentence_bleu(\n        [target_sentences], received_sentences, weights=(0, 0, 0, 1)\n    )\n\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--tx-relay-path\", type=str)\n    parser.add_argument(\"--tx-relay-rx-path\", type=str)\n\n    parser.add_argument(\"--SNR-list\", nargs=\"+\", type=int)\n\n    parser.add_argument(\"--checkpoint-path\", default=\"checkpoints\", type=str)\n    parser.add_argument(\"--n-samples\", default=10000, type=int)\n    parser.add_argument(\"--train-size\", default=0.9, type=float)\n    parser.add_argument(\"--max-length\", default=30, type=int)\n    parser.add_argument(\"--batch-size\", default=32, type=int)\n    parser.add_argument(\"--n-epochs\", default=10, type=int)\n    parser.add_argument(\"--lr\", default=1e-4, type=float)\n    parser.add_argument(\"--n-blocks\", default=1, type=int)\n    parser.add_argument(\"--n-heads\", default=4, type=int)\n    parser.add_argument(\"--n-embeddings\", default=384, type=int)\n\n    # New args\n    parser.add_argument(\"--channel-block-input-dim\", default=384, type=int)\n    parser.add_argument(\"--channel-block-latent-dim\", default=128, type=int)\n    parser.add_argument(\"--val-size\", default=0.2, type=float)\n    parser.add_argument(\"--sig-pow\", default=1.0, type=float)\n    parser.add_argument(\"--SNR-diff\", default=3, type=int)\n    parser.add_argument(\"--channel-type\", default=\"AWGN\", type=str)\n    args = parser.parse_args()\n\n    device = get_device()\n    set_seed()\n    # Create Data handler\n    semantic_encoder = SemanticEncoder(max_length=args.max_length)\n    data_handler = DataHandler(\n        semantic_encoder=semantic_encoder,\n        batch_size=args.batch_size,\n        n_samples=args.n_samples,\n        train_size=args.train_size,\n        val_size=args.val_size,\n    )\n    data_handler.load_data()\n\n    # Create Channels\n    if args.channel_type == \"AWGN\":\n        tx_rx_channel = AWGN(\n            int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow\n        )\n        tx_relay_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)\n        relay_rx_channel = AWGN(int(args.SNR_list[0]), args.sig_pow)\n\n    else:\n        tx_rx_channel = Rayleigh(\n            int(args.SNR_list[0]) - args.SNR_diff, args.sig_pow\n        )\n        tx_relay_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)\n        relay_rx_channel = Rayleigh(int(args.SNR_list[0]), args.sig_pow)\n\n    num_classes = data_handler.vocab_size\n\n    # Create Transceiver\n    tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=tx_relay_channel).to(device)\n    tx_relay_checkpoint = torch.load(args.tx_relay_path)\n    tx_relay_model.load_state_dict(tx_relay_checkpoint[\"model_state_dict\"])\n\n    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, tx_rx_channel, relay_rx_channel,tx_relay_model).to(device)\n    tx_relay_rx_checkpoint = torch.load(args.tx_relay_rx_path)\n    tx_relay_rx_model.load_state_dict(tx_relay_rx_checkpoint[\"model_state_dict\"])\n\n    semantic_sim = []\n    bleu_1 = []\n    bleu_2 = []\n    bleu_3 = []\n    bleu_4 = []\n    for SNR in args.SNR_list:\n        print(\"Simulating for SNR: \" + str(SNR))\n        # Create Channels\n        if args.channel_type == \"AWGN\":\n            tx_rx_channel = AWGN(int(SNR) - args.SNR_diff, args.sig_pow)\n            tx_relay_channel = AWGN(int(SNR), args.sig_pow)\n            relay_rx_channel = AWGN(int(SNR), args.sig_pow)\n\n        else:\n            tx_rx_channel = Rayleigh(int(SNR) - args.SNR_diff, args.sig_pow)\n            tx_relay_channel = Rayleigh(int(SNR), args.sig_pow)\n            relay_rx_channel = Rayleigh(int(SNR), args.sig_pow)\n\n        tx_relay_rx_model.tx_rx_channel = tx_rx_channel\n        tx_relay_rx_model.relay_rx_channel = relay_rx_channel\n        tx_relay_rx_model.tx_relay_model.channel = tx_relay_channel\n\n        cosine_scores = []\n        bleu1_scores = []\n        bleu2_scores = []\n        bleu3_scores = []\n        bleu4_scores = []\n\n        tx_relay_rx_model.eval()\n        for b in data_handler.test_dataloader:\n            xb = b[0].to(device)\n            attention_mask = b[1].to(device)\n\n            B, T = xb.shape\n\n            with torch.no_grad():\n                logits, _ = tx_relay_rx_model(xb, attention_mask)\n                probs = F.softmax(logits, dim=-1)\n                predicted_ids = (torch.argmax(probs, dim=-1)).reshape(\n                    B, args.max_length\n                )\n\n                end_token_id = data_handler.encoder.transform([102])[0]\n                end_prediction_idx = torch.argmax(\n                    predicted_ids.eq(end_token_id).double(), dim=1\n                )\n\n                # zero means no end token prediction\n                end_prediction_idx[end_prediction_idx == 0] = T - 1\n\n                # prediction mask is created based on end token predictions\n                pred_mask = (torch.arange(T - 1).to(device)).le(\n                    end_prediction_idx.view(-1, 1)\n                )\n\n                predicted_sentences = data_handler.get_tokens(\n                    ids=predicted_ids,\n                    attention_mask=pred_mask,\n                    skip_special_tokens=True,\n                )\n\n                original_sentences = data_handler.get_tokens(\n                    ids=xb,\n                    attention_mask=attention_mask,\n                    skip_special_tokens=True,\n                )\n\n                for s1, s2 in zip(original_sentences, predicted_sentences):\n                    cosine_scores.append(\n                        semantic_similarity_score([s1], [s2])[0][0]\n                    )\n\n                    bleu1_scores.append(bleu_1gram(s1, s2))\n                    bleu2_scores.append(bleu_2gram(s1, s2))\n                    bleu3_scores.append(bleu_3gram(s1, s2))\n                    bleu4_scores.append(bleu_4gram(s1, s2))\n\n        semantic_sim.append(np.mean(cosine_scores))\n        bleu_1.append(np.mean(bleu1_scores))\n        bleu_2.append(np.mean(bleu2_scores))\n        bleu_3.append(np.mean(bleu3_scores))\n        bleu_4.append(np.mean(bleu4_scores))\n\n    snr_np = np.array(args.SNR_list).astype(int)\n\n    plt.figure()\n    plt.plot(args.SNR_list, semantic_sim)\n    plt.grid()\n    plt.xlabel(\"Channel SNR (dB)\")\n    plt.ylabel(\"Semantic Similarity\")\n    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))\n    plt.title(\"Semantic Similarity v. Channel SNR (dB)\")\n    plt.savefig(\"SemanticSimilarty_v_SNR.png\", dpi=400)\n\n    plt.figure()\n    plt.plot(args.SNR_list, bleu_1)\n    plt.grid()\n    plt.xlabel(\"Channel SNR (dB)\")\n    plt.ylabel(\"BLEU 1-gram\")\n    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))\n    plt.title(\"BLEU 1-gram v. Channel SNR (dB)\")\n    plt.savefig(\"BLEU1gram_v_SNR.png\", dpi=400)\n\n    plt.figure()\n    plt.plot(args.SNR_list, bleu_2)\n    plt.grid()\n    plt.xlabel(\"Channel SNR (dB)\")\n    plt.ylabel(\"BLEU 2-gram\")\n    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))\n    plt.title(\"BLEU 2-gram v. Channel SNR (dB)\")\n    plt.savefig(\"BLEU2gam_v_SNR.png\", dpi=400)\n\n    plt.figure()\n    plt.plot(args.SNR_list, bleu_3)\n    plt.grid()\n    plt.xlabel(\"Channel SNR (dB)\")\n    plt.ylabel(\"BLEU 3-gram\")\n    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))\n    plt.title(\"BLEU 3-gram v. Channel SNR (dB)\")\n    plt.savefig(\"BLEU3gram_v_SNR.png\", dpi=400)\n\n    plt.figure()\n    plt.plot(args.SNR_list, bleu_4)\n    plt.grid()\n    plt.xlabel(\"Channel SNR (dB)\")\n    plt.ylabel(\"BLEU 4-gram\")\n    plt.xticks(np.arange(np.min(snr_np), np.max(snr_np), 3))\n    plt.title(\"BLEU 4-gram v. Channel SNR (dB)\")\n    plt.savefig(\"BLEU4gram_v_SNR.png\", dpi=400)\n\n    with open('semantic_sim.npy', 'wb') as f:\n        np.save(f, semantic_sim)\n\n    with open('bleu_1.npy', 'wb') as f:\n        np.save(f, bleu_1)\n\n    with open('bleu_2.npy', 'wb') as f:\n        np.save(f, bleu_2)\n\n    with open('bleu_3.npy', 'wb') as f:\n        np.save(f, bleu_3)\n\n    with open('bleu_4.npy', 'wb') as f:\n        np.save(f, bleu_4)\n
+-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+-<+>UTF-8
+-===================================================================
+-diff --git a/Baseline/eval_baseline.py b/Baseline/eval_baseline.py
+---- a/Baseline/eval_baseline.py	(revision 5566b652f3e3a951d41878db04a04636a72d5283)
+-+++ b/Baseline/eval_baseline.py	(date 1699378630580)
+-@@ -13,7 +13,6 @@
+- from torch.nn import functional as F
+- 
+- 
+--
+- def semantic_similarity_score(target_sentences, received_sentences):
+-     target_emb = semantic_encoder(messages=target_sentences)
+-     received_emb = semantic_encoder(messages=received_sentences)
+-@@ -78,14 +77,9 @@
+-     parser.add_argument("--SNR-list", nargs="+", type=int)
+- 
+-     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
+--    parser.add_argument("--n-samples", default=10000, type=int)
+--    parser.add_argument("--train-size", default=0.9, type=float)
+-+    parser.add_argument("--data-fp", default="", type=str)
+-     parser.add_argument("--max-length", default=30, type=int)
+-     parser.add_argument("--batch-size", default=32, type=int)
+--    parser.add_argument("--n-epochs", default=10, type=int)
+--    parser.add_argument("--lr", default=1e-4, type=float)
+--    parser.add_argument("--n-blocks", default=1, type=int)
+--    parser.add_argument("--n-heads", default=4, type=int)
+-     parser.add_argument("--n-embeddings", default=384, type=int)
+- 
+-     # New args
+-@@ -104,11 +98,8 @@
+-     data_handler = DataHandler(
+-         semantic_encoder=semantic_encoder,
+-         batch_size=args.batch_size,
+--        n_samples=args.n_samples,
+--        train_size=args.train_size,
+--        val_size=args.val_size,
+-+        data_fp=args.data_fp,
+-     )
+--    data_handler.load_data()
+- 
+-     # Create Channels
+-     if args.channel_type == "AWGN":
+-@@ -128,13 +119,29 @@
+-     num_classes = data_handler.vocab_size
+- 
+-     # Create Transceiver
+--    tx_relay_model = Tx_Relay(num_classes, n_emb=args.channel_block_input_dim, n_latent=args.channel_block_latent_dim, channel=tx_relay_channel).to(device)
+--    tx_relay_checkpoint = torch.load(args.tx_relay_path)
+-+    tx_relay_model = Tx_Relay(
+-+        num_classes,
+-+        n_emb=args.channel_block_input_dim,
+-+        n_latent=args.channel_block_latent_dim,
+-+        channel=tx_relay_channel,
+-+    ).to(device)
+-+    tx_relay_checkpoint = torch.load(args.tx_relay_path, map_location=device)
+-     tx_relay_model.load_state_dict(tx_relay_checkpoint["model_state_dict"])
+- 
+--    tx_relay_rx_model = Tx_Relay_Rx(num_classes, args.channel_block_input_dim, args.channel_block_latent_dim, tx_rx_channel, relay_rx_channel,tx_relay_model).to(device)
+--    tx_relay_rx_checkpoint = torch.load(args.tx_relay_rx_path)
+--    tx_relay_rx_model.load_state_dict(tx_relay_rx_checkpoint["model_state_dict"])
+-+    tx_relay_rx_model = Tx_Relay_Rx(
+-+        num_classes,
+-+        args.channel_block_input_dim,
+-+        args.channel_block_latent_dim,
+-+        tx_rx_channel,
+-+        relay_rx_channel,
+-+        tx_relay_model,
+-+    ).to(device)
+-+    tx_relay_rx_checkpoint = torch.load(
+-+        args.tx_relay_rx_path, map_location=device
+-+    )
+-+    tx_relay_rx_model.load_state_dict(
+-+        tx_relay_rx_checkpoint["model_state_dict"]
+-+    )
+- 
+-     semantic_sim = []
+-     bleu_1 = []
+-@@ -266,17 +273,17 @@
+-     plt.title("BLEU 4-gram v. Channel SNR (dB)")
+-     plt.savefig("BLEU4gram_v_SNR.png", dpi=400)
+- 
+--    with open('semantic_sim.npy', 'wb') as f:
+-+    with open("semantic_sim.npy", "wb") as f:
+-         np.save(f, semantic_sim)
+- 
+--    with open('bleu_1.npy', 'wb') as f:
+-+    with open("bleu_1.npy", "wb") as f:
+-         np.save(f, bleu_1)
+- 
+--    with open('bleu_2.npy', 'wb') as f:
+-+    with open("bleu_2.npy", "wb") as f:
+-         np.save(f, bleu_2)
+- 
+--    with open('bleu_3.npy', 'wb') as f:
+-+    with open("bleu_3.npy", "wb") as f:
+-         np.save(f, bleu_3)
+- 
+--    with open('bleu_4.npy', 'wb') as f:
+-+    with open("bleu_4.npy", "wb") as f:
+-         np.save(f, bleu_4)
+Index: .idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023__17_20__Changes_.xml
+===================================================================
+diff --git a/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023__17_20__Changes_.xml b/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023__17_20__Changes_.xml
+deleted file mode 100644
+--- a/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023__17_20__Changes_.xml	(revision d45336c0ee138979084452bf2780538c9349fd9c)
++++ /dev/null	(revision d45336c0ee138979084452bf2780538c9349fd9c)
+@@ -1,4 +0,0 @@
+-<changelist name="Uncommitted_changes_before_Update_at_8_11_2023,_17_20_[Changes]" date="1699482033016" recycled="true" deleted="true">
+-  <option name="PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_8_11_2023,_17_20_[Changes]/shelved.patch" />
+-  <option name="DESCRIPTION" value="Uncommitted changes before Update at 8.11.2023, 17:20 [Changes]" />
+-</changelist>
+\ No newline at end of file
+Index: semantic_communication/models/semantic_decoder_v2.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import torch\nimport torch.nn as nn\nfrom torch.nn import functional as F\n\nfrom semantic_communication.utils.general import get_device\n\n\nclass MultiInputSequential(nn.Sequential):\n    def forward(self, *inputs):\n        for module in self._modules.values():\n            if type(inputs) == tuple:\n                inputs = module(*inputs)\n            else:\n                inputs = module(inputs)\n        return inputs\n\n\nclass DecoderBlock(nn.Module):\n    def __init__(self, n_heads, n_embeddings, block_size):\n        super().__init__()\n        self.sa_heads = nn.MultiheadAttention(\n            embed_dim=n_embeddings,\n            num_heads=n_heads,\n            dropout=0.1,\n            batch_first=True,\n        )\n        self.ca_heads = nn.MultiheadAttention(\n            embed_dim=n_embeddings,\n            num_heads=n_heads,\n            dropout=0.1,\n            batch_first=True,\n        )\n\n        self.ff_net = nn.Sequential(\n            nn.Linear(n_embeddings, 4 * n_embeddings),\n            nn.ReLU(),\n            nn.Linear(4 * n_embeddings, n_embeddings),  # projection\n            nn.Dropout(0.1),\n        )\n        self.ln1 = nn.LayerNorm(n_embeddings)\n        self.ln2 = nn.LayerNorm(n_embeddings)\n        self.ln3 = nn.LayerNorm(n_embeddings)\n\n        self.register_buffer(\"tril\", torch.tril(torch.ones(block_size, block_size)))\n\n    def forward(self, x, encoder_output, attention_mask):\n        # norm before the layer, residual connection after the layer\n        x_normed = self.ln1(x)\n        attention_out = self.sa_heads(\n            query=x_normed,\n            key=x_normed,\n            value=x_normed,\n            key_padding_mask=(attention_mask == 0),\n            need_weights=False,\n            attn_mask=(self.tril == 0),\n            is_causal=True,\n        )[0]\n        x = x + attention_out\n\n        x_normed = self.ln2(x)\n        attention_out = self.ca_heads(\n            query=x_normed,\n            key=encoder_output,\n            value=encoder_output,\n            key_padding_mask=(attention_mask == 0),\n            need_weights=False,\n            attn_mask=(self.tril == 0),\n            is_causal=True,\n        )[0]\n        x = x + attention_out\n\n        x = x + self.ff_net(self.ln3(x))\n        return x, attention_mask\n\n\nclass SemanticDecoder(nn.Module):\n    def __init__(self, vocab_size, n_blocks, n_heads, n_embeddings, block_size):\n        super().__init__()\n        self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)\n        self.position_embedding_table = nn.Embedding(block_size, n_embeddings)\n\n        self.decoder_blocks = MultiInputSequential(\n            *[\n                DecoderBlock(\n                    n_heads=n_heads,\n                    n_embeddings=n_embeddings,\n                    block_size=block_size,\n                )\n                for _ in range(n_blocks)\n            ]\n        )\n        self.ln = nn.LayerNorm(n_embeddings)\n        self.lm_head = nn.Linear(n_embeddings, vocab_size)\n        self.device = get_device()\n\n    def forward(self, idx, encoder_output, attention_mask=None, targets=None):\n        B, T, C = encoder_output.shape\n\n        token_embeddings = self.token_embedding_table(idx)  # (B,T,C)\n        pos_embeddings = self.position_embedding_table(\n            torch.arange(T, device=self.device)\n        )  # (T,C)\n        x = token_embeddings + pos_embeddings\n\n        if attention_mask is None:\n            attention_mask = torch.ones(B, T, dtype=torch.long).to(self.device)\n\n        x, _ = self.decoder_blocks(x, encoder_output, attention_mask)\n        logits = self.lm_head(self.ln(x))\n\n        if targets is None:\n            loss = None\n        else:\n            logits = logits.reshape(B * T, -1)\n            targets = targets.reshape(B * T)\n            attention_mask = attention_mask.flatten() == 1\n\n            loss = F.cross_entropy(logits[attention_mask, :], targets[attention_mask])\n\n        return logits, loss\n\n    def generate(self, encoder_output, attention_mask=None, sample=False):\n        B, T, C = encoder_output.shape\n\n        # get the predictions\n        logits, _ = self(encoder_output, attention_mask)  # (B, T, C)\n        # apply softmax to get probabilities\n        probs = F.softmax(logits, dim=-1)  # (B, C)\n\n        if sample:\n            idx_next = torch.multinomial(\n                probs.view(B * self.block_size, -1),\n                num_samples=1,\n            )\n            idx_next = idx_next.reshape(B, -1)\n        else:\n            idx_next = torch.argmax(probs, dim=-1)\n\n        return idx_next  # (B, T)\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_decoder_v2.py b/semantic_communication/models/semantic_decoder_v2.py
+--- a/semantic_communication/models/semantic_decoder_v2.py	(revision d45336c0ee138979084452bf2780538c9349fd9c)
++++ b/semantic_communication/models/semantic_decoder_v2.py	(date 1702682255982)
+@@ -74,9 +74,23 @@
+ 
+ 
+ class SemanticDecoder(nn.Module):
+-    def __init__(self, vocab_size, n_blocks, n_heads, n_embeddings, block_size):
++    def __init__(
++        self,
++        vocab_size,
++        n_blocks,
++        n_heads,
++        n_embeddings,
++        block_size,
++        semantic_encoder,
++        label_encoder,
++    ):
+         super().__init__()
+         self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
++        self.token_embedding_table.weight = nn.Parameter(
++            semantic_encoder.bert.embeddings.word_embeddings.weight[
++                label_encoder.classes, :
++            ]
++        )
+         self.position_embedding_table = nn.Embedding(block_size, n_embeddings)
+ 
+         self.decoder_blocks = MultiInputSequential(
+@@ -90,7 +104,9 @@
+             ]
+         )
+         self.ln = nn.LayerNorm(n_embeddings)
+-        self.lm_head = nn.Linear(n_embeddings, vocab_size)
++        self.lm_head = nn.Linear(n_embeddings, vocab_size, bias=False)
++        self.lm_head.weight = self.token_embedding_table.weight
++
+         self.device = get_device()
+ 
+     def forward(self, idx, encoder_output, attention_mask=None, targets=None):
+Index: train_relay_decoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import argparse\nimport os\n\nimport numpy as np\nfrom tqdm import tqdm\nimport torch\n\nfrom semantic_communication.data_processing.data_handler import DataHandler\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.general import (\n    get_device,\n    print_loss,\n    create_checkpoint,\n    set_seed,\n    add_semantic_decoder_args,\n    add_data_args,\n    add_train_args,\n)\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n\n    parser.add_argument(\"--relay-decoder-path\", default=None, type=str)\n    add_semantic_decoder_args(parser)\n    add_data_args(parser)\n    add_train_args(parser)\n    args = parser.parse_args()\n\n    set_seed()\n    device = get_device()\n\n    semantic_encoder = SemanticEncoder(max_length=args.max_length)\n    data_handler = DataHandler(\n        semantic_encoder=semantic_encoder,\n        batch_size=args.batch_size,\n        data_fp=args.data_fp,\n    )\n\n    relay_decoder = SemanticDecoder(\n        vocab_size=data_handler.vocab_size,\n        n_blocks=args.n_blocks,\n        n_heads=args.n_heads,\n        n_embeddings=args.n_embeddings,\n        block_size=args.max_length,\n    ).to(device)\n    optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)\n\n    if args.relay_decoder_path is not None:\n        checkpoint = torch.load(args.relay_decoder_path)\n        relay_decoder.load_state_dict(checkpoint[\"model_state_dict\"])\n        optimizer.load_state_dict(checkpoint[\"optimizer_state_dict\"])\n\n    best_loss = torch.inf\n    for epoch in range(args.n_epochs):\n        train_losses = []\n        relay_decoder.train()\n        for b in tqdm(data_handler.train_dataloader):\n            xb = b[0].to(device)\n            attention_mask = b[1].to(device)\n\n            encoder_output = semantic_encoder(\n                input_ids=xb,\n                attention_mask=attention_mask,\n            )\n\n            xb = data_handler.label_encoder.transform(xb)\n            _, loss = relay_decoder(\n                encoder_output=encoder_output[:, :-1, :],\n                attention_mask=attention_mask[:, :-1],\n                targets=xb[:, 1:],\n            )\n\n            optimizer.zero_grad(set_to_none=True)\n            loss.backward()\n            optimizer.step()\n\n            train_losses.append(loss.item())\n\n        val_losses = []\n        relay_decoder.eval()\n        for b in data_handler.val_dataloader:\n            xb = b[0].to(device)\n            attention_mask = b[1].to(device)\n\n            encoder_output = semantic_encoder(\n                input_ids=xb,\n                attention_mask=attention_mask,\n            )\n            xb = data_handler.label_encoder.transform(xb)\n\n            with torch.no_grad():\n                _, loss = relay_decoder(\n                    encoder_output=encoder_output[:, :-1, :],\n                    attention_mask=attention_mask[:, :-1],\n                    targets=xb[:, 1:],\n                )\n            val_losses.append(loss.item())\n\n        print(\"\\n\")\n        print_loss(train_losses, \"Train\")\n        print_loss(val_losses, \"Val\")\n\n        mean_loss = np.mean(val_losses)\n\n        checkpoint_path = os.path.join(\n            args.checkpoint_path,\n            f\"relay-decoder/relay_decoder_{epoch}.pt\",\n        )\n\n        if mean_loss < best_loss:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=relay_decoder.state_dict(),\n                optimizer_state_dict=optimizer.state_dict(),\n                mean_val_loss=mean_loss,\n            )\n            best_loss = mean_loss\n        else:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=None,\n                optimizer_state_dict=None,\n                mean_val_loss=mean_loss,\n            )\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/train_relay_decoder.py b/train_relay_decoder.py
+--- a/train_relay_decoder.py	(revision d45336c0ee138979084452bf2780538c9349fd9c)
++++ b/train_relay_decoder.py	(date 1702679863642)
+@@ -6,7 +6,7 @@
+ import torch
+ 
+ from semantic_communication.data_processing.data_handler import DataHandler
+-from semantic_communication.models.semantic_decoder import SemanticDecoder
++from semantic_communication.models.semantic_decoder_v2 import SemanticDecoder
+ from semantic_communication.models.semantic_encoder import SemanticEncoder
+ from semantic_communication.utils.general import (
+     get_device,
+@@ -43,6 +43,8 @@
+         n_heads=args.n_heads,
+         n_embeddings=args.n_embeddings,
+         block_size=args.max_length,
++        semantic_encoder=semantic_encoder,
++        label_encoder=data_handler.label_encoder,
+     ).to(device)
+     optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)
+ 
+@@ -66,6 +68,7 @@
+ 
+             xb = data_handler.label_encoder.transform(xb)
+             _, loss = relay_decoder(
++                idx=xb[:, :-1],
+                 encoder_output=encoder_output[:, :-1, :],
+                 attention_mask=attention_mask[:, :-1],
+                 targets=xb[:, 1:],
+@@ -91,6 +94,7 @@
+ 
+             with torch.no_grad():
+                 _, loss = relay_decoder(
++                    idx=xb[:, :-1],
+                     encoder_output=encoder_output[:, :-1, :],
+                     attention_mask=attention_mask[:, :-1],
+                     targets=xb[:, 1:],
+Index: semantic_communication/models/semantic_decoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import torch\nimport torch.nn as nn\nfrom torch.nn import functional as F\n\nfrom semantic_communication.models.multi_head_attention import (\n    MultiHeadAttention,\n)\n\nfrom semantic_communication.utils.general import get_device\n\n\nclass MultiInputSequential(nn.Sequential):\n    def forward(self, *inputs):\n        for module in self._modules.values():\n            if type(inputs) == tuple:\n                inputs = module(*inputs)\n            else:\n                inputs = module(inputs)\n        return inputs\n\n\nclass DecoderBlock(nn.Module):\n    def __init__(self, n_heads, n_embeddings, block_size):\n        super().__init__()\n        self.sa_heads = MultiHeadAttention(\n            n_heads=n_heads,\n            embedding_size=n_embeddings,\n            head_size=n_embeddings // n_heads,\n            block_size=block_size,\n        )\n        self.ff_net = nn.Sequential(\n            nn.Linear(n_embeddings, 4 * n_embeddings),\n            nn.ReLU(),\n            nn.Linear(4 * n_embeddings, n_embeddings),  # projection\n            nn.Dropout(0.1),\n        )\n        self.ln1 = nn.LayerNorm(n_embeddings)\n        self.ln2 = nn.LayerNorm(n_embeddings)\n\n    def forward(self, x, attention_mask):\n        # residual connection after the layer, norm before the layer\n        x = x + self.sa_heads(self.ln1(x), attention_mask)\n        x = x + self.ff_net(self.ln2(x))\n\n        return x, attention_mask\n\n\nclass SemanticDecoder(nn.Module):\n    def __init__(\n        self, vocab_size, n_blocks, n_heads, n_embeddings, block_size\n    ):\n        super().__init__()\n        self.decoder_blocks = MultiInputSequential(\n            *[\n                DecoderBlock(\n                    n_heads=n_heads,\n                    n_embeddings=n_embeddings,\n                    block_size=block_size,\n                )\n                for _ in range(n_blocks)\n            ]\n        )\n        self.ln = nn.LayerNorm(n_embeddings)\n        self.lm_head = nn.Linear(n_embeddings, vocab_size)\n\n        self.block_size = block_size\n\n    def forward(self, encoder_output, attention_mask=None, targets=None):\n        B, T, C = encoder_output.shape\n\n        if attention_mask is None:\n            attention_mask = torch.ones(B, T, dtype=torch.long).to(\n                get_device()\n            )\n\n        x, _ = self.decoder_blocks(encoder_output, attention_mask)\n        logits = self.lm_head(self.ln(x))\n\n        if targets is None:\n            loss = None\n        else:\n            logits = logits.reshape(B * T, -1)\n            targets = targets.reshape(B * T)\n            attention_mask = attention_mask.flatten() == 1\n\n            loss = F.cross_entropy(\n                logits[attention_mask, :], targets[attention_mask]\n            )\n\n        return logits, loss\n\n    def generate(self, encoder_output, attention_mask=None, sample=False):\n        B, T, C = encoder_output.shape\n\n        # get the predictions\n        logits, _ = self(encoder_output, attention_mask)  # (B, T, C)\n        # apply softmax to get probabilities\n        probs = F.softmax(logits, dim=-1)  # (B, C)\n\n        if sample:\n            idx_next = torch.multinomial(\n                probs.view(B * self.block_size, -1),\n                num_samples=1,\n            )\n            idx_next = idx_next.reshape(B, -1)\n        else:\n            idx_next = torch.argmax(probs, dim=-1)\n\n        return idx_next  # (B, T)\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_decoder.py b/semantic_communication/models/semantic_decoder.py
+--- a/semantic_communication/models/semantic_decoder.py	(revision d45336c0ee138979084452bf2780538c9349fd9c)
++++ b/semantic_communication/models/semantic_decoder.py	(date 1702600609937)
+@@ -28,6 +28,13 @@
+             head_size=n_embeddings // n_heads,
+             block_size=block_size,
+         )
++        self.ca_heads = MultiHeadAttention(
++            n_heads=n_heads,
++            embedding_size=n_embeddings,
++            head_size=n_embeddings // n_heads,
++            block_size=block_size,
++        )
++
+         self.ff_net = nn.Sequential(
+             nn.Linear(n_embeddings, 4 * n_embeddings),
+             nn.ReLU(),
+@@ -36,20 +43,26 @@
+         )
+         self.ln1 = nn.LayerNorm(n_embeddings)
+         self.ln2 = nn.LayerNorm(n_embeddings)
++        self.ln3 = nn.LayerNorm(n_embeddings)
+ 
+-    def forward(self, x, attention_mask):
++    def forward(self, x, encoder_output, attention_mask):
+         # residual connection after the layer, norm before the layer
+-        x = x + self.sa_heads(self.ln1(x), attention_mask)
+-        x = x + self.ff_net(self.ln2(x))
++        x_normed = self.ln1(x)
++        x = x + self.sa_heads(x_normed, x_normed, attention_mask)
+ 
++        x_normed = self.ln2(x)
++        x = x + self.ca_heads(x_normed, encoder_output, attention_mask)
++
++        x = x + self.ff_net(self.ln3(x))
+         return x, attention_mask
+ 
+ 
+ class SemanticDecoder(nn.Module):
+-    def __init__(
+-        self, vocab_size, n_blocks, n_heads, n_embeddings, block_size
+-    ):
++    def __init__(self, vocab_size, n_blocks, n_heads, n_embeddings, block_size):
+         super().__init__()
++        self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
++        self.position_embedding_table = nn.Embedding(block_size, n_embeddings)
++
+         self.decoder_blocks = MultiInputSequential(
+             *[
+                 DecoderBlock(
+@@ -64,16 +77,21 @@
+         self.lm_head = nn.Linear(n_embeddings, vocab_size)
+ 
+         self.block_size = block_size
++        self.device = get_device()
+ 
+-    def forward(self, encoder_output, attention_mask=None, targets=None):
++    def forward(self, idx, encoder_output, attention_mask=None, targets=None):
+         B, T, C = encoder_output.shape
+ 
++        token_embeddings = self.token_embedding_table(idx)  # (B,T,C)
++        pos_embeddings = self.position_embedding_table(
++            torch.arange(T, device=self.device)
++        )  # (T,C)
++        x = token_embeddings + pos_embeddings
++
+         if attention_mask is None:
+-            attention_mask = torch.ones(B, T, dtype=torch.long).to(
+-                get_device()
+-            )
++            attention_mask = torch.ones(B, T, dtype=torch.long).to(self.device)
+ 
+-        x, _ = self.decoder_blocks(encoder_output, attention_mask)
++        x, _ = self.decoder_blocks(x, encoder_output, attention_mask)
+         logits = self.lm_head(self.ln(x))
+ 
+         if targets is None:
+@@ -83,9 +101,7 @@
+             targets = targets.reshape(B * T)
+             attention_mask = attention_mask.flatten() == 1
+ 
+-            loss = F.cross_entropy(
+-                logits[attention_mask, :], targets[attention_mask]
+-            )
++            loss = F.cross_entropy(logits[attention_mask, :], targets[attention_mask])
+ 
+         return logits, loss
+ 
+Index: semantic_communication/models/multi_head_attention.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import torch\nfrom torch import nn\nfrom torch.nn import functional as F\n\n\nclass MultiHeadAttention(nn.Module):\n    def __init__(self, n_heads, embedding_size, head_size, block_size):\n        super().__init__()\n        self.N = n_heads\n\n        self.key = nn.Linear(embedding_size, head_size * n_heads, bias=False)\n        self.query = nn.Linear(embedding_size, head_size * n_heads, bias=False)\n        self.value = nn.Linear(embedding_size, head_size * n_heads, bias=False)\n        self.register_buffer(\n            \"tril\", torch.tril(torch.ones(block_size, block_size))\n        )\n\n        self.proj = nn.Linear(embedding_size, embedding_size)\n        self.dropout = nn.Dropout(0.1)\n\n    def forward(self, x, attention_mask):\n        B, T, C = x.shape\n\n        K = self.key(x).view(B, T, self.N, -1)\n        Q = self.query(x).view(B, T, self.N, -1)\n        V = self.value(x).view(B, T, self.N, -1)\n\n        wei = torch.einsum(\"b i h d , b j h d -> b h i j\", Q, K)\n        wei = wei * (C**-0.5)  # normalize\n\n        # TODO: allow tokens to communicate with future tokens\n        # tril mask to disable communication with future tokens\n        wei = wei.masked_fill(self.tril == 0, -torch.inf)  # (B,N,T,T)\n        wei = wei.transpose(0, 1)  # (N,B,T,T)\n\n        # attention mask to disable communication with paddings\n        extended_mask = attention_mask.unsqueeze(-1).to(torch.float64)\n        extended_mask = extended_mask @ extended_mask.transpose(1, 2)\n\n        wei = F.softmax(wei, dim=-1)  # (N,B,T,T)\n        wei.masked_fill(extended_mask == 0, 0)\n\n        wei = self.dropout(wei)\n        out = torch.einsum(\"h b j i, b i h d -> b j h d\", wei, V)\n\n        out = out.reshape(B, T, C)\n        out = self.dropout(self.proj(out))\n        return out\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/multi_head_attention.py b/semantic_communication/models/multi_head_attention.py
+--- a/semantic_communication/models/multi_head_attention.py	(revision d45336c0ee138979084452bf2780538c9349fd9c)
++++ b/semantic_communication/models/multi_head_attention.py	(date 1702600484183)
+@@ -11,19 +11,17 @@
+         self.key = nn.Linear(embedding_size, head_size * n_heads, bias=False)
+         self.query = nn.Linear(embedding_size, head_size * n_heads, bias=False)
+         self.value = nn.Linear(embedding_size, head_size * n_heads, bias=False)
+-        self.register_buffer(
+-            "tril", torch.tril(torch.ones(block_size, block_size))
+-        )
++        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
+ 
+         self.proj = nn.Linear(embedding_size, embedding_size)
+         self.dropout = nn.Dropout(0.1)
+ 
+-    def forward(self, x, attention_mask):
+-        B, T, C = x.shape
++    def forward(self, x_q, x_k, attention_mask):
++        B, T, C = x_q.shape
+ 
+-        K = self.key(x).view(B, T, self.N, -1)
+-        Q = self.query(x).view(B, T, self.N, -1)
+-        V = self.value(x).view(B, T, self.N, -1)
++        Q = self.query(x_q).view(B, T, self.N, -1)
++        K = self.key(x_k).view(B, T, self.N, -1)
++        V = self.value(x_k).view(B, T, self.N, -1)
+ 
+         wei = torch.einsum("b i h d , b j h d -> b h i j", Q, K)
+         wei = wei * (C**-0.5)  # normalize

@@ -1,0 +1,632 @@
+Index: semantic_communication/data_processing/data_handler.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import os\nfrom typing import List\n\nimport torch\n\nfrom torch.utils.data import (\n    RandomSampler,\n    DataLoader,\n)\n\nfrom semantic_communication.data_processing.preprocessor import Preprocessor\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.general import get_device\n\n\nclass DataHandler:\n    def __init__(\n        self,\n        semantic_encoder: SemanticEncoder,\n        data_fp: str,\n        batch_size: int,\n    ):\n        self.device = get_device()\n        self.semantic_encoder = semantic_encoder\n        self.data_fp = data_fp\n        self.batch_size = batch_size\n\n        encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)\n        self.encoder = torch.load(encoder_fp, map_location=\"cpu\")\n\n        self.vocab_size = len(self.encoder.classes_)\n\n        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)\n        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)\n        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)\n\n    def get_tokens(\n        self,\n        ids,\n        attention_mask=None,\n        skip_special_tokens=False,\n    ) -> List[str]:\n        if attention_mask is not None:\n            pad_token_id = self.encoder.transform([0])[0]\n            ids = torch.masked_fill(ids, attention_mask == 0, pad_token_id)\n\n        token_ids = self.encoder.inverse_transform(ids.flatten().to(\"cpu\"))\n        token_ids = token_ids.reshape(ids.shape)\n\n        tokens = [\n            self.semantic_encoder.tokenizer.decode(\n                t, skip_special_tokens=skip_special_tokens\n            )\n            for t in token_ids\n        ]\n        return tokens\n\n    def encode_token_ids(self, token_ids: torch.Tensor):\n        ids = self.encoder.transform(token_ids.flatten().to(\"cpu\"))\n        ids = ids.reshape(-1, self.semantic_encoder.max_length)\n        return torch.LongTensor(ids).to(self.device)\n\n    def init_dl(self, fn: str):\n        fp = os.path.join(self.data_fp, fn)\n\n        dataset = torch.load(fp, map_location=self.device)\n        sampler = RandomSampler(dataset)\n\n        return DataLoader(\n            dataset=dataset,\n            sampler=sampler,\n            batch_size=self.batch_size,\n        )\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/data_processing/data_handler.py b/semantic_communication/data_processing/data_handler.py
+--- a/semantic_communication/data_processing/data_handler.py	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/semantic_communication/data_processing/data_handler.py	(date 1702578450958)
+@@ -25,10 +25,10 @@
+         self.data_fp = data_fp
+         self.batch_size = batch_size
+ 
+-        encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
+-        self.encoder = torch.load(encoder_fp, map_location="cpu")
++        label_encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
++        self.label_encoder = torch.load(label_encoder_fp)
+ 
+-        self.vocab_size = len(self.encoder.classes_)
++        self.vocab_size = len(self.label_encoder.classes)
+ 
+         self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
+         self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
+@@ -41,12 +41,10 @@
+         skip_special_tokens=False,
+     ) -> List[str]:
+         if attention_mask is not None:
+-            pad_token_id = self.encoder.transform([0])[0]
+-            ids = torch.masked_fill(ids, attention_mask == 0, pad_token_id)
++            pad_id = self.label_encoder.pad_id
++            ids = torch.masked_fill(ids, attention_mask == 0, pad_id)
+ 
+-        token_ids = self.encoder.inverse_transform(ids.flatten().to("cpu"))
+-        token_ids = token_ids.reshape(ids.shape)
+-
++        token_ids = self.label_encoder.inverse_transform(ids)
+         tokens = [
+             self.semantic_encoder.tokenizer.decode(
+                 t, skip_special_tokens=skip_special_tokens
+@@ -55,11 +53,6 @@
+         ]
+         return tokens
+ 
+-    def encode_token_ids(self, token_ids: torch.Tensor):
+-        ids = self.encoder.transform(token_ids.flatten().to("cpu"))
+-        ids = ids.reshape(-1, self.semantic_encoder.max_length)
+-        return torch.LongTensor(ids).to(self.device)
+-
+     def init_dl(self, fn: str):
+         fp = os.path.join(self.data_fp, fn)
+ 
+Index: preprocess_data.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import argparse\nimport glob\nimport os\n\nfrom tqdm import tqdm\n\nimport torch\nfrom torch.utils.data import TensorDataset\nfrom sklearn.preprocessing import LabelEncoder\n\nfrom semantic_communication.data_processing.preprocessor import Preprocessor\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--europarl-folder-path\", type=str)\n    parser.add_argument(\"--output-data-fp\", default=\"\", type=str)\n    parser.add_argument(\"--max-length\", default=30, type=int)\n    parser.add_argument(\"--train-size\", default=0.7, type=float)\n    parser.add_argument(\"--test-size\", default=0.5, type=float)\n    parser.add_argument(\"--n-samples\", default=None, type=int)\n    args = parser.parse_args()\n\n    en_fp = os.path.join(args.europarl_folder_path, \"en/*.txt\")\n    txt_filepaths = sorted(glob.glob(en_fp))\n\n    preprocessed_messages = []\n    for txt_fp in tqdm(txt_filepaths, \"Txt files\"):\n        with open(txt_fp, \"r\", encoding=\"utf-8\") as f:\n            m = f.read()\n\n        preprocessed_messages.extend(Preprocessor.preprocess(m))\n        if args.n_samples and (args.n_samples < len(preprocessed_messages)):\n            preprocessed_messages = preprocessed_messages[: args.n_samples]\n            break\n\n    print(f\"Number of sentences: {len(preprocessed_messages)}\")\n\n    # tokenize\n    semantic_encoder = SemanticEncoder(max_length=args.max_length)\n    tokens = semantic_encoder.tokenize(messages=preprocessed_messages)\n\n    # drop sentences shorter than 2 tokens\n    long_sentence_query = tokens[\"attention_mask\"].sum(dim=1) > 4\n    attention_mask = tokens[\"attention_mask\"][long_sentence_query, :]\n    input_ids = tokens[\"input_ids\"][long_sentence_query, :]\n\n    (\n        train_input_ids,\n        train_attention_mask,\n        val_input_ids,\n        val_attention_mask,\n        test_input_ids,\n        test_attention_mask,\n    ) = Preprocessor.split_data(\n        input_ids=input_ids,\n        attention_mask=attention_mask,\n        train_size=args.train_size,\n        test_size=args.test_size,\n    )\n\n    # drop the unknown tokens in val/test sets\n    unique_ids = torch.unique(train_input_ids)\n\n    val_query = torch.all(torch.isin(val_input_ids, unique_ids), dim=1)\n    val_input_ids = val_input_ids[val_query, :]\n    val_attention_mask = val_attention_mask[val_query, :]\n\n    test_query = torch.all(torch.isin(test_input_ids, unique_ids), dim=1)\n    test_input_ids = test_input_ids[test_query, :]\n    test_attention_mask = test_attention_mask[test_query, :]\n\n    # train label encoder\n    encoder_fp = os.path.join(args.output_data_fp, Preprocessor.encoder_fn)\n    encoder = LabelEncoder().fit(train_input_ids.flatten().to(\"cpu\"))\n    torch.save(encoder, encoder_fp)\n\n    train_dataset = TensorDataset(train_input_ids, train_attention_mask)\n    val_dataset = TensorDataset(val_input_ids, val_attention_mask)\n    test_dataset = TensorDataset(test_input_ids, test_attention_mask)\n\n    train_fp = os.path.join(args.output_data_fp, Preprocessor.train_data_fn)\n    torch.save(train_dataset, train_fp)\n\n    val_fp = os.path.join(args.output_data_fp, Preprocessor.val_data_fn)\n    torch.save(val_dataset, val_fp)\n\n    test_fp = os.path.join(args.output_data_fp, Preprocessor.test_data_fn)\n    torch.save(test_dataset, test_fp)\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/preprocess_data.py b/preprocess_data.py
+--- a/preprocess_data.py	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/preprocess_data.py	(date 1702509014813)
+@@ -6,10 +6,10 @@
+ 
+ import torch
+ from torch.utils.data import TensorDataset
+-from sklearn.preprocessing import LabelEncoder
+ 
+ from semantic_communication.data_processing.preprocessor import Preprocessor
+ from semantic_communication.models.semantic_encoder import SemanticEncoder
++from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
+ 
+ if __name__ == "__main__":
+     parser = argparse.ArgumentParser()
+@@ -72,7 +72,7 @@
+ 
+     # train label encoder
+     encoder_fp = os.path.join(args.output_data_fp, Preprocessor.encoder_fn)
+-    encoder = LabelEncoder().fit(train_input_ids.flatten().to("cpu"))
++    encoder = TensorLabelEncoder().fit(train_input_ids)
+     torch.save(encoder, encoder_fp)
+ 
+     train_dataset = TensorDataset(train_input_ids, train_attention_mask)
+Index: semantic_communication/utils/tensor_label_encoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/utils/tensor_label_encoder.py b/semantic_communication/utils/tensor_label_encoder.py
+new file mode 100644
+--- /dev/null	(date 1702579452622)
++++ b/semantic_communication/utils/tensor_label_encoder.py	(date 1702579452622)
+@@ -0,0 +1,22 @@
++import torch
++
++
++class TensorLabelEncoder:
++    def __init__(self):
++        self.classes = None
++        self.pad_id = None
++        self.cls_id = None
++
++    def fit(self, x):
++        self.classes = torch.unique(x)
++        self.pad_id = torch.nonzero(self.classes == 0)[0][0].item()
++        self.cls_id = torch.nonzero(self.classes == 101)[0][0].item()
++        return self
++
++    def transform(self, x):
++        bool_tensor = torch.eq(x.reshape(1, -1), self.classes.reshape(-1, 1))
++        indices = torch.argmax(bool_tensor.to(torch.int8), dim=0)
++        return indices.view(x.shape)
++
++    def inverse_transform(self, y):
++        return self.classes[y]
+Index: train_relay_decoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import argparse\nimport os\n\nimport numpy as np\nfrom tqdm import tqdm\nimport torch\n\nfrom semantic_communication.data_processing.data_handler import DataHandler\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.general import (\n    get_device,\n    print_loss,\n    create_checkpoint,\n    set_seed,\n    add_semantic_decoder_args,\n    add_data_args,\n    add_train_args,\n)\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n\n    parser.add_argument(\"--relay-decoder-path\", default=None, type=str)\n    add_semantic_decoder_args(parser)\n    add_data_args(parser)\n    add_train_args(parser)\n    args = parser.parse_args()\n\n    set_seed()\n    device = get_device()\n\n    semantic_encoder = SemanticEncoder(max_length=args.max_length)\n    data_handler = DataHandler(\n        semantic_encoder=semantic_encoder,\n        batch_size=args.batch_size,\n        data_fp=args.data_fp,\n    )\n\n    relay_decoder = SemanticDecoder(\n        vocab_size=data_handler.vocab_size,\n        n_blocks=args.n_blocks,\n        n_heads=args.n_heads,\n        n_embeddings=args.n_embeddings,\n        block_size=args.max_length,\n    ).to(device)\n    optimizer = torch.optim.AdamW(relay_decoder.parameters(), lr=args.lr)\n\n    if args.relay_decoder_path is not None:\n        checkpoint = torch.load(args.relay_decoder_path)\n        relay_decoder.load_state_dict(checkpoint[\"model_state_dict\"])\n        optimizer.load_state_dict(checkpoint[\"optimizer_state_dict\"])\n\n    best_loss = torch.inf\n    for epoch in range(args.n_epochs):\n        train_losses = []\n        relay_decoder.train()\n        for b in tqdm(data_handler.train_dataloader):\n            xb = b[0].to(device)\n            attention_mask = b[1].to(device)\n\n            encoder_output = semantic_encoder(\n                input_ids=xb,\n                attention_mask=attention_mask,\n            )\n\n            xb = data_handler.encode_token_ids(xb)\n            logits, loss = relay_decoder(\n                encoder_output=encoder_output[:, :-1, :],\n                attention_mask=attention_mask[:, :-1],\n                targets=xb[:, 1:],\n            )\n\n            optimizer.zero_grad(set_to_none=True)\n            loss.backward()\n            optimizer.step()\n\n            train_losses.append(loss.item())\n\n        val_losses = []\n        relay_decoder.eval()\n        for b in data_handler.val_dataloader:\n            xb = b[0].to(device)\n            attention_mask = b[1].to(device)\n\n            encoder_output = semantic_encoder(\n                input_ids=xb,\n                attention_mask=attention_mask,\n            )\n            xb = data_handler.encode_token_ids(xb)\n\n            with torch.no_grad():\n                _, loss = relay_decoder(\n                    encoder_output=encoder_output[:, :-1, :],\n                    attention_mask=attention_mask[:, :-1],\n                    targets=xb[:, 1:],\n                )\n            val_losses.append(loss.item())\n\n        print(\"\\n\")\n        print_loss(train_losses, \"Train\")\n        print_loss(val_losses, \"Val\")\n\n        mean_loss = np.mean(val_losses)\n\n        checkpoint_path = os.path.join(\n            args.checkpoint_path,\n            f\"relay-decoder/relay_decoder_{epoch}.pt\",\n        )\n\n        if mean_loss < best_loss:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=relay_decoder.state_dict(),\n                optimizer_state_dict=optimizer.state_dict(),\n                mean_val_loss=mean_loss,\n            )\n            best_loss = mean_loss\n        else:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=None,\n                optimizer_state_dict=None,\n                mean_val_loss=mean_loss,\n            )\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/train_relay_decoder.py b/train_relay_decoder.py
+--- a/train_relay_decoder.py	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/train_relay_decoder.py	(date 1702578497764)
+@@ -64,8 +64,8 @@
+                 attention_mask=attention_mask,
+             )
+ 
+-            xb = data_handler.encode_token_ids(xb)
+-            logits, loss = relay_decoder(
++            xb = data_handler.label_encoder.transform(xb)
++            _, loss = relay_decoder(
+                 encoder_output=encoder_output[:, :-1, :],
+                 attention_mask=attention_mask[:, :-1],
+                 targets=xb[:, 1:],
+@@ -87,7 +87,7 @@
+                 input_ids=xb,
+                 attention_mask=attention_mask,
+             )
+-            xb = data_handler.encode_token_ids(xb)
++            xb = data_handler.label_encoder.transform(xb)
+ 
+             with torch.no_grad():
+                 _, loss = relay_decoder(
+Index: train_end_to_end.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import argparse\nimport os\n\nimport numpy as np\nimport torch\nfrom tqdm import tqdm\n\nfrom semantic_communication.data_processing.data_handler import DataHandler\nfrom semantic_communication.models.transceiver import (\n    TxRelayChannelModel,\n    TxRelayRxChannelModel,\n    Transceiver,\n    RelayChannelBlock,\n    ChannelEncoder,\n)\nfrom semantic_communication.utils.channel import (\n    init_channel,\n    get_distance,\n)\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.general import (\n    get_device,\n    print_loss,\n    create_checkpoint,\n    set_seed,\n    add_semantic_decoder_args,\n    add_channel_model_args,\n    add_data_args,\n    add_train_args,\n    load_model,\n    load_optimizer,\n)\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n    parser.add_argument(\"--transceiver-path\", type=str)\n\n    # semantic decoders\n    parser.add_argument(\"--receiver-decoder-path\", type=str)\n    add_semantic_decoder_args(parser)\n\n    # channel models\n    parser.add_argument(\"--relay-channel-block-path\", type=str)\n    parser.add_argument(\"--tx-relay-rx-channel-model-path\", type=str)\n    add_channel_model_args(parser)\n\n    add_data_args(parser)\n    add_train_args(parser)\n    args = parser.parse_args()\n\n    set_seed()\n    device = get_device()\n\n    semantic_encoder = SemanticEncoder(max_length=args.max_length)\n    data_handler = DataHandler(\n        semantic_encoder=semantic_encoder,\n        batch_size=args.batch_size,\n        data_fp=args.data_fp,\n    )\n\n    relay_decoder = SemanticDecoder(\n        vocab_size=data_handler.vocab_size,\n        n_blocks=args.n_blocks,\n        n_heads=args.n_heads,\n        n_embeddings=args.n_embeddings,\n        block_size=args.max_length,\n    ).to(device)\n\n    tx_channel_enc = ChannelEncoder(\n        nin=args.channel_block_input_dim,\n        nout=args.channel_block_latent_dim,\n    ).to(device)\n\n    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)\n    tx_relay_channel_model = TxRelayChannelModel(\n        nin=args.channel_block_input_dim,\n        n_latent=args.channel_block_latent_dim,\n        channel=channel,\n    ).to(device)\n\n    relay_channel_block = RelayChannelBlock(\n        semantic_decoder=relay_decoder,\n        tx_channel_enc=tx_channel_enc,\n        tx_relay_channel_enc_dec=tx_relay_channel_model,\n    ).to(device)\n    load_model(relay_channel_block, args.relay_channel_block_path)\n\n    # freeze\n    for param in relay_channel_block.parameters():\n        param.requires_grad = False\n\n    receiver_decoder = SemanticDecoder(\n        vocab_size=data_handler.vocab_size,\n        n_blocks=args.n_blocks,\n        n_heads=args.n_heads,\n        n_embeddings=args.n_embeddings * 2,\n        block_size=args.max_length,\n    ).to(device)\n    load_model(receiver_decoder, args.receiver_decoder_path)\n\n    tx_relay_rx_channel_model = TxRelayRxChannelModel(\n        nin=args.channel_block_input_dim,\n        n_latent=args.channel_block_latent_dim,\n        channel=channel,\n    ).to(device)\n    load_model(tx_relay_rx_channel_model, args.tx_relay_rx_channel_model_path)\n\n    transceiver = Transceiver(\n        semantic_encoder=semantic_encoder,\n        relay_channel_block=relay_channel_block,\n        rx_semantic_decoder=receiver_decoder,\n        tx_relay_rx_channel_enc_dec=tx_relay_rx_channel_model,\n        encoder=data_handler.encoder,\n    )\n    load_model(transceiver, args.transceiver_path)\n\n    optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)\n    load_optimizer(optimizer, args.transceiver_path)\n    scheduler = torch.optim.lr_scheduler.OneCycleLR(\n        optimizer=optimizer,\n        max_lr=args.lr,\n        total_steps=args.n_epochs,\n    )\n\n    best_loss = torch.inf\n    for epoch in range(args.n_epochs):\n        train_losses = []\n        transceiver.train()\n        for b in tqdm(data_handler.train_dataloader):\n            xb = b[0].to(device)\n            targets = data_handler.encode_token_ids(xb)\n            attention_mask = b[1].to(device)\n\n            d_sd = get_distance(args.d_min, args.d_max)\n            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)\n            d_rd = d_sd - d_sr\n\n            logits, loss = transceiver(\n                xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd\n            )\n\n            optimizer.zero_grad(set_to_none=True)\n            loss.backward()\n            optimizer.step()\n            train_losses.append(loss.item())\n\n        scheduler.step()\n\n        val_losses = []\n        transceiver.eval()\n        for b in data_handler.val_dataloader:\n            xb = b[0].to(device)\n            targets = data_handler.encode_token_ids(xb)\n            attention_mask = b[1].to(device)\n\n            d_sd = get_distance(args.d_min, args.d_max)\n            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)\n            d_rd = d_sd - d_sr\n            with torch.no_grad():\n                _, loss = transceiver(\n                    xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd\n                )\n\n            val_losses.append(loss.item())\n\n        print(\"\\n\")\n        print_loss(train_losses, \"Train\")\n        print_loss(val_losses, \"Val\")\n\n        mean_loss = np.mean(val_losses)\n\n        checkpoint_path = os.path.join(\n            args.checkpoint_path,\n            f\"end-to-end-transceiver/end_to_end_transceiver_{epoch}.pt\",\n        )\n\n        if mean_loss < best_loss:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=transceiver.state_dict(),\n                optimizer_state_dict=optimizer.state_dict(),\n                mean_val_loss=mean_loss,\n            )\n            best_loss = mean_loss\n        else:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=None,\n                optimizer_state_dict=None,\n                mean_val_loss=mean_loss,\n            )\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/train_end_to_end.py b/train_end_to_end.py
+--- a/train_end_to_end.py	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/train_end_to_end.py	(date 1702578608717)
+@@ -7,11 +7,11 @@
+ 
+ from semantic_communication.data_processing.data_handler import DataHandler
+ from semantic_communication.models.transceiver import (
+-    TxRelayChannelModel,
+-    TxRelayRxChannelModel,
+     Transceiver,
+     RelayChannelBlock,
+     ChannelEncoder,
++    SrcRelayChannelModel,
++    SrcRelayDstChannelModel,
+ )
+ from semantic_communication.utils.channel import (
+     init_channel,
+@@ -37,12 +37,12 @@
+     parser.add_argument("--transceiver-path", type=str)
+ 
+     # semantic decoders
+-    parser.add_argument("--receiver-decoder-path", type=str)
++    parser.add_argument("--dst-decoder-path", type=str)
+     add_semantic_decoder_args(parser)
+ 
+     # channel models
+     parser.add_argument("--relay-channel-block-path", type=str)
+-    parser.add_argument("--tx-relay-rx-channel-model-path", type=str)
++    parser.add_argument("--src-relay-dst-channel-model-path", type=str)
+     add_channel_model_args(parser)
+ 
+     add_data_args(parser)
+@@ -67,22 +67,22 @@
+         block_size=args.max_length,
+     ).to(device)
+ 
+-    tx_channel_enc = ChannelEncoder(
++    src_channel_enc = ChannelEncoder(
+         nin=args.channel_block_input_dim,
+         nout=args.channel_block_latent_dim,
+     ).to(device)
+ 
+     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
+-    tx_relay_channel_model = TxRelayChannelModel(
+-        nin=args.channel_block_input_dim,
++    src_relay_channel_model = SrcRelayChannelModel(
++        n_in=args.channel_block_input_dim,
+         n_latent=args.channel_block_latent_dim,
+         channel=channel,
+     ).to(device)
+ 
+     relay_channel_block = RelayChannelBlock(
++        source_channel_encoder=src_channel_enc,
++        src_relay_channel_model=src_relay_channel_model,
+         semantic_decoder=relay_decoder,
+-        tx_channel_enc=tx_channel_enc,
+-        tx_relay_channel_enc_dec=tx_relay_channel_model,
+     ).to(device)
+     load_model(relay_channel_block, args.relay_channel_block_path)
+ 
+@@ -90,28 +90,28 @@
+     for param in relay_channel_block.parameters():
+         param.requires_grad = False
+ 
+-    receiver_decoder = SemanticDecoder(
++    dst_decoder = SemanticDecoder(
+         vocab_size=data_handler.vocab_size,
+         n_blocks=args.n_blocks,
+         n_heads=args.n_heads,
+         n_embeddings=args.n_embeddings * 2,
+         block_size=args.max_length,
+     ).to(device)
+-    load_model(receiver_decoder, args.receiver_decoder_path)
++    load_model(dst_decoder, args.dst_decoder_path)
+ 
+-    tx_relay_rx_channel_model = TxRelayRxChannelModel(
+-        nin=args.channel_block_input_dim,
++    src_relay_dst_channel_model = SrcRelayDstChannelModel(
++        n_in=args.channel_block_input_dim,
+         n_latent=args.channel_block_latent_dim,
+         channel=channel,
+     ).to(device)
+-    load_model(tx_relay_rx_channel_model, args.tx_relay_rx_channel_model_path)
++    load_model(src_relay_dst_channel_model, args.src_relay_dst_channel_model_path)
+ 
+     transceiver = Transceiver(
+         semantic_encoder=semantic_encoder,
+         relay_channel_block=relay_channel_block,
+-        rx_semantic_decoder=receiver_decoder,
+-        tx_relay_rx_channel_enc_dec=tx_relay_rx_channel_model,
+-        encoder=data_handler.encoder,
++        dst_semantic_decoder=dst_decoder,
++        src_relay_dst_channel_model=src_relay_dst_channel_model,
++        label_encoder=data_handler.label_encoder,
+     )
+     load_model(transceiver, args.transceiver_path)
+ 
+@@ -129,16 +129,14 @@
+         transceiver.train()
+         for b in tqdm(data_handler.train_dataloader):
+             xb = b[0].to(device)
+-            targets = data_handler.encode_token_ids(xb)
+             attention_mask = b[1].to(device)
++            targets = data_handler.label_encoder.transform(xb)
+ 
+             d_sd = get_distance(args.d_min, args.d_max)
+             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+             d_rd = d_sd - d_sr
+ 
+-            logits, loss = transceiver(
+-                xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd
+-            )
++            _, loss = transceiver(xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd)
+ 
+             optimizer.zero_grad(set_to_none=True)
+             loss.backward()
+@@ -151,8 +149,8 @@
+         transceiver.eval()
+         for b in data_handler.val_dataloader:
+             xb = b[0].to(device)
+-            targets = data_handler.encode_token_ids(xb)
+             attention_mask = b[1].to(device)
++            targets = data_handler.label_encoder.transform(xb)
+ 
+             d_sd = get_distance(args.d_min, args.d_max)
+             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project version=\"4\">\n  <component name=\"VcsDirectoryMappings\">\n    <mapping directory=\"\" vcs=\"Git\" />\n  </component>\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+--- a/.idea/vcs.xml	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/.idea/vcs.xml	(date 1701490201904)
+@@ -2,5 +2,6 @@
+ <project version="4">
+   <component name="VcsDirectoryMappings">
+     <mapping directory="" vcs="Git" />
++    <mapping directory="$PROJECT_DIR$/SciencePlots" vcs="Git" />
+   </component>
+ </project>
+\ No newline at end of file
+Index: semantic_communication/models/transceiver.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import numpy as np\nimport torch\nfrom sklearn.preprocessing import LabelEncoder\nfrom torch import nn\n\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.channel import Channel\nfrom semantic_communication.utils.general import get_device\n\n\nclass ChannelEncComp(nn.Module):\n    def __init__(self, in_dim, out_dim):\n        super(ChannelEncComp, self).__init__()\n        self.linear = nn.Linear(in_dim, out_dim)\n        self.bn = nn.BatchNorm1d(out_dim)\n        self.prelu = nn.PReLU()\n\n    def forward(self, x):\n        x = self.linear(x).transpose(1, 2)\n        x = self.bn(x).transpose(1, 2)\n        out = self.prelu(x)\n        return out\n\n\nclass ChannelEncoder(nn.Module):\n    def __init__(self, nin, nout):\n        super(ChannelEncoder, self).__init__()\n        up_dim = int(np.floor(np.log2(nin) / 2))\n        low_dim = int(np.ceil(np.log2(nout) / 2))\n\n        dims = [nin]\n        for i in range(up_dim - low_dim + 1):\n            dims.append(np.power(4, up_dim - i))\n\n        self.layers = nn.ModuleList(\n            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]\n        )\n\n        self.linear = nn.Linear(dims[-1], nout)\n\n    def forward(self, x):\n        for l in self.layers:\n            x = l(x)\n        return self.linear(x)\n\n\nclass ChannelDecoder(nn.Module):\n    def __init__(self, nin, nout):\n        super(ChannelDecoder, self).__init__()\n        up_dim = int(np.floor(np.log2(nout) / 2))\n        low_dim = int(np.ceil(np.log2(nin) / 2))\n        dims = [nin]\n        for i in range(up_dim - low_dim + 1):\n            dims.append(np.power(4, low_dim + i))\n\n        self.layers = nn.ModuleList(\n            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]\n        )\n\n        self.linear = nn.Linear(dims[-1], nout)\n\n    def forward(self, x):\n        x = x / torch.norm(x, dim=2, keepdim=True)\n        for l in self.layers:\n            x = l(x)\n        return self.linear(x)\n\n\nclass TxRelayChannelModel(nn.Module):\n    def __init__(self, nin, n_latent, channel: Channel):\n        super(TxRelayChannelModel, self).__init__()\n        self.relay_decoder = ChannelDecoder(n_latent, nin)\n        self.channel = channel\n\n    def forward(self, x, d_sr):\n        ch_output = self.channel(x, d_sr)\n        x_hat = self.relay_decoder(ch_output)\n        return x_hat\n\n\nclass TxRelayRxChannelModel(nn.Module):\n    def __init__(\n        self,\n        nin,\n        n_latent,\n        channel: Channel,\n    ):\n        super(TxRelayRxChannelModel, self).__init__()\n\n        self.relay_encoder = ChannelEncoder(nin, n_latent)\n        self.tx_rx_decoder = ChannelDecoder(n_latent, nin)\n        self.relay_rx_decoder = ChannelDecoder(n_latent, nin)\n        self.channel = channel\n\n    def forward(self, tx_ch_input, rel_x, d_rd, d_sd):\n        rel_ch_input = self.relay_encoder(rel_x)\n        rel_ch_out = self.channel(rel_ch_input, d_rd)\n\n        tx_ch_out = self.channel(tx_ch_input, d_sd)\n\n        x_hat = torch.cat(\n            [self.relay_rx_decoder(rel_ch_out), self.tx_rx_decoder(tx_ch_out)],\n            dim=-1,\n        )\n        return x_hat\n\n\nclass RelayChannelBlock(nn.Module):\n    def __init__(\n        self,\n        semantic_decoder: SemanticDecoder,\n        tx_channel_enc: ChannelEncoder,\n        tx_relay_channel_enc_dec: TxRelayChannelModel,\n    ):\n        super().__init__()\n        self.semantic_decoder = semantic_decoder\n        self.tx_channel_enc = tx_channel_enc\n        self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec\n\n    def forward(self, x, d_sr, attention_mask=None, targets=None):\n        tx_out = self.tx_channel_enc(x)\n        relay_in = self.tx_relay_channel_enc_dec(tx_out[:, :-1, :], d_sr)\n        logits, loss = self.semantic_decoder(\n            encoder_output=relay_in,\n            attention_mask=attention_mask,\n            targets=targets,\n        )\n\n        return tx_out, logits, loss\n\n\nclass Transceiver(nn.Module):  # TODO: find a cooler name\n    def __init__(\n        self,\n        semantic_encoder: SemanticEncoder,\n        relay_channel_block: RelayChannelBlock,\n        rx_semantic_decoder: SemanticDecoder,\n        tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,\n        encoder: LabelEncoder,\n    ):\n        super().__init__()\n        self.tx_semantic_encoder = semantic_encoder\n        self.relay = Relay(semantic_encoder, relay_channel_block, encoder)\n        self.rx_semantic_decoder = rx_semantic_decoder\n        self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec\n\n    def forward(self, w, attention_mask, targets, d_sd, d_sr, d_rd):\n        # transmitter\n        encoder_output = self.tx_semantic_encoder(\n            input_ids=w,\n            attention_mask=attention_mask,\n        )\n\n        # relay\n        source_output, relay_output = self.relay(encoder_output, d_sr)\n\n        # receiver\n        receiver_input = self.tx_relay_rx_channel_enc_dec(\n            source_output[:, 1:, :], relay_output, d_rd, d_sd\n        )\n        receiver_output = self.rx_semantic_decoder(\n            encoder_output=receiver_input,\n            attention_mask=attention_mask[:, 1:],\n            targets=targets,\n        )\n        return receiver_output\n\n\nclass Relay(nn.Module):\n    def __init__(\n        self,\n        semantic_encoder: SemanticEncoder,\n        relay_channel_block: RelayChannelBlock,\n        encoder: LabelEncoder,\n    ):\n        super().__init__()\n        self.device = get_device()\n        self.semantic_encoder = semantic_encoder\n        self.relay_channel_block = relay_channel_block\n        self.encoder = encoder\n\n    def forward(self, x, d_sr):\n        B, T, C = x.shape\n        T = T - 1\n\n        tx_out, logits, _ = self.relay_channel_block(x, d_sr)\n        predicted_ids = torch.argmax(logits, dim=-1)\n\n        predicted_ids = self.encoder.inverse_transform(\n            predicted_ids.flatten().to(\"cpu\")\n        ).reshape(B, T)\n        predicted_ids = torch.LongTensor(predicted_ids).to(self.device)\n\n        # ids are repeated to generate the embeddings sequentially\n        predicted_ids = torch.repeat_interleave(predicted_ids, T, dim=0)\n\n        # append [CLS] token\n        cls_padding = torch.full((B * T, 1), 101).to(self.device)\n        predicted_ids = torch.cat(\n            tensors=(cls_padding, predicted_ids),\n            dim=1,\n        )\n\n        # tril mask to generate the embeddings sequentially\n        tril_mask = (\n            torch.tril(\n                torch.ones(T, T + 1, dtype=torch.long),\n                diagonal=1,\n            ).repeat(B, 1)\n        ).to(self.device)\n\n        out = self.semantic_encoder(\n            input_ids=predicted_ids,\n            attention_mask=tril_mask,\n        )\n\n        # use eye mask to select the correct embeddings sequentially\n        eye_mask = (torch.eye(T).repeat(1, B) == 1).to(self.device)\n        out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)\n        out = out.view(B, T, C)\n\n        return tx_out, out\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/transceiver.py b/semantic_communication/models/transceiver.py
+--- a/semantic_communication/models/transceiver.py	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/semantic_communication/models/transceiver.py	(date 1702579668145)
+@@ -1,24 +1,24 @@
+ import numpy as np
+ import torch
+-from sklearn.preprocessing import LabelEncoder
+ from torch import nn
+ 
+ from semantic_communication.models.semantic_decoder import SemanticDecoder
+ from semantic_communication.models.semantic_encoder import SemanticEncoder
+ from semantic_communication.utils.channel import Channel
+ from semantic_communication.utils.general import get_device
++from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
+ 
+ 
+ class ChannelEncComp(nn.Module):
+     def __init__(self, in_dim, out_dim):
+         super(ChannelEncComp, self).__init__()
+         self.linear = nn.Linear(in_dim, out_dim)
+-        self.bn = nn.BatchNorm1d(out_dim)
++        self.ln = nn.LayerNorm(out_dim)
+         self.prelu = nn.PReLU()
+ 
+     def forward(self, x):
+-        x = self.linear(x).transpose(1, 2)
+-        x = self.bn(x).transpose(1, 2)
++        x = self.linear(x)
++        x = self.ln(x)
+         out = self.prelu(x)
+         return out
+ 
+@@ -67,40 +67,40 @@
+         return self.linear(x)
+ 
+ 
+-class TxRelayChannelModel(nn.Module):
+-    def __init__(self, nin, n_latent, channel: Channel):
+-        super(TxRelayChannelModel, self).__init__()
+-        self.relay_decoder = ChannelDecoder(n_latent, nin)
++class SrcRelayChannelModel(nn.Module):
++    def __init__(self, n_in, n_latent, channel: Channel):
++        super().__init__()
++        self.src_encoder = ChannelEncoder(n_in, n_latent)
++        self.relay_decoder = ChannelDecoder(n_latent, n_in)
+         self.channel = channel
+ 
+-    def forward(self, x, d_sr):
+-        ch_output = self.channel(x, d_sr)
+-        x_hat = self.relay_decoder(ch_output)
+-        return x_hat
++    def forward(self, src_out, d_sr):
++        ch_output = self.channel(src_out, d_sr)
++        relay_in = self.relay_decoder(ch_output)
++        return relay_in
+ 
+ 
+-class TxRelayRxChannelModel(nn.Module):
++class SrcRelayDstChannelModel(nn.Module):
+     def __init__(
+         self,
+-        nin,
++        n_in,
+         n_latent,
+         channel: Channel,
+     ):
+-        super(TxRelayRxChannelModel, self).__init__()
+-
+-        self.relay_encoder = ChannelEncoder(nin, n_latent)
+-        self.tx_rx_decoder = ChannelDecoder(n_latent, nin)
+-        self.relay_rx_decoder = ChannelDecoder(n_latent, nin)
++        super().__init__()
++        self.relay_encoder = ChannelEncoder(n_in, n_latent)
++        self.src_dst_decoder = ChannelDecoder(n_latent, n_in)
++        self.relay_dst_decoder = ChannelDecoder(n_latent, n_in)
+         self.channel = channel
+ 
+-    def forward(self, tx_ch_input, rel_x, d_rd, d_sd):
+-        rel_ch_input = self.relay_encoder(rel_x)
+-        rel_ch_out = self.channel(rel_ch_input, d_rd)
++    def forward(self, src_out, rel_x, d_rd, d_sd):
++        src_dst_in = self.channel(src_out, d_sd)
+ 
+-        tx_ch_out = self.channel(tx_ch_input, d_sd)
++        rel_out = self.relay_encoder(rel_x)
++        rel_dst_in = self.channel(rel_out, d_rd)
+ 
+         x_hat = torch.cat(
+-            [self.relay_rx_decoder(rel_ch_out), self.tx_rx_decoder(tx_ch_out)],
++            [self.relay_dst_decoder(rel_dst_in), self.src_dst_decoder(src_dst_in)],
+             dim=-1,
+         )
+         return x_hat
+@@ -110,24 +110,24 @@
+     def __init__(
+         self,
+         semantic_decoder: SemanticDecoder,
+-        tx_channel_enc: ChannelEncoder,
+-        tx_relay_channel_enc_dec: TxRelayChannelModel,
++        source_channel_encoder: ChannelEncoder,
++        src_relay_channel_model: SrcRelayChannelModel,
+     ):
+         super().__init__()
++        self.source_channel_encoder = source_channel_encoder
++        self.src_relay_channel_model = src_relay_channel_model
+         self.semantic_decoder = semantic_decoder
+-        self.tx_channel_enc = tx_channel_enc
+-        self.tx_relay_channel_enc_dec = tx_relay_channel_enc_dec
+ 
+     def forward(self, x, d_sr, attention_mask=None, targets=None):
+-        tx_out = self.tx_channel_enc(x)
+-        relay_in = self.tx_relay_channel_enc_dec(tx_out[:, :-1, :], d_sr)
++        src_out = self.source_channel_encoder(x)
++        relay_in = self.src_relay_channel_model(src_out[:, :-1, :], d_sr)
+         logits, loss = self.semantic_decoder(
+             encoder_output=relay_in,
+             attention_mask=attention_mask,
+             targets=targets,
+         )
+ 
+-        return tx_out, logits, loss
++        return logits, loss
+ 
+ 
+ class Transceiver(nn.Module):  # TODO: find a cooler name
+@@ -135,31 +135,42 @@
+         self,
+         semantic_encoder: SemanticEncoder,
+         relay_channel_block: RelayChannelBlock,
+-        rx_semantic_decoder: SemanticDecoder,
+-        tx_relay_rx_channel_enc_dec: TxRelayRxChannelModel,
+-        encoder: LabelEncoder,
++        dst_semantic_decoder: SemanticDecoder,
++        src_relay_dst_channel_model: SrcRelayDstChannelModel,
++        label_encoder: TensorLabelEncoder,
+     ):
+         super().__init__()
+-        self.tx_semantic_encoder = semantic_encoder
+-        self.relay = Relay(semantic_encoder, relay_channel_block, encoder)
+-        self.rx_semantic_decoder = rx_semantic_decoder
+-        self.tx_relay_rx_channel_enc_dec = tx_relay_rx_channel_enc_dec
++        self.semantic_encoder = semantic_encoder
++        self.source_encoder = relay_channel_block.source_channel_encoder
++
++        self.src_relay_channel_model = relay_channel_block.src_relay_channel_model
++        self.relay_semantic_decoder = relay_channel_block.semantic_decoder
++        self.relay_encoder = RelayEncoder(
++            semantic_encoder=semantic_encoder,
++            label_encoder=label_encoder,
++        )
++
++        self.dst_semantic_decoder = dst_semantic_decoder
++        self.src_relay_dst_channel_model = src_relay_dst_channel_model
+ 
+     def forward(self, w, attention_mask, targets, d_sd, d_sr, d_rd):
+         # transmitter
+-        encoder_output = self.tx_semantic_encoder(
++        encoder_output = self.semantic_encoder(
+             input_ids=w,
+             attention_mask=attention_mask,
+         )
++        src_out = self.source_encoder(encoder_output)
+ 
+         # relay
+-        source_output, relay_output = self.relay(encoder_output, d_sr)
++        relay_in = self.src_relay_channel_model(src_out[:, :-1, :], d_sr)
++        logits, _ = self.relay_semantic_decoder(relay_in)
++        relay_out = self.relay_encoder(logits)
+ 
+         # receiver
+-        receiver_input = self.tx_relay_rx_channel_enc_dec(
+-            source_output[:, 1:, :], relay_output, d_rd, d_sd
++        receiver_input = self.src_relay_dst_channel_model(
++            src_out[:, 1:, :], relay_out, d_rd, d_sd
+         )
+-        receiver_output = self.rx_semantic_decoder(
++        receiver_output = self.dst_semantic_decoder(
+             encoder_output=receiver_input,
+             attention_mask=attention_mask[:, 1:],
+             targets=targets,
+@@ -167,41 +178,34 @@
+         return receiver_output
+ 
+ 
+-class Relay(nn.Module):
++class RelayEncoder:
+     def __init__(
+         self,
+         semantic_encoder: SemanticEncoder,
+-        relay_channel_block: RelayChannelBlock,
+-        encoder: LabelEncoder,
++        label_encoder: TensorLabelEncoder,
+     ):
+         super().__init__()
+         self.device = get_device()
+         self.semantic_encoder = semantic_encoder
+-        self.relay_channel_block = relay_channel_block
+-        self.encoder = encoder
++        self.label_encoder = label_encoder
+ 
+-    def forward(self, x, d_sr):
+-        B, T, C = x.shape
+-        T = T - 1
+-
+-        tx_out, logits, _ = self.relay_channel_block(x, d_sr)
++    def __call__(self, logits):
++        B, T, _ = logits.shape
+         predicted_ids = torch.argmax(logits, dim=-1)
+ 
+-        predicted_ids = self.encoder.inverse_transform(
+-            predicted_ids.flatten().to("cpu")
+-        ).reshape(B, T)
+-        predicted_ids = torch.LongTensor(predicted_ids).to(self.device)
+-
+-        # ids are repeated to generate the embeddings sequentially
+-        predicted_ids = torch.repeat_interleave(predicted_ids, T, dim=0)
+-
+         # append [CLS] token
+-        cls_padding = torch.full((B * T, 1), 101).to(self.device)
++        cls_padding = torch.full((B, 1), self.label_encoder.cls_id).to(self.device)
+         predicted_ids = torch.cat(
+             tensors=(cls_padding, predicted_ids),
+             dim=1,
+         )
+ 
++        # transform to bert token ids
++        predicted_ids = self.label_encoder.inverse_transform(predicted_ids)
++
++        # ids are repeated to generate the embeddings sequentially
++        predicted_ids = torch.repeat_interleave(predicted_ids, T, dim=0)
++
+         # tril mask to generate the embeddings sequentially
+         tril_mask = (
+             torch.tril(
+@@ -218,6 +222,6 @@
+         # use eye mask to select the correct embeddings sequentially
+         eye_mask = (torch.eye(T).repeat(1, B) == 1).to(self.device)
+         out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)
+-        out = out.view(B, T, C)
++        out = out.view(B, T, -1)
+ 
+-        return tx_out, out
++        return out
+Index: train_relay_channel_block.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import argparse\nimport os\n\nimport numpy as np\nfrom tqdm import tqdm\nimport torch\n\nfrom semantic_communication.data_processing.data_handler import DataHandler\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.models.transceiver import (\n    RelayChannelBlock,\n    TxRelayChannelModel,\n    ChannelEncoder,\n)\nfrom semantic_communication.utils.channel import init_channel, get_distance\nfrom semantic_communication.utils.general import (\n    get_device,\n    print_loss,\n    create_checkpoint,\n    set_seed,\n    add_semantic_decoder_args,\n    add_data_args,\n    add_train_args,\n    add_channel_model_args,\n    load_model,\n)\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n\n    parser.add_argument(\"--relay-decoder-path\", default=None, type=str)\n    add_semantic_decoder_args(parser)\n    add_data_args(parser)\n    add_train_args(parser)\n    add_channel_model_args(parser)\n    args = parser.parse_args()\n\n    set_seed()\n    device = get_device()\n\n    semantic_encoder = SemanticEncoder(max_length=args.max_length)\n    data_handler = DataHandler(\n        semantic_encoder=semantic_encoder,\n        batch_size=args.batch_size,\n        data_fp=args.data_fp,\n    )\n\n    relay_decoder = SemanticDecoder(\n        vocab_size=data_handler.vocab_size,\n        n_blocks=args.n_blocks,\n        n_heads=args.n_heads,\n        n_embeddings=args.n_embeddings,\n        block_size=args.max_length,\n    ).to(device)\n    load_model(relay_decoder, args.relay_decoder_path)\n\n    tx_channel_enc = ChannelEncoder(\n        nin=args.channel_block_input_dim,\n        nout=args.channel_block_latent_dim,\n    ).to(device)\n\n    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)\n    tx_relay_channel_enc_dec = TxRelayChannelModel(\n        nin=args.channel_block_input_dim,\n        n_latent=args.channel_block_latent_dim,\n        channel=channel,\n    ).to(device)\n\n    relay_channel_block = RelayChannelBlock(\n        semantic_decoder=relay_decoder,\n        tx_channel_enc=tx_channel_enc,\n        tx_relay_channel_enc_dec=tx_relay_channel_enc_dec,\n    ).to(device)\n\n    optimizer = torch.optim.AdamW(relay_channel_block.parameters(), lr=args.lr)\n    scheduler = torch.optim.lr_scheduler.OneCycleLR(\n        optimizer=optimizer,\n        max_lr=args.lr,\n        total_steps=args.n_epochs,\n    )\n\n    best_loss = torch.inf\n    for epoch in range(args.n_epochs):\n        train_losses = []\n        relay_channel_block.train()\n        for b in tqdm(data_handler.train_dataloader):\n            xb = b[0].to(device)\n            targets = data_handler.encode_token_ids(xb)\n            attention_mask = b[1].to(device)\n\n            d_sd = get_distance(args.d_min, args.d_max)\n            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)\n\n            encoder_output = semantic_encoder(\n                input_ids=xb,\n                attention_mask=attention_mask,\n            )\n\n            _, _, loss = relay_channel_block(\n                x=encoder_output,\n                d_sr=d_sr,\n                attention_mask=attention_mask[:, :-1],\n                targets=targets[:, 1:],\n            )\n\n            optimizer.zero_grad(set_to_none=True)\n            loss.backward()\n            optimizer.step()\n\n            train_losses.append(loss.item())\n\n        scheduler.step()\n\n        val_losses = []\n        relay_channel_block.eval()\n        for b in data_handler.val_dataloader:\n            xb = b[0].to(device)\n            targets = data_handler.encode_token_ids(xb)\n            attention_mask = b[1].to(device)\n\n            d_sd = get_distance(args.d_min, args.d_max)\n            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)\n\n            encoder_output = semantic_encoder(\n                input_ids=xb,\n                attention_mask=attention_mask,\n            )\n\n            with torch.no_grad():\n                _, _, loss = relay_channel_block(\n                    x=encoder_output,\n                    d_sr=d_sr,\n                    attention_mask=attention_mask[:, :-1],\n                    targets=targets[:, 1:],\n                )\n            val_losses.append(loss.item())\n\n        print(\"\\n\")\n        print_loss(train_losses, \"Train\")\n        print_loss(val_losses, \"Val\")\n\n        mean_loss = np.mean(val_losses)\n\n        checkpoint_path = os.path.join(\n            args.checkpoint_path,\n            f\"relay-channel-block/relay_channel_block_{epoch}.pt\",\n        )\n\n        if mean_loss < best_loss:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=relay_channel_block.state_dict(),\n                optimizer_state_dict=optimizer.state_dict(),\n                mean_val_loss=mean_loss,\n            )\n            best_loss = mean_loss\n        else:\n            create_checkpoint(\n                path=checkpoint_path,\n                model_state_dict=None,\n                optimizer_state_dict=None,\n                mean_val_loss=mean_loss,\n            )\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/train_relay_channel_block.py b/train_relay_channel_block.py
+--- a/train_relay_channel_block.py	(revision 48b07e159f10eee6fa469769996a37e342d46c93)
++++ b/train_relay_channel_block.py	(date 1702578513407)
+@@ -10,8 +10,8 @@
+ from semantic_communication.models.semantic_encoder import SemanticEncoder
+ from semantic_communication.models.transceiver import (
+     RelayChannelBlock,
+-    TxRelayChannelModel,
+     ChannelEncoder,
++    SrcRelayChannelModel,
+ )
+ from semantic_communication.utils.channel import init_channel, get_distance
+ from semantic_communication.utils.general import (
+@@ -55,22 +55,22 @@
+     ).to(device)
+     load_model(relay_decoder, args.relay_decoder_path)
+ 
+-    tx_channel_enc = ChannelEncoder(
++    src_channel_encoder = ChannelEncoder(
+         nin=args.channel_block_input_dim,
+         nout=args.channel_block_latent_dim,
+     ).to(device)
+ 
+     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
+-    tx_relay_channel_enc_dec = TxRelayChannelModel(
+-        nin=args.channel_block_input_dim,
++    src_relay_channel_model = SrcRelayChannelModel(
++        n_in=args.channel_block_input_dim,
+         n_latent=args.channel_block_latent_dim,
+         channel=channel,
+     ).to(device)
+ 
+     relay_channel_block = RelayChannelBlock(
++        source_channel_encoder=src_channel_encoder,
++        src_relay_channel_model=src_relay_channel_model,
+         semantic_decoder=relay_decoder,
+-        tx_channel_enc=tx_channel_enc,
+-        tx_relay_channel_enc_dec=tx_relay_channel_enc_dec,
+     ).to(device)
+ 
+     optimizer = torch.optim.AdamW(relay_channel_block.parameters(), lr=args.lr)
+@@ -86,8 +86,8 @@
+         relay_channel_block.train()
+         for b in tqdm(data_handler.train_dataloader):
+             xb = b[0].to(device)
+-            targets = data_handler.encode_token_ids(xb)
+             attention_mask = b[1].to(device)
++            targets = data_handler.label_encoder.transform(xb)
+ 
+             d_sd = get_distance(args.d_min, args.d_max)
+             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+@@ -97,7 +97,7 @@
+                 attention_mask=attention_mask,
+             )
+ 
+-            _, _, loss = relay_channel_block(
++            _, loss = relay_channel_block(
+                 x=encoder_output,
+                 d_sr=d_sr,
+                 attention_mask=attention_mask[:, :-1],
+@@ -116,8 +116,8 @@
+         relay_channel_block.eval()
+         for b in data_handler.val_dataloader:
+             xb = b[0].to(device)
+-            targets = data_handler.encode_token_ids(xb)
+             attention_mask = b[1].to(device)
++            targets = data_handler.label_encoder.transform(xb)
+ 
+             d_sd = get_distance(args.d_min, args.d_max)
+             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+@@ -128,7 +128,7 @@
+             )
+ 
+             with torch.no_grad():
+-                _, _, loss = relay_channel_block(
++                _, loss = relay_channel_block(
+                     x=encoder_output,
+                     d_sr=d_sr,
+                     attention_mask=attention_mask[:, :-1],
