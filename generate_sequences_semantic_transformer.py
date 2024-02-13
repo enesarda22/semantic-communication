@@ -1,5 +1,7 @@
 import argparse
 
+from tqdm import tqdm
+
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
@@ -14,7 +16,7 @@ from semantic_communication.utils.general import (
 
 
 def generate_text():
-    for b in data_handler.test_dataloader:
+    for b in tqdm(data_handler.test_dataloader):
         encoder_idx = b[0].to(device)
         encoder_attention_mask = b[1].to(device)
 
