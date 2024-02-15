@@ -66,15 +66,16 @@ if __name__ == "__main__":
     load_model(semantic_transformer, args.semantic_transformer_path)
 
     optimizer = torch.optim.AdamW(semantic_transformer.parameters(), lr=args.lr)
+    if args.load_optimizer:
+        load_optimizer(optimizer, args.semantic_transformer_path)
+
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=args.lr,
         steps_per_epoch=len(data_handler.train_dataloader),
         epochs=args.n_epochs,
     )
-
     if args.load_optimizer:
-        load_optimizer(optimizer, args.semantic_transformer_path)
         load_scheduler(scheduler, args.semantic_transformer_path)
 
     start_epoch = get_start_epoch(args.semantic_transformer_path)
