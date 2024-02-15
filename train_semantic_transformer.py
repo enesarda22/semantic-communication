@@ -29,6 +29,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--semantic-decoder-path", default=None, type=str)
     parser.add_argument("--semantic-transformer-path", default=None, type=str)
+    parser.add_argument("--snr-db", default=None, type=float)
     add_semantic_decoder_args(parser)
     add_data_args(parser)
     add_train_args(parser)
@@ -65,15 +66,16 @@ if __name__ == "__main__":
     load_model(semantic_transformer, args.semantic_transformer_path)
 
     optimizer = torch.optim.AdamW(semantic_transformer.parameters(), lr=args.lr)
-    load_optimizer(optimizer, args.semantic_transformer_path)
-
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=args.lr,
         steps_per_epoch=len(data_handler.train_dataloader),
         epochs=args.n_epochs,
     )
-    load_scheduler(scheduler, args.semantic_transformer_path)
+
+    if args.load_optimizer:
+        load_optimizer(optimizer, args.semantic_transformer_path)
+        load_scheduler(scheduler, args.semantic_transformer_path)
 
     start_epoch = get_start_epoch(args.semantic_transformer_path)
     best_loss = torch.inf
@@ -89,6 +91,7 @@ if __name__ == "__main__":
             _, loss = semantic_transformer(
                 input_ids=encoder_idx,
                 attention_mask=encoder_attention_mask,
+                snr_db=args.snr_db,
             )
 
             optimizer.zero_grad(set_to_none=True)
@@ -110,6 +113,7 @@ if __name__ == "__main__":
                 _, loss = semantic_transformer(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
+                    snr_db=args.snr_db,
                 )
             val_losses.append(loss.item())
 

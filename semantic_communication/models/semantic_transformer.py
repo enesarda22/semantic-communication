@@ -5,10 +5,7 @@ from torch import nn
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.utils.general import (
-    shift_inputs,
-    get_device,
-)
+from semantic_communication.utils.general import shift_inputs
 
 
 class SemanticTransformer(nn.Module):
@@ -27,12 +24,14 @@ class SemanticTransformer(nn.Module):
         messages: Optional[List[str]] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        snr_db: Optional[float] = None,
     ):
         encoder_output = self.semantic_encoder(
             messages=messages,
             input_ids=input_ids,
             attention_mask=attention_mask,
         )
+        encoder_output = self._add_noise(encoder_output, snr_db)
 
         decoder_idx, decoder_attention_mask, targets = shift_inputs(
             xb=input_ids,
@@ -67,3 +66,15 @@ class SemanticTransformer(nn.Module):
                 beam_width=beam_width,
                 max_length=max_length,
             )
+
+    @staticmethod
+    def _add_noise(signal, snr_db):
+        if snr_db is not None:
+            signal_pow = torch.mean(torch.pow(signal, 2), dim=-1, keepdim=True)
+            noise_pow = signal_pow / (10 ** (snr_db / 10))
+
+            noise = torch.randn(size=signal.shape) * torch.sqrt(noise_pow)
+            return signal + noise
+
+        else:
+            return signal
