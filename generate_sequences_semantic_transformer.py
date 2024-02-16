@@ -26,6 +26,7 @@ def generate_text():
             input_ids=encoder_idx,
             attention_mask=encoder_attention_mask,
             max_length=args.max_length,
+            snr_db=args.snr_db,
         )
 
         predicted_tokens = semantic_encoder.get_tokens(
@@ -46,6 +47,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--semantic-transformer-path", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
+    parser.add_argument("--snr-db", default=None, type=float)
     add_semantic_decoder_args(parser)
     add_data_args(parser)
     args = parser.parse_args()

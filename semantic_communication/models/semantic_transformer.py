@@ -50,6 +50,7 @@ class SemanticTransformer(nn.Module):
         messages: Optional[List[str]] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        snr_db: Optional[float] = None,
         beam_width=5,
         max_length=20,
     ):
@@ -60,6 +61,7 @@ class SemanticTransformer(nn.Module):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
             )
+            encoder_output = self._add_noise(encoder_output, snr_db)
 
             return self.semantic_decoder.generate(
                 encoder_output=encoder_output,
