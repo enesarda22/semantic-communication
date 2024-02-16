@@ -73,7 +73,9 @@ class SemanticTransformer(nn.Module):
             signal_pow = torch.mean(torch.pow(signal, 2), dim=-1, keepdim=True)
             noise_pow = signal_pow / (10 ** (snr_db / 10))
 
-            noise = torch.randn(size=signal.shape) * torch.sqrt(noise_pow)
+            noise = torch.sqrt(noise_pow) * torch.randn(
+                size=signal.shape, device=signal.device
+            )
             return signal + noise
 
         else:
