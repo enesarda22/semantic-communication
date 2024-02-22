@@ -79,6 +79,11 @@ def add_semantic_decoder_args(parser):
     parser.add_argument("--mode", default="predict", type=str)
 
 
+def add_paraphrase_detector_args(parser):
+    parser.add_argument("--n-in", default=384, type=int)
+    parser.add_argument("--n-latent", default=512, type=int)
+
+
 def add_train_args(parser):
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--batch-size", default=32, type=int)

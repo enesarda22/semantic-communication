@@ -16,6 +16,7 @@ class DataHandler:
         self,
         data_fp: str,
         batch_size: int,
+        fn_prefix: str = "",
     ):
         self.device = get_device()
         self.data_fp = data_fp
@@ -26,9 +27,9 @@ class DataHandler:
 
         self.vocab_size = len(self.label_encoder.classes)
 
-        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
-        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
-        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)
+        self.train_dataloader = self.init_dl(fn=fn_prefix + Preprocessor.train_data_fn)
+        self.val_dataloader = self.init_dl(fn=fn_prefix + Preprocessor.val_data_fn)
+        self.test_dataloader = self.init_dl(fn=fn_prefix + Preprocessor.test_data_fn)
 
     def init_dl(self, fn: str):
         fp = os.path.join(self.data_fp, fn)

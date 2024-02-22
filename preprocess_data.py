@@ -9,6 +9,7 @@ from torch.utils.data import TensorDataset
 
 from semantic_communication.data_processing.preprocessor import Preprocessor
 from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.utils.general import get_device
 from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
 
 if __name__ == "__main__":
@@ -20,6 +21,8 @@ if __name__ == "__main__":
     parser.add_argument("--test-size", default=0.5, type=float)
     parser.add_argument("--n-samples", default=None, type=int)
     args = parser.parse_args()
+
+    device = get_device()
 
     en_fp = os.path.join(args.europarl_folder_path, "en/*.txt")
     txt_filepaths = sorted(glob.glob(en_fp))
@@ -37,8 +40,11 @@ if __name__ == "__main__":
     print(f"Number of sentences: {len(preprocessed_messages)}")
 
     # tokenize
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
-    tokens = semantic_encoder.tokenize(messages=preprocessed_messages)
+    tokens = SemanticEncoder.tokenize(
+        messages=preprocessed_messages,
+        max_length=args.max_length,
+        device=device,
+    )
 
     # drop sentences shorter than 2 tokens
     long_sentence_query = tokens["attention_mask"].sum(dim=1) > 4

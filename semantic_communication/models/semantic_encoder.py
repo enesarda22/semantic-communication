@@ -10,6 +10,7 @@ from semantic_communication.utils.general import get_device
 
 class SemanticEncoder(nn.Module):
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def __init__(self, label_encoder, max_length, mode):
         super().__init__()
@@ -19,7 +20,6 @@ class SemanticEncoder(nn.Module):
         self.max_length = max_length + 1
         self.mode = mode
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.bert = AutoModel.from_pretrained(self.model_name).to(self.device)
         self.bert.embeddings.word_embeddings.weight = nn.Parameter(
             self.bert.embeddings.word_embeddings.weight[label_encoder.classes, :]
@@ -32,8 +32,12 @@ class SemanticEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if messages is not None:
-            tokens = self.tokenize(messages=messages)
-            input_ids = tokens["input_ids"]
+            tokens = self.tokenize(
+                messages=messages,
+                max_length=self.max_length,
+                device=self.device,
+            )
+            input_ids = self.label_encoder.transform(tokens["input_ids"])
             attention_mask = tokens["attention_mask"]
 
         encoder_lhs = self.bert(
@@ -62,14 +66,34 @@ class SemanticEncoder(nn.Module):
 
         return encoder_output
 
-    def tokenize(self, messages: List[str]):
-        return self.tokenizer(
-            messages,
-            padding="max_length",
-            max_length=self.max_length,
-            truncation=True,
-            return_tensors="pt",
-        ).to(self.device)
+    @classmethod
+    def tokenize(
+        cls,
+        messages: Optional[List[str]] = None,
+        m1: Optional[List[str]] = None,
+        m2: Optional[List[str]] = None,
+        max_length=30,
+        device="cpu",
+    ):
+        if messages is not None:
+            return cls.tokenizer(
+                messages,
+                padding="max_length",
+                max_length=max_length,
+                truncation=True,
+                return_tensors="pt",
+            ).to(device)
+        elif (m1 is not None) and (m2 is not None):
+            return cls.tokenizer(
+                m1,
+                m2,
+                padding="max_length",
+                max_length=max_length,
+                truncation=True,
+                return_tensors="pt",
+            ).to(device)
+        else:
+            raise ValueError("'messages' or 'm1' & 'm2' should be passed.")
 
     def get_tokens(
         self,
