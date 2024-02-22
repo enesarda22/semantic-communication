@@ -85,6 +85,7 @@ def add_train_args(parser):
     parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--load-optimizer", default=False, type=bool)
+    parser.add_argument("--load-scheduler", default=False, type=bool)
 
 
 def add_data_args(parser):

@@ -75,7 +75,7 @@ if __name__ == "__main__":
         steps_per_epoch=len(data_handler.train_dataloader),
         epochs=args.n_epochs,
     )
-    if args.load_optimizer:
+    if args.load_scheduler:
         load_scheduler(scheduler, args.semantic_transformer_path)
 
     start_epoch = get_start_epoch(args.semantic_transformer_path)
