@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
         checkpoint_path = os.path.join(
             args.checkpoint_path,
-            f"paraphrase_detector/paraphrase_detector_{epoch}.pt",
+            f"paraphrase-detector/paraphrase_detector_{epoch}.pt",
         )
 
         if mean_loss < best_loss:

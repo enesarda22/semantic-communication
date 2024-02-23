@@ -2,6 +2,7 @@ import argparse
 import csv
 import os
 
+import numpy as np
 import torch
 from torch.utils.data import TensorDataset
 
@@ -42,7 +43,17 @@ def get_tokens(fn, paws_qqp_fn=None):
 
     # filter the messages with unknown tokens
     q = torch.all(torch.isin(tokens["input_ids"], label_encoder.classes), dim=1)
-    return tokens["input_ids"][q, :], tokens["attention_mask"][q, :], labels[q]
+    input_ids = tokens["input_ids"][q, :]
+    attention_mask = tokens["attention_mask"][q, :]
+    labels = labels[q]
+
+    if args.n_samples is not None:
+        idx = np.random.permutation(len(labels))[: args.n_samples]
+        input_ids = input_ids[idx, :]
+        attention_mask = attention_mask[idx, :]
+        labels = labels[idx]
+
+    return input_ids, attention_mask, labels
 
 
 if __name__ == "__main__":
@@ -52,6 +63,7 @@ if __name__ == "__main__":
     parser.add_argument("--paws-wiki-folder-path", type=str)
     parser.add_argument("--output-data-fp", default="", type=str)
     parser.add_argument("--max-length", default=30, type=int)
+    parser.add_argument("--n-samples", default=None, type=int)
     args = parser.parse_args()
 
     device = get_device()
