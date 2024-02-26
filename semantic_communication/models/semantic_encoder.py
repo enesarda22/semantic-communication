@@ -28,12 +28,16 @@ class SemanticEncoder(nn.Module):
     def forward(
         self,
         messages: Optional[List[str]] = None,
+        m1: Optional[List[str]] = None,
+        m2: Optional[List[str]] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if messages is not None:
             tokens = self.tokenize(
                 messages=messages,
+                m1=m1,
+                m2=m2,
                 max_length=self.max_length,
                 device=self.device,
             )
@@ -51,14 +55,14 @@ class SemanticEncoder(nn.Module):
                 attention_mask=attention_mask,
             )
             encoder_output = encoder_output[:, :-1, :]
-        elif self.mode == "forward":
-            encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
             encoder_output = self._replace_cls_embedding(
                 encoder_lhs=encoder_lhs,
                 attention_mask=attention_mask,
             )
             encoder_output = encoder_output[:, [0], :]
+        elif self.mode == "forward":
+            encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "cls":
             encoder_output = encoder_lhs[:, [0], :]
         else:
