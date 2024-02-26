@@ -34,6 +34,6 @@ class ParaphraseDetector(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
         ).squeeze(1)
-        x = self.dropout(self.relu(self.fc1(x)))
+        x = self.relu(self.fc1(x))
         x = self.dropout(self.relu(self.fc2(x)))
         return self.fc3(x).flatten()
