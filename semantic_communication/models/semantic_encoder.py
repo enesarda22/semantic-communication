@@ -45,24 +45,26 @@ class SemanticEncoder(nn.Module):
             attention_mask=attention_mask,
         )["last_hidden_state"]
 
-        encoder_output = self.mean_pooling(
-            bert_lhs=encoder_lhs,
-            attention_mask=attention_mask,
-        )
-
-        encoder_output = torch.cat(
-            tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),
-            dim=1,
-        )
-
         if self.mode == "predict":
+            encoder_output = self._replace_cls_embedding(
+                encoder_lhs=encoder_lhs,
+                attention_mask=attention_mask,
+            )
             encoder_output = encoder_output[:, :-1, :]
         elif self.mode == "forward":
-            encoder_output = encoder_output[:, 1:, :]
+            encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
+            encoder_output = self._replace_cls_embedding(
+                encoder_lhs=encoder_lhs,
+                attention_mask=attention_mask,
+            )
             encoder_output = encoder_output[:, [0], :]
+        elif self.mode == "cls":
+            encoder_output = encoder_lhs[:, [0], :]
         else:
-            raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
+            raise ValueError(
+                "Mode needs to be 'predict', 'forward', 'sentence' or 'cls'."
+            )
 
         return encoder_output
 
@@ -114,8 +116,8 @@ class SemanticEncoder(nn.Module):
         ]
         return tokens
 
-    @staticmethod
-    def mean_pooling(bert_lhs, attention_mask=None):
+    @classmethod
+    def mean_pooling(cls, bert_lhs, attention_mask=None):
         if attention_mask is None:
             out = torch.mean(bert_lhs, 1)
 
@@ -129,3 +131,15 @@ class SemanticEncoder(nn.Module):
             )
 
         return out
+
+    @classmethod
+    def _replace_cls_embedding(cls, encoder_lhs, attention_mask):
+        encoder_output = cls.mean_pooling(
+            bert_lhs=encoder_lhs,
+            attention_mask=attention_mask,
+        )
+        encoder_output = torch.cat(
+            tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),
+            dim=1,
+        )
+        return encoder_output

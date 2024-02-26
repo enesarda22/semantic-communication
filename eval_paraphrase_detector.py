@@ -36,7 +36,7 @@ if __name__ == "__main__":
     semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length * 2,
-        mode="sentence",
+        mode="cls",
     ).to(device)
 
     paraphrase_detector = ParaphraseDetector(
