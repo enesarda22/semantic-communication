@@ -20,6 +20,7 @@ from semantic_communication.utils.general import (
     get_start_epoch,
     print_loss,
     create_checkpoint,
+    set_seed,
 )
 
 if __name__ == "__main__":
@@ -31,6 +32,7 @@ if __name__ == "__main__":
     add_train_args(parser)
     args = parser.parse_args()
 
+    set_seed()
     device = get_device()
 
     data_handler = DataHandler(
