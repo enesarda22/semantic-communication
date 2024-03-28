@@ -33,7 +33,7 @@ class SemanticEncoder(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        if messages is not None:
+        if messages is not None or (m1 is not None and m2 is not None):
             tokens = self.tokenize(
                 messages=messages,
                 m1=m1,

@@ -26,11 +26,15 @@ class ParaphraseDetector(nn.Module):
     def forward(
         self,
         messages: Optional[List[str]] = None,
+        m1: Optional[List[str]] = None,
+        m2: Optional[List[str]] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         x = self.semantic_encoder(
             messages=messages,
+            m1=m1,
+            m2=m2,
             input_ids=input_ids,
             attention_mask=attention_mask,
         ).squeeze(1)
