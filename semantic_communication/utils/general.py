@@ -77,6 +77,7 @@ def add_semantic_decoder_args(parser):
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embeddings", default=384, type=int)
     parser.add_argument("--mode", default="predict", type=str)
+    parser.add_argument("--rate", default=1, type=int)
 
 
 def add_train_args(parser):
