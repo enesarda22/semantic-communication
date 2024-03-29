@@ -11,19 +11,23 @@ from semantic_communication.utils.general import get_device
 class SemanticEncoder(nn.Module):
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
 
-    def __init__(self, label_encoder, max_length, mode):
+    def __init__(self, label_encoder, max_length, mode, rate=None):
         super().__init__()
         self.device = get_device()
 
         self.label_encoder = label_encoder
         self.max_length = max_length + 1
         self.mode = mode
+        self.rate = rate
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.bert = AutoModel.from_pretrained(self.model_name).to(self.device)
         self.bert.embeddings.word_embeddings.weight = nn.Parameter(
             self.bert.embeddings.word_embeddings.weight[label_encoder.classes, :]
         )
+
+        if self.rate is not None and self.mode == "sentence":
+            self.pooling_head = nn.Linear(max_length + 1, rate, bias=False)
 
     def forward(
         self,
@@ -41,22 +45,21 @@ class SemanticEncoder(nn.Module):
             attention_mask=attention_mask,
         )["last_hidden_state"]
 
-        encoder_output = self.mean_pooling(
-            bert_lhs=encoder_lhs,
-            attention_mask=attention_mask,
-        )
-
-        encoder_output = torch.cat(
-            tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),
-            dim=1,
-        )
-
         if self.mode == "predict":
+            encoder_output = self.mean_pooling(
+                bert_lhs=encoder_lhs,
+                attention_mask=attention_mask,
+            )
+            encoder_output = torch.cat(
+                tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),
+                dim=1,
+            )
             encoder_output = encoder_output[:, :-1, :]
         elif self.mode == "forward":
-            encoder_output = encoder_output[:, 1:, :]
+            encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
-            encoder_output = encoder_output[:, [0], :]
+            encoder_output = self.pooling_head(encoder_lhs.transpose(1, 2))
+            encoder_output = encoder_output.transpose(1, 2)
         else:
             raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 

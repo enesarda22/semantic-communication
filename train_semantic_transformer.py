@@ -47,6 +47,7 @@ if __name__ == "__main__":
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
         mode=args.mode,
+        rate=args.rate,
     ).to(device)
 
     semantic_decoder = SemanticDecoder(
