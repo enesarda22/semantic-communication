@@ -183,7 +183,7 @@ class SemanticDecoder(nn.Module):
             Y = Y.repeat((beam_width, 1))
             Y[:, 1] = next_chars.flatten()
 
-            for i in tqdm(range(1, max_length - 1)):
+            for i in tqdm(range(1, max_length - 1), desc="Predicted token"):
                 attn_mask[:, i] = 1
 
                 dataset = TensorDataset(
@@ -196,7 +196,7 @@ class SemanticDecoder(nn.Module):
                 dl = DataLoader(dataset, batch_size=32)
                 next_probabilities = []
 
-                for x, e, mask in tqdm(dl):
+                for x, e, mask in dl:
                     next_logits, _ = self(x, e, mask)
                     next_logits = next_logits[:, i, :]
                     next_probabilities.append(F.log_softmax(next_logits, dim=-1))
@@ -231,7 +231,7 @@ class SemanticDecoder(nn.Module):
                 best_indices.reshape(-1, 1, 1).repeat((1, 1, Y.shape[-1])),
             ).squeeze(1)
 
-            return Y
+            return Y, probabilities[torch.arange(B), best_indices]
 
     def generate_next(
         self,

@@ -1,5 +1,6 @@
 import argparse
 
+import torch
 from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
@@ -22,7 +23,7 @@ def generate_text():
 
         encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-        predicted_ids = semantic_transformer.generate(
+        predicted_ids, probs = semantic_transformer.generate(
             input_ids=encoder_idx,
             attention_mask=encoder_attention_mask,
             max_length=args.max_length,
@@ -39,8 +40,10 @@ def generate_text():
             skip_special_tokens=True,
         )
 
-        for input_, predicted in zip(input_tokens, predicted_tokens):
-            print(f"{input_}\n{predicted}\n")
+        _, indices = torch.sort(probs)
+        for i in indices:
+            print(f"Probability: {torch.exp(probs[i]):.2e}")
+            print(f"{input_tokens[i]}\n{predicted_tokens[i]}\n")
 
 
 if __name__ == "__main__":
