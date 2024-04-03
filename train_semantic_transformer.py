@@ -17,6 +17,7 @@ from semantic_communication.utils.general import (
     get_device,
     load_model,
     load_optimizer,
+    load_scheduler,
     get_start_epoch,
     create_checkpoint,
     print_loss,
@@ -69,6 +70,15 @@ if __name__ == "__main__":
     if args.load_optimizer:
         load_optimizer(optimizer, args.semantic_transformer_path)
 
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=args.lr,
+        steps_per_epoch=len(data_handler.train_dataloader),
+        epochs=args.n_epochs,
+    )
+    if args.load_scheduler:
+        load_scheduler(scheduler, args.semantic_transformer_path)
+
     start_epoch = get_start_epoch(args.semantic_transformer_path)
     best_loss = torch.inf
     for epoch in range(start_epoch, args.n_epochs + 1):
@@ -89,6 +99,7 @@ if __name__ == "__main__":
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             train_losses.append(loss.item())
 
@@ -124,6 +135,7 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=semantic_transformer.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
+                scheduler_state_dict=scheduler.state_dict(),
                 mean_val_loss=mean_loss,
                 epoch=epoch,
             )
@@ -133,6 +145,7 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=None,
                 optimizer_state_dict=None,
+                scheduler_state_dict=None,
                 mean_val_loss=mean_loss,
                 epoch=epoch,
             )
