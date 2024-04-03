@@ -86,6 +86,7 @@ def add_train_args(parser):
     parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--load-optimizer", default=False, type=bool)
+    parser.add_argument("--load-scheduler", default=False, type=bool)
 
 
 def add_data_args(parser):
@@ -110,17 +111,20 @@ def add_channel_model_args(parser):
 def shift_inputs(xb, attention_mask, mode):
     if mode == "predict":
         idx = xb[:, :-1]
-        attention_mask = attention_mask[:, :-1]
         targets = xb[:, 1:]
+        target_padding_mask = attention_mask[:, 1:] == 0  # mask the end token
+        is_causal = True
     elif mode == "forward":
         idx = xb[:, :-1]
-        attention_mask = attention_mask[:, 1:]
         targets = xb[:, 1:]
+        target_padding_mask = attention_mask[:, 1:] == 0  # CLS is not received
+        is_causal = True
     elif mode == "sentence":
         idx = xb[:, :-1]
-        attention_mask = attention_mask[:, 1:]
         targets = xb[:, 1:]
+        target_padding_mask = None
+        is_causal = False
     else:
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
-    return idx, attention_mask, targets
+    return idx, targets, target_padding_mask, is_causal

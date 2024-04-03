@@ -1,4 +1,6 @@
 from abc import ABC
+from typing import Optional
+
 import torch
 from semantic_communication.utils.general import get_device
 
@@ -15,7 +17,7 @@ class Channel(ABC):
         self.noise_pow = noise_pow
         self.device = get_device()
 
-    def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
+    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
         pass
 
     def signal_process(self, x: torch.Tensor, d: float, h=None) -> torch.Tensor:
@@ -37,7 +39,10 @@ class AWGN(Channel):
     def __init__(self, signal_power_constraint, alpha, noise_pow):
         super().__init__(signal_power_constraint, alpha, noise_pow)
 
-    def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
+    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
+        if d is None:
+            return x
+
         x = self.signal_process(x, d)
 
         noise = torch.normal(
@@ -55,7 +60,10 @@ class Rayleigh(Channel):
     def __init__(self, signal_power_constraint, alpha, noise_pow):
         super().__init__(signal_power_constraint, alpha, noise_pow)
 
-    def __call__(self, x: torch.Tensor, d: float) -> torch.Tensor:
+    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
+        if d is None:
+            return x
+
         h = torch.normal(
             mean=0.0,
             std=0.5**0.5,

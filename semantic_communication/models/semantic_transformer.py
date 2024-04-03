@@ -33,14 +33,18 @@ class SemanticTransformer(nn.Module):
         )
         encoder_output = self._add_noise(encoder_output, snr_db)
 
-        decoder_idx, decoder_attention_mask, targets = shift_inputs(
+        decoder_idx, targets, target_padding_mask, is_causal = shift_inputs(
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.mode,
         )
 
         logits, loss = self.semantic_decoder(
-            decoder_idx, encoder_output, decoder_attention_mask, targets
+            idx=decoder_idx,
+            encoder_output=encoder_output,
+            is_causal=is_causal,
+            target_padding_mask=target_padding_mask,
+            targets=targets,
         )
 
         return logits, loss

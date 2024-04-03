@@ -17,6 +17,45 @@ lr =  4e-5
 epoch = 20
 batch_size = 64
 
+
+```
+python train_semantic_transformer.py \
+--data-fp ~/data \
+--checkpoint-path ~/data/checkpoints/relay-decoder-with-rate5 \
+--mode sentence \
+--rate 5 \
+--batch-size 512 \
+--n-epochs 20 \
+--lr 5e-4 \
+--n-blocks 6 \
+--n-heads 6
+```
+
+```
+python train_src_relay_block.py \
+--data-fp ~/data \
+--checkpoint-path ~/data/checkpoints/ \
+--semantic-transformer-path ~/data/checkpoints/relay-decoder-with-rate5/******.pt \
+--mode sentence \
+--rate 5 \
+--batch-size 512 \
+--n-epochs 20 \
+--lr 5e-4 \
+--n-blocks 6 \
+--n-heads 6 \
+--channel-block-input-dim 384 \
+--channel-block-latent-dim 256 \
+--channel-type AWGN \
+--alpha 4 \
+--sig-pow 1 \
+--noise-pow 4e-15 \
+--d-min 2e3 \
+--d-max 7e3 \
+--gamma-min 0.2 \
+--gamma-max 0.8 \
+```
+
+### old
 ```
 python train_relay_decoder.py \
 --batch-size 512 \

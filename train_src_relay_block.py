@@ -8,11 +8,9 @@ import torch
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.models.transceiver import (
-    RelayChannelBlock,
-    ChannelEncoder,
-    SrcRelayChannelModel,
-)
+from semantic_communication.models.semantic_transformer import SemanticTransformer
+from semantic_communication.models.transceiver import ChannelEncoder, ChannelDecoder, SrcRelayBlock
+
 from semantic_communication.utils.channel import init_channel, get_distance
 from semantic_communication.utils.general import (
     get_device,
@@ -23,13 +21,15 @@ from semantic_communication.utils.general import (
     add_data_args,
     add_train_args,
     add_channel_model_args,
-    load_model,
+    load_model, load_optimizer, load_scheduler, get_start_epoch,
 )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--relay-decoder-path", default=None, type=str)
+    parser.add_argument("--semantic-transformer-path", default=None, type=str)
+    parser.add_argument("--src-relay-block-path", default=None, type=str)
     add_semantic_decoder_args(parser)
     add_data_args(parser)
     add_train_args(parser)
@@ -39,100 +39,110 @@ if __name__ == "__main__":
     set_seed()
     device = get_device()
 
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
-        semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
 
-    relay_decoder = SemanticDecoder(
+    semantic_encoder = SemanticEncoder(
+        label_encoder=data_handler.label_encoder,
+        max_length=args.max_length,
+        mode=args.mode,
+        rate=args.rate,
+    ).to(device)
+
+    semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
+        bert=semantic_encoder.bert,
+        pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
-    load_model(relay_decoder, args.relay_decoder_path)
+
+    semantic_transformer = SemanticTransformer(
+        semantic_encoder=semantic_encoder,
+        semantic_decoder=semantic_decoder,
+    ).to(device)
+    load_model(semantic_transformer, args.semantic_transformer_path)
 
     src_channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
 
+    relay_channel_decoder = ChannelDecoder(
+        nin=args.channel_block_latent_dim,
+        nout=args.channel_block_input_dim,
+    ).to(device)
+
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
-    src_relay_channel_model = SrcRelayChannelModel(
-        n_in=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
+
+    src_relay_block = SrcRelayBlock(
+        semantic_transformer=semantic_transformer,
+        src_channel_encoder=src_channel_encoder,
+        relay_channel_decoder=relay_channel_decoder,
         channel=channel,
     ).to(device)
+    load_model(src_relay_block, args.src_relay_block_path)
 
-    relay_channel_block = RelayChannelBlock(
-        source_channel_encoder=src_channel_encoder,
-        src_relay_channel_model=src_relay_channel_model,
-        semantic_decoder=relay_decoder,
-    ).to(device)
+    optimizer = torch.optim.AdamW(src_relay_block.parameters(), lr=args.lr)
+    if args.load_optimizer:
+        load_optimizer(optimizer, args.src_relay_block_path)
 
-    optimizer = torch.optim.AdamW(relay_channel_block.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer=optimizer,
+        optimizer,
         max_lr=args.lr,
-        total_steps=args.n_epochs,
+        steps_per_epoch=len(data_handler.train_dataloader),
+        epochs=args.n_epochs,
     )
+    if args.load_scheduler:
+        load_scheduler(scheduler, args.src_relay_block_path)
 
+    start_epoch = get_start_epoch(args.src_relay_block_path)
     best_loss = torch.inf
-    for epoch in range(args.n_epochs):
+    for epoch in range(start_epoch, args.n_epochs + 1):
         train_losses = []
-        relay_channel_block.train()
+        src_relay_block.train()
         for b in tqdm(data_handler.train_dataloader):
-            xb = b[0].to(device)
-            attention_mask = b[1].to(device)
-            targets = data_handler.label_encoder.transform(xb)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
-            encoder_output = semantic_encoder(
-                input_ids=xb,
-                attention_mask=attention_mask,
-            )
-
-            _, loss = relay_channel_block(
-                x=encoder_output,
+            _, loss = src_relay_block(
+                input_ids=encoder_idx,
+                attention_mask=encoder_attention_mask,
                 d_sr=d_sr,
-                attention_mask=attention_mask[:, :-1],
-                targets=targets[:, 1:],
             )
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             train_losses.append(loss.item())
 
-        scheduler.step()
-
         val_losses = []
-        relay_channel_block.eval()
+        src_relay_block.eval()
         for b in data_handler.val_dataloader:
-            xb = b[0].to(device)
-            attention_mask = b[1].to(device)
-            targets = data_handler.label_encoder.transform(xb)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
-            encoder_output = semantic_encoder(
-                input_ids=xb,
-                attention_mask=attention_mask,
-            )
-
             with torch.no_grad():
-                _, loss = relay_channel_block(
-                    x=encoder_output,
-                    d_sr=d_sr,
-                    attention_mask=attention_mask[:, :-1],
-                    targets=targets[:, 1:],
+                _, loss = src_relay_block(
+                    input_ids=encoder_idx,
+                    attention_mask=encoder_attention_mask,
+                    snr_db=args.snr_db,
                 )
             val_losses.append(loss.item())
 
@@ -144,13 +154,13 @@ if __name__ == "__main__":
 
         checkpoint_path = os.path.join(
             args.checkpoint_path,
-            f"relay-channel-block/relay_channel_block_{epoch}.pt",
+            f"src-relay-block/src_relay_block_{epoch}.pt",
         )
 
         if mean_loss < best_loss:
             create_checkpoint(
                 path=checkpoint_path,
-                model_state_dict=relay_channel_block.state_dict(),
+                model_state_dict=src_relay_block.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
                 mean_val_loss=mean_loss,
             )

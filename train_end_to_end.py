@@ -80,7 +80,7 @@ if __name__ == "__main__":
     ).to(device)
 
     relay_channel_block = RelayChannelBlock(
-        source_channel_encoder=src_channel_enc,
+        src_channel_encoder=src_channel_enc,
         src_relay_channel_model=src_relay_channel_model,
         semantic_decoder=relay_decoder,
     ).to(device)

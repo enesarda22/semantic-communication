@@ -1,11 +1,14 @@
+from typing import Optional, List
+
 import numpy as np
 import torch
 from torch import nn
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.models.semantic_transformer import SemanticTransformer
 from semantic_communication.utils.channel import Channel
-from semantic_communication.utils.general import get_device
+from semantic_communication.utils.general import get_device, shift_inputs
 from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
 
 
@@ -67,17 +70,16 @@ class ChannelDecoder(nn.Module):
         return self.linear(x)
 
 
-class SrcRelayChannelModel(nn.Module):
-    def __init__(self, n_in, n_latent, channel: Channel):
-        super().__init__()
-        self.src_encoder = ChannelEncoder(n_in, n_latent)
-        self.relay_decoder = ChannelDecoder(n_latent, n_in)
-        self.channel = channel
-
-    def forward(self, src_out, d_sr):
-        ch_output = self.channel(src_out, d_sr)
-        relay_in = self.relay_decoder(ch_output)
-        return relay_in
+# class SrcRelayChannelModel(nn.Module):
+#     def __init__(self, n_in, n_latent, channel: Channel):
+#         super().__init__()
+#         self.relay_decoder = ChannelDecoder(n_latent, n_in)
+#         self.channel = channel
+#
+#     def forward(self, src_out, d_sr):
+#         ch_output = self.channel(src_out, d_sr)
+#         relay_in = self.relay_decoder(ch_output)
+#         return relay_in
 
 
 class SrcRelayDstChannelModel(nn.Module):
@@ -106,76 +108,126 @@ class SrcRelayDstChannelModel(nn.Module):
         return x_hat
 
 
-class RelayChannelBlock(nn.Module):
+class SrcRelayBlock(nn.Module):
     def __init__(
         self,
-        semantic_decoder: SemanticDecoder,
-        source_channel_encoder: ChannelEncoder,
-        src_relay_channel_model: SrcRelayChannelModel,
+        semantic_transformer: SemanticTransformer,
+        src_channel_encoder: ChannelEncoder,
+        relay_channel_decoder: ChannelDecoder,
+        channel: Channel,
     ):
         super().__init__()
-        self.source_channel_encoder = source_channel_encoder
-        self.src_relay_channel_model = src_relay_channel_model
-        self.semantic_decoder = semantic_decoder
+        self.semantic_encoder = semantic_transformer.semantic_encoder
+        self.semantic_decoder = semantic_transformer.semantic_decoder
 
-    def forward(self, x, d_sr, attention_mask=None, targets=None):
-        src_out = self.source_channel_encoder(x)
-        relay_in = self.src_relay_channel_model(src_out[:, :-1, :], d_sr)
-        logits, loss = self.semantic_decoder(
-            encoder_output=relay_in,
+        self.channel = channel
+        self.src_channel_encoder = src_channel_encoder
+        self.relay_channel_decoder = relay_channel_decoder
+
+    def forward(
+        self,
+        messages: Optional[List[str]] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        d_sr: Optional[float] = None,
+    ):
+        x = self.semantic_encoder(
+            messages=messages,
+            input_ids=input_ids,
             attention_mask=attention_mask,
+        )
+        x = self.src_channel_encoder(x)
+        x = self._shift_relay_input(x)
+
+        x = self.channel(x, d_sr)
+        x = self.relay_channel_decoder(x)
+
+        decoder_idx, targets, target_padding_mask, is_causal = shift_inputs(
+            xb=input_ids,
+            attention_mask=attention_mask,
+            mode=self.semantic_encoder.mode,
+        )
+
+        logits, loss = self.semantic_decoder(
+            idx=decoder_idx,
+            encoder_output=x,
+            is_causal=is_causal,
+            target_padding_mask=target_padding_mask,
             targets=targets,
         )
 
         return logits, loss
 
+    def _shift_relay_input(self, x):
+        if self.semantic_encoder.mode == "predict":
+            x = x[:, :-1, :]
+        return x
 
-class Transceiver(nn.Module):  # TODO: find a cooler name
-    def __init__(
-        self,
-        semantic_encoder: SemanticEncoder,
-        relay_channel_block: RelayChannelBlock,
-        dst_semantic_decoder: SemanticDecoder,
-        src_relay_dst_channel_model: SrcRelayDstChannelModel,
-        label_encoder: TensorLabelEncoder,
-    ):
-        super().__init__()
-        self.semantic_encoder = semantic_encoder
-        self.source_encoder = relay_channel_block.source_channel_encoder
 
-        self.src_relay_channel_model = relay_channel_block.src_relay_channel_model
-        self.relay_semantic_decoder = relay_channel_block.semantic_decoder
-        self.relay_encoder = RelayEncoder(
-            semantic_encoder=semantic_encoder,
-            label_encoder=label_encoder,
-        )
 
-        self.dst_semantic_decoder = dst_semantic_decoder
-        self.src_relay_dst_channel_model = src_relay_dst_channel_model
 
-    def forward(self, w, attention_mask, targets, d_sd, d_sr, d_rd):
-        # transmitter
-        encoder_output = self.semantic_encoder(
-            input_ids=w,
-            attention_mask=attention_mask,
-        )
-        src_out = self.source_encoder(encoder_output)
-
-        # relay
-        relay_in = self.src_relay_channel_model(src_out[:, :-1, :], d_sr)
-        logits, _ = self.relay_semantic_decoder(relay_in)
-        relay_out = self.relay_encoder(logits)
-
-        # receiver
-        receiver_input = self.src_relay_dst_channel_model(
-            src_out[:, 1:, :], relay_out, d_rd, d_sd
-        )
-        receiver_output = self.dst_semantic_decoder(
-            encoder_output=receiver_input,
-            attention_mask=attention_mask[:, 1:],
-            targets=targets,
-        )
-        return receiver_output
+# class Transceiver(nn.Module):
+#     def __init__(
+#         self,
+#         semantic_encoder: SemanticEncoder,
+#         relay_channel_block: RelayChannelBlock,
+#         dst_semantic_decoder: SemanticDecoder,
+#         src_relay_dst_channel_model: SrcRelayDstChannelModel,
+#         label_encoder: TensorLabelEncoder,
+#     ):
+#         super().__init__()
+#         self.semantic_encoder = semantic_encoder
+#         self.src_channel_encoder = relay_channel_block.src_channel_encoder
+#
+#         self.src_relay_channel_model = relay_channel_block.src_relay_channel_model
+#         self.relay_semantic_decoder = relay_channel_block.semantic_decoder
+#         self.relay_encoder = RelayEncoder(
+#             semantic_encoder=semantic_encoder,
+#             label_encoder=label_encoder,
+#         )
+#
+#         self.dst_semantic_decoder = dst_semantic_decoder
+#         self.src_relay_dst_channel_model = src_relay_dst_channel_model
+#
+#     def forward(self, input_ids, attention_mask, targets, d_sd, d_sr, d_rd):
+#         # source
+#         encoder_output = self.semantic_encoder(
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#         )
+#         src_out = self.src_channel_encoder(encoder_output)
+#         src_to_relay, src_to_dst = self._shift_src_output(src_out)
+#
+#         # relay
+#         relay_in = self.src_relay_channel_model(src_to_relay, d_sr)
+#         logits, _ = self.relay_semantic_decoder(relay_in)
+#         relay_out = self.relay_encoder(logits)
+#
+#         # destination
+#         receiver_input = self.src_relay_dst_channel_model(
+#             src_to_dst, relay_out, d_rd, d_sd
+#         )
+#         receiver_output = self.dst_semantic_decoder(
+#             encoder_output=receiver_input,
+#             attention_mask=attention_mask[:, 1:],
+#             targets=targets,
+#         )
+#         return receiver_output
+#
+#     def _shift_src_output(self, src_out):
+#         if self.mode == "predict":
+#             src_to_relay = src_out[:, :-1, :]
+#             src_to_dst = src_out[:, 1:, :]
+#         elif self.mode == "forward":
+#             src_to_relay = src_out[:, 1:, :]
+#             src_to_dst = src_out[:, 1:, :]
+#         elif self.mode == "sentence":
+#             src_to_relay = src_out
+#             src_to_dst = src_out
+#         else:
+#             raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
+#
+#         return src_to_relay, src_to_dst
 
 
 class RelayEncoder:

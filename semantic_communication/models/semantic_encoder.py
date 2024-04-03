@@ -54,7 +54,6 @@ class SemanticEncoder(nn.Module):
                 tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),
                 dim=1,
             )
-            encoder_output = encoder_output[:, :-1, :]
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
