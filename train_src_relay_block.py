@@ -142,7 +142,7 @@ if __name__ == "__main__":
                 _, loss = src_relay_block(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
-                    snr_db=args.snr_db,
+                    d_sr=d_sr,
                 )
             val_losses.append(loss.item())
 
