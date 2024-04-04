@@ -35,7 +35,7 @@ python train_semantic_transformer.py \
 python train_src_relay_block.py \
 --data-fp ~/data \
 --checkpoint-path ~/data/checkpoints/ \
---semantic-transformer-path ~/data/checkpoints/relay-decoder-with-rate5/******.pt \
+--semantic-transformer-path ~/data/checkpoints/relay-decoder-with-rate5/semantic_transformer_19.pt \
 --mode sentence \
 --rate 5 \
 --batch-size 512 \
