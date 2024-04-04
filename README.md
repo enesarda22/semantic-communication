@@ -52,7 +52,7 @@ python train_src_relay_block.py \
 --d-min 2e3 \
 --d-max 7e3 \
 --gamma-min 0.2 \
---gamma-max 0.8 \
+--gamma-max 0.8
 ```
 
 ### old
