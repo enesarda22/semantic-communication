@@ -25,7 +25,7 @@ class Channel(ABC):
         last_dim = int(x.shape[-1] / 2)
         x = torch.complex(*torch.split(x, last_dim, dim=-1))
 
-        if not h is None:
+        if h is not None:
             x = x / h
 
         # normalize
@@ -66,13 +66,10 @@ class Rayleigh(Channel):
 
         h = torch.normal(
             mean=0.0,
-            std=0.5**0.5,
-            size=x.shape,
-            dtype=torch.float,
+            std=1.0,
+            size=(*x.shape[:-1], int(x.shape[-1] / 2)),
+            dtype=torch.cfloat,
         ).to(self.device)
-
-        last_dim = int(h.shape[-1] / 2)
-        h = torch.complex(*torch.split(h, last_dim, dim=-1))
 
         x = self.signal_process(x, d, h)
 
