@@ -44,7 +44,7 @@ python train_src_relay_block.py \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \
---channel-block-latent-dim 256 \
+--channel-block-latent-dim 64 \
 --channel-type AWGN \
 --alpha 4 \
 --sig-pow 1 \
