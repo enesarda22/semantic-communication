@@ -16,7 +16,7 @@ class SemanticEncoder(nn.Module):
         self.device = get_device()
 
         self.label_encoder = label_encoder
-        self.max_length = max_length + 1
+        self.max_length = max_length + 1  # TODO: fix +1 discrepancy
         self.mode = mode
         self.rate = rate
 

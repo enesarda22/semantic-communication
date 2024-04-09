@@ -49,7 +49,7 @@ class DecoderBlock(nn.Module):
         self.register_buffer("tril", torch.tril(ones_tensor, -1).T.bool())
 
     def forward(
-        self, x, encoder_output, source_padding_mask, target_padding_mask, is_causal
+        self, x, encoder_output, source_padding_mask, enc_padding_mask, is_causal
     ):
         # norm before the layer, residual connection after the layer
         x_normed = self.ln1(x)
@@ -75,7 +75,7 @@ class DecoderBlock(nn.Module):
             query=x_normed,
             key=encoder_output,
             value=encoder_output,
-            key_padding_mask=target_padding_mask,
+            key_padding_mask=enc_padding_mask,
             need_weights=False,
             attn_mask=attention_mask,
             is_causal=is_causal,
@@ -83,7 +83,7 @@ class DecoderBlock(nn.Module):
         x = x + attention_out
 
         x = x + self.ff_net(self.ln3(x))
-        return x, encoder_output, source_padding_mask, target_padding_mask, is_causal
+        return x, encoder_output, source_padding_mask, enc_padding_mask, is_causal
 
 
 class SemanticDecoder(nn.Module):
@@ -121,7 +121,7 @@ class SemanticDecoder(nn.Module):
         self.pad_idx = pad_idx
 
     def forward(
-        self, idx, encoder_output, is_causal, target_padding_mask=None, targets=None
+        self, idx, encoder_output, is_causal, enc_padding_mask=None, targets=None
     ):
         B, T = idx.shape
 
@@ -134,7 +134,7 @@ class SemanticDecoder(nn.Module):
         source_padding_mask = idx == self.pad_idx
 
         x, _, _, _, _ = self.decoder_blocks(
-            x, encoder_output, source_padding_mask, target_padding_mask, is_causal
+            x, encoder_output, source_padding_mask, enc_padding_mask, is_causal
         )
         logits = self.lm_head(self.ln(x))
 
@@ -152,20 +152,22 @@ class SemanticDecoder(nn.Module):
     def generate(
         self,
         encoder_output,
+        is_causal,
+        max_length,
+        enc_padding_mask=None,
         beam_width=5,
-        max_length=20,
+        n_generated_tokens=20,
     ):
         B = encoder_output.shape[0]
-        T = max_length
+        T = n_generated_tokens
 
         with torch.no_grad():
-            Y = torch.zeros(B, T).to(self.device).long()
+            Y = self.pad_idx * torch.ones(B, T).to(self.device).long()
             Y[:, 0] = 1
 
-            attn_mask = torch.zeros(B, T).to(self.device).long()
-            attn_mask[:, 0] = 1
-
-            next_logits, _ = self(Y, encoder_output, attn_mask)
+            next_logits, _ = self(
+                Y[:, -max_length:], encoder_output, is_causal, enc_padding_mask
+            )
             next_logits = next_logits[:, 0, :]
             vocab_size = next_logits.shape[-1]
 
@@ -176,21 +178,16 @@ class SemanticDecoder(nn.Module):
             Y = Y.repeat((beam_width, 1))
             Y[:, 1] = next_chars.flatten()
 
-            for i in tqdm(range(1, max_length - 1), desc="Predicted token"):
-                attn_mask[:, i] = 1
+            for i in tqdm(range(1, T - 1), desc="Predicted token"):
 
-                dataset = TensorDataset(
-                    Y[:, -max_length:],
-                    encoder_output.repeat((beam_width, 1, 1, 1))
-                    .transpose(0, 1)
-                    .flatten(end_dim=1),
-                    attn_mask.repeat((beam_width, 1)),
-                )
+                dataset = TensorDataset(Y[:, -max_length:])
                 dl = DataLoader(dataset, batch_size=32)
                 next_probabilities = []
 
-                for x, e, mask in dl:
-                    next_logits, _ = self(x, e, mask)
+                for x in dl:
+                    next_logits, _ = self(
+                        x[0], encoder_output, is_causal, enc_padding_mask
+                    )
                     next_logits = next_logits[:, i, :]
                     next_probabilities.append(F.log_softmax(next_logits, dim=-1))
 

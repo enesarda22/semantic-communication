@@ -112,19 +112,19 @@ def shift_inputs(xb, attention_mask, mode):
     if mode == "predict":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
-        target_padding_mask = attention_mask[:, 1:] == 0  # mask the end token
+        enc_padding_mask = attention_mask[:, 1:] == 0  # mask the end token
         is_causal = True
     elif mode == "forward":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
-        target_padding_mask = attention_mask[:, 1:] == 0  # CLS is not received
+        enc_padding_mask = attention_mask[:, 1:] == 0  # CLS is not received
         is_causal = True
     elif mode == "sentence":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
-        target_padding_mask = None
+        enc_padding_mask = None
         is_causal = False
     else:
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
-    return idx, targets, target_padding_mask, is_causal
+    return idx, targets, enc_padding_mask, is_causal

@@ -6,12 +6,12 @@ import torch
 from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
+from semantic_communication.models.semantic_transformer import SemanticTransformer
 from semantic_communication.models.transceiver import (
     Transceiver,
-    RelayChannelBlock,
     ChannelEncoder,
-    SrcRelayChannelModel,
-    SrcRelayDstChannelModel,
+    ChannelDecoder,
+    SrcRelayBlock,
 )
 from semantic_communication.utils.channel import (
     init_channel,
@@ -30,136 +30,174 @@ from semantic_communication.utils.general import (
     add_train_args,
     load_model,
     load_optimizer,
+    load_scheduler,
+    get_start_epoch,
 )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--transceiver-path", type=str)
-
-    # semantic decoders
-    parser.add_argument("--dst-decoder-path", type=str)
+    parser.add_argument("--src-relay-block-path", default=None, type=str)
     add_semantic_decoder_args(parser)
-
-    # channel models
-    parser.add_argument("--relay-channel-block-path", type=str)
-    parser.add_argument("--src-relay-dst-channel-model-path", type=str)
-    add_channel_model_args(parser)
-
     add_data_args(parser)
     add_train_args(parser)
+    add_channel_model_args(parser)
     args = parser.parse_args()
 
     set_seed()
     device = get_device()
 
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
-        semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
 
-    relay_decoder = SemanticDecoder(
+    semantic_encoder = SemanticEncoder(
+        label_encoder=data_handler.label_encoder,
+        max_length=args.max_length,
+        mode=args.mode,
+        rate=args.rate,
+    ).to(device)
+
+    semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
+        bert=semantic_encoder.bert,
+        pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
 
-    src_channel_enc = ChannelEncoder(
+    semantic_transformer = SemanticTransformer(
+        semantic_encoder=semantic_encoder,
+        semantic_decoder=semantic_decoder,
+    ).to(device)
+
+    src_channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
 
+    relay_channel_decoder = ChannelDecoder(
+        nin=args.channel_block_latent_dim,
+        nout=args.channel_block_input_dim,
+    ).to(device)
+
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
-    src_relay_channel_model = SrcRelayChannelModel(
-        n_in=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
+
+    src_relay_block = SrcRelayBlock(
+        semantic_transformer=semantic_transformer,
+        src_channel_encoder=src_channel_encoder,
+        relay_channel_decoder=relay_channel_decoder,
         channel=channel,
     ).to(device)
+    load_model(src_relay_block, args.src_relay_block_path)
 
-    relay_channel_block = RelayChannelBlock(
-        src_channel_encoder=src_channel_enc,
-        src_relay_channel_model=src_relay_channel_model,
-        semantic_decoder=relay_decoder,
+    relay_semantic_encoder = SemanticEncoder(
+        label_encoder=data_handler.label_encoder,
+        max_length=args.max_length,
+        mode=args.mode if args.mode == "sentence" else "forward",
+        rate=args.rate,
     ).to(device)
-    load_model(relay_channel_block, args.relay_channel_block_path)
+    relay_semantic_encoder.load_state_dict(
+        src_relay_block.semantic_encoder.state_dict()
+    )
 
-    # freeze
-    for param in relay_channel_block.parameters():
-        param.requires_grad = False
+    relay_channel_encoder = ChannelEncoder(
+        nin=args.channel_block_input_dim,
+        nout=args.channel_block_latent_dim,
+    ).to(device)
+    relay_channel_encoder.load_state_dict(
+        src_relay_block.src_channel_encoder.state_dict()
+    )
 
-    dst_decoder = SemanticDecoder(
+    dst_channel_decoder = ChannelDecoder(
+        nin=args.channel_block_latent_dim * 2,
+        nout=args.channel_block_input_dim,
+    ).to(device)
+
+    dst_semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
         n_blocks=args.n_blocks,
         n_heads=args.n_heads,
-        n_embeddings=args.n_embeddings * 2,
+        n_embeddings=args.n_embeddings,
         block_size=args.max_length,
+        bert=semantic_encoder.bert,
+        pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
-    load_model(dst_decoder, args.dst_decoder_path)
-
-    src_relay_dst_channel_model = SrcRelayDstChannelModel(
-        n_in=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
-        channel=channel,
-    ).to(device)
-    load_model(src_relay_dst_channel_model, args.src_relay_dst_channel_model_path)
+    dst_semantic_decoder.load_state_dict(src_relay_block.semantic_decoder.state_dict())
 
     transceiver = Transceiver(
-        semantic_encoder=semantic_encoder,
-        relay_channel_block=relay_channel_block,
-        dst_semantic_decoder=dst_decoder,
-        src_relay_dst_channel_model=src_relay_dst_channel_model,
-        label_encoder=data_handler.label_encoder,
-    )
+        src_relay_block=src_relay_block,
+        relay_semantic_encoder=relay_semantic_encoder,
+        relay_channel_encoder=relay_channel_encoder,
+        dst_channel_decoder=dst_channel_decoder,
+        dst_semantic_decoder=dst_semantic_decoder,
+        channel=channel,
+        max_length=args.max_length,
+    ).to(device)
     load_model(transceiver, args.transceiver_path)
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
-    load_optimizer(optimizer, args.transceiver_path)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer=optimizer,
-        max_lr=args.lr,
-        total_steps=args.n_epochs,
-    )
+    if args.load_optimizer:
+        load_optimizer(optimizer, args.transceiver_path)
 
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=args.lr,
+        steps_per_epoch=len(data_handler.train_dataloader),
+        epochs=args.n_epochs,
+    )
+    if args.load_scheduler:
+        load_scheduler(scheduler, args.transceiver_path)
+
+    start_epoch = get_start_epoch(args.transceiver_path)
     best_loss = torch.inf
-    for epoch in range(args.n_epochs):
+    for epoch in range(start_epoch, args.n_epochs + 1):
         train_losses = []
         transceiver.train()
+
         for b in tqdm(data_handler.train_dataloader):
-            xb = b[0].to(device)
-            attention_mask = b[1].to(device)
-            targets = data_handler.label_encoder.transform(xb)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
-            d_rd = d_sd - d_sr
 
-            _, loss = transceiver(xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd)
+            _, loss = transceiver(
+                input_ids=encoder_idx,
+                attention_mask=encoder_attention_mask,
+                d_sd=d_sd,
+                d_sr=d_sr,
+            )
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
-            train_losses.append(loss.item())
+            scheduler.step()
 
-        scheduler.step()
+            train_losses.append(loss.item())
 
         val_losses = []
         transceiver.eval()
         for b in data_handler.val_dataloader:
-            xb = b[0].to(device)
-            attention_mask = b[1].to(device)
-            targets = data_handler.label_encoder.transform(xb)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
-            d_rd = d_sd - d_sr
+
             with torch.no_grad():
                 _, loss = transceiver(
-                    xb, attention_mask, targets[:, 1:], d_sd, d_sr, d_rd
+                    input_ids=encoder_idx,
+                    attention_mask=encoder_attention_mask,
+                    d_sr=d_sr,
                 )
-
             val_losses.append(loss.item())
 
         print("\n")
@@ -170,7 +208,7 @@ if __name__ == "__main__":
 
         checkpoint_path = os.path.join(
             args.checkpoint_path,
-            f"end-to-end-transceiver/end_to_end_transceiver_{epoch}.pt",
+            f"transceiver/transceiver_{epoch}.pt",
         )
 
         if mean_loss < best_loss:
