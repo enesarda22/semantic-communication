@@ -166,7 +166,7 @@ class SemanticDecoder(nn.Module):
             Y[:, 0] = 1
 
             next_logits, _ = self(
-                Y[:, -max_length:], encoder_output, is_causal, enc_padding_mask
+                Y[:, :max_length], encoder_output, is_causal, enc_padding_mask
             )
             next_logits = next_logits[:, 0, :]
             vocab_size = next_logits.shape[-1]
@@ -179,9 +179,10 @@ class SemanticDecoder(nn.Module):
             Y[:, 1] = next_chars.flatten()
 
             for i in tqdm(range(1, T - 1), desc="Predicted token"):
-
-                dataset = TensorDataset(Y[:, -max_length:])
-                dl = DataLoader(dataset, batch_size=32)
+                start_idx = max(i - max_length, 0)
+                end_idx = start_idx + max_length
+                dataset = TensorDataset(Y[:, -start_idx:end_idx])
+                dl = DataLoader(dataset, batch_size=B)
                 next_probabilities = []
 
                 for x in dl:

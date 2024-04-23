@@ -213,12 +213,21 @@ class Transceiver(nn.Module):
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
         x_relay = self.relay_channel_decoder(x_relay)
+
+        B, R, C = x_relay.shape
+        x_relay = torch.repeat_interleave(input=x_relay, repeats=R, dim=0)
+        x_relay_padding_mask = torch.tril(
+            torch.ones(R, R, device=self.device), -1
+        ).T.bool()
+        x_relay_padding_mask = x_relay_padding_mask.repeat(B, 1)
+
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
             is_causal=self.relay_semantic_encoder.mode != "sentence",
             max_length=self.max_length,  # TODO: fix +1 discrepancy
+            enc_padding_mask=x_relay_padding_mask,
             n_generated_tokens=self.max_length + 1,
-        )  # TODO: transceiver sees all the embeddings?
+        )  # TODO: relay sees all the embeddings?
 
         relay_attention_mask = torch.ones(
             *x_relay.shape, dtype=torch.long, device=self.device
@@ -233,6 +242,9 @@ class Transceiver(nn.Module):
             input_ids=x_relay,
             attention_mask=relay_attention_mask,
         )
+        x_relay = x_relay[torch.arange(B * R), torch.arange(R).repeat(B), :]
+        x_relay = x_relay.reshape(B, R, C)
+
         x_relay = self.relay_channel_encoder(x_relay)
 
         # destination
