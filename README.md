@@ -62,7 +62,7 @@ python train_end_to_end.py \
 --src-relay-block-path ~/data/checkpoints/src-relay-block/src_relay_block_17.pt \
 --mode sentence \
 --rate 5 \
---batch-size 512 \
+--batch-size 256 \
 --n-epochs 20 \
 --lr 5e-4 \
 --n-blocks 6 \
