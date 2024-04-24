@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import torch
+from torch import nn
 from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
@@ -136,7 +137,9 @@ if __name__ == "__main__":
         dst_semantic_decoder=dst_semantic_decoder,
         channel=channel,
         max_length=args.max_length,
-    ).to(device)
+    )
+    transceiver = nn.DataParallel(transceiver)
+    transceiver = transceiver.to(device)
     load_model(transceiver, args.transceiver_path)
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
