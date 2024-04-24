@@ -178,11 +178,11 @@ if __name__ == "__main__":
             )
 
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
+            loss.sum().backward()
             optimizer.step()
             scheduler.step()
 
-            train_losses.append(loss.item())
+            train_losses.append(loss.sum().item())
 
         val_losses = []
         transceiver.eval()
@@ -201,7 +201,7 @@ if __name__ == "__main__":
                     attention_mask=encoder_attention_mask,
                     d_sr=d_sr,
                 )
-            val_losses.append(loss.item())
+            val_losses.append(loss.sum().item())
 
         print("\n")
         print_loss(train_losses, "Train")
