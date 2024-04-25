@@ -199,6 +199,7 @@ if __name__ == "__main__":
                 _, loss = transceiver(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
+                    d_sd=d_sd,
                     d_sr=d_sr,
                 )
             val_losses.append(loss.sum().item())

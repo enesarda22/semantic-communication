@@ -3,8 +3,6 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.utils.data import TensorDataset, DataLoader
 
-from tqdm import tqdm
-
 from semantic_communication.utils.general import get_device
 
 
@@ -178,7 +176,7 @@ class SemanticDecoder(nn.Module):
             Y = Y.repeat((beam_width, 1))
             Y[:, 1] = next_chars.flatten()
 
-            for i in tqdm(range(1, T - 1), desc="Predicted token"):
+            for i in range(1, T - 1):
                 start_idx = max(i - max_length, 0)
                 end_idx = start_idx + max_length
                 dataset = TensorDataset(Y[:, -start_idx:end_idx])
