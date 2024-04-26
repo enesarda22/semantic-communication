@@ -180,11 +180,11 @@ if __name__ == "__main__":
             )
 
             optimizer.zero_grad(set_to_none=True)
-            loss.sum().backward()
+            loss.mean().backward()
             optimizer.step()
             scheduler.step()
 
-            train_losses.append(loss.sum().item())
+            train_losses.append(loss.mean().item())
             break
 
         val_losses = []
@@ -198,14 +198,13 @@ if __name__ == "__main__":
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
-            with torch.no_grad():
-                _, loss = transceiver(
-                    input_ids=encoder_idx,
-                    attention_mask=encoder_attention_mask,
-                    d_sd=d_sd,
-                    d_sr=d_sr,
-                )
-            val_losses.append(loss.sum().item())
+            _, loss = transceiver(
+                input_ids=encoder_idx,
+                attention_mask=encoder_attention_mask,
+                d_sd=d_sd,
+                d_sr=d_sr,
+            )
+            val_losses.append(loss.mean().item())
             break
 
         print("\n")
