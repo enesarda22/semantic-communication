@@ -48,6 +48,8 @@ if __name__ == "__main__":
     set_seed()
     device = get_device()
 
+    print(torch.cuda.device_count())
+
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
@@ -183,6 +185,7 @@ if __name__ == "__main__":
             scheduler.step()
 
             train_losses.append(loss.sum().item())
+            break
 
         val_losses = []
         transceiver.eval()
@@ -203,6 +206,7 @@ if __name__ == "__main__":
                     d_sr=d_sr,
                 )
             val_losses.append(loss.sum().item())
+            break
 
         print("\n")
         print_loss(train_losses, "Train")
