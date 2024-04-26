@@ -188,7 +188,7 @@ if __name__ == "__main__":
             break
 
         val_losses = []
-        transceiver.eval()
+        # transceiver.eval()
         for b in tqdm(data_handler.val_dataloader):
             encoder_idx = b[0].to(device)
             encoder_attention_mask = b[1].to(device)
