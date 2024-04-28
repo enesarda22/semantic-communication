@@ -29,7 +29,7 @@ class Channel(ABC):
             x = x / h
 
         # normalize
-        sig_pow = self.signal_power_constraint / (d**self.alpha)
+        sig_pow = self.signal_power_constraint  # TODO: path loss
         x = (x / torch.abs(x)) * (sig_pow**0.5)
 
         return x
@@ -47,7 +47,7 @@ class AWGN(Channel):
 
         noise = torch.normal(
             mean=0.0,
-            std=self.noise_pow**0.5,
+            std=(self.noise_pow * (d**self.alpha)) ** 0.5,  # TODO: path loss
             size=x.shape,
             dtype=torch.cfloat,
         ).to(self.device)

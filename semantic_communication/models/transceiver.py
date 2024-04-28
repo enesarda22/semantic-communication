@@ -63,7 +63,7 @@ class ChannelDecoder(nn.Module):
         self.linear = nn.Linear(dims[-1], nout)
 
     def forward(self, x):
-        x = x / torch.norm(x, dim=2, keepdim=True)
+        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize
         for l in self.layers:
             x = l(x)
         return self.linear(x)
@@ -123,6 +123,8 @@ class SrcRelayBlock(nn.Module):
         self.src_channel_encoder = src_channel_encoder
         self.relay_channel_decoder = relay_channel_decoder
 
+        self.device = get_device()
+
     def forward(
         self,
         messages: Optional[List[str]] = None,
@@ -141,21 +143,66 @@ class SrcRelayBlock(nn.Module):
         x = self.channel(x, d_sr)
         x = self.relay_channel_decoder(x)
 
-        decoder_idx, targets, target_padding_mask, is_causal = shift_inputs(
+        B, R, C = x.shape
+        x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+
+        enc_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
+        enc_padding_mask = enc_padding_mask.repeat(B, 1)
+
+        decoder_idx, targets, _, is_causal = shift_inputs(
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.semantic_encoder.mode,
         )
 
+        decoder_idx = torch.repeat_interleave(input=decoder_idx, repeats=R, dim=0)
+        targets = torch.repeat_interleave(input=targets, repeats=R, dim=0)
+
         logits, loss = self.semantic_decoder(
             idx=decoder_idx,
             encoder_output=x,
             is_causal=is_causal,
-            target_padding_mask=target_padding_mask,
+            enc_padding_mask=enc_padding_mask,
             targets=targets,
         )
 
         return logits, loss
+
+    def generate(
+        self,
+        messages: Optional[List[str]] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        d_sr: Optional[float] = None,
+    ):
+        self.eval()
+        with torch.no_grad():
+            x = self.semantic_encoder(
+                messages=messages,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )
+            x = self.src_channel_encoder(x)
+            x = self._shift_relay_input(x)
+
+            x = self.channel(x, d_sr)
+            x = self.relay_channel_decoder(x)
+
+            B, R, C = x.shape
+            x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+
+            x_padding_mask = torch.tril(
+                torch.ones(R, R, device=self.device), -1
+            ).T.bool()
+            x_padding_mask = x_padding_mask.repeat(B, 1)
+
+            return self.semantic_decoder.generate(
+                encoder_output=x,
+                is_causal=False,
+                max_length=self.semantic_encoder.max_length - 1,
+                enc_padding_mask=x_padding_mask,
+                n_generated_tokens=self.semantic_encoder.max_length,
+            )
 
     def _shift_relay_input(self, x):
         if self.semantic_encoder.mode == "predict":
@@ -202,25 +249,55 @@ class Transceiver(nn.Module):
         d_sr: Optional[float] = None,
     ):
         # source
-        x_src = self.src_semantic_encoder(
-            messages=messages,
-            input_ids=input_ids,
+        x_src_to_dst, x_src_to_relay = self._source_forward(
             attention_mask=attention_mask,
+            input_ids=input_ids,
+            messages=messages,
         )
-        x_src = self.src_channel_encoder(x_src)
-        x_src_to_relay, x_src_to_dst = self._shift_src_output(x_src)
 
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
-        x_relay = self.relay_channel_decoder(x_relay)
+        x_relay = self._relay_forward(x_relay=x_relay)
 
+        # destination
+        x_dst1 = self.channel(x_relay, d_sd - d_sr)
+        x_dst2 = self.channel(x_src_to_dst, d_sd)
+        x_dst = torch.cat((x_dst1, x_dst2), dim=-1)
+
+        logits, loss = self._destination_forward(
+            x_dst=x_dst,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+
+        return logits, loss
+
+    def _destination_forward(self, x_dst, input_ids, attention_mask):
+        x_dst = self.dst_channel_decoder(x_dst)
+        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
+            xb=input_ids,
+            attention_mask=attention_mask,
+            mode=self.relay_semantic_encoder.mode,
+        )
+        logits, loss = self.dst_semantic_decoder(
+            idx=decoder_idx,
+            encoder_output=x_dst,
+            is_causal=is_causal,
+            enc_padding_mask=enc_padding_mask,
+            targets=targets,
+        )
+        return logits, loss
+
+    def _relay_forward(self, x_relay):
+        x_relay = self.relay_channel_decoder(x_relay)
         B, R, C = x_relay.shape
+
+        # decode every sentence embedding using beam search
         x_relay = torch.repeat_interleave(input=x_relay, repeats=R, dim=0)
         x_relay_padding_mask = torch.tril(
             torch.ones(R, R, device=self.device), -1
         ).T.bool()
         x_relay_padding_mask = x_relay_padding_mask.repeat(B, 1)
-
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
             is_causal=self.relay_semantic_encoder.mode != "sentence",
@@ -229,6 +306,7 @@ class Transceiver(nn.Module):
             n_generated_tokens=self.max_length + 1,
         )  # TODO: relay sees all the embeddings?
 
+        # create attention mask based on [SEP] token
         relay_attention_mask = torch.ones(
             *x_relay.shape, dtype=torch.long, device=self.device
         )
@@ -238,36 +316,60 @@ class Transceiver(nn.Module):
                 continue
             relay_attention_mask[i, k + 1 :] = 0
 
+        # re-encode decoded sentences and forward
         x_relay = self.relay_semantic_encoder(
             input_ids=x_relay,
             attention_mask=relay_attention_mask,
         )
         x_relay = x_relay[torch.arange(B * R), torch.arange(R).repeat(B), :]
         x_relay = x_relay.reshape(B, R, C)
-
         x_relay = self.relay_channel_encoder(x_relay)
+        return x_relay
 
-        # destination
-        x_dst1 = self.channel(x_relay, d_sd - d_sr)
-        x_dst2 = self.channel(x_src_to_dst, d_sd)
-        x_dst = torch.cat((x_dst1, x_dst2), dim=-1)
-        x_dst = self.dst_channel_decoder(x_dst)
-
-        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
-            xb=input_ids,
+    def _source_forward(self, input_ids, messages, attention_mask):
+        x_src = self.src_semantic_encoder(
+            messages=messages,
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            mode=self.relay_semantic_encoder.mode,
         )
+        x_src = self.src_channel_encoder(x_src)
+        x_src_to_relay, x_src_to_dst = self._shift_src_output(x_src)
+        return x_src_to_dst, x_src_to_relay
 
-        logits, loss = self.dst_semantic_decoder(
-            idx=decoder_idx,
-            encoder_output=x_dst,
-            is_causal=is_causal,
-            enc_padding_mask=enc_padding_mask,
-            targets=targets,
-        )
+    def generate(
+        self,
+        messages: Optional[List[str]] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        d_sd: Optional[float] = None,
+        d_sr: Optional[float] = None,
+    ):
+        self.eval()
+        with torch.no_grad():
+            # source
+            x_src_to_dst, x_src_to_relay = self._source_forward(
+                attention_mask=attention_mask,
+                input_ids=input_ids,
+                messages=messages,
+            )
 
-        return logits, loss
+            # relay
+            x_relay = self.channel(x_src_to_relay, d_sr)
+            x_relay = self._relay_forward(x_relay=x_relay)
+
+            # destination
+            x_dst1 = self.channel(x_relay, d_sd - d_sr)
+            x_dst2 = self.channel(x_src_to_dst, d_sd)
+            x_dst = torch.cat((x_dst1, x_dst2), dim=-1)
+
+            x_dst = self.dst_channel_decoder(x_dst)
+            return self.dst_semantic_decoder.generate(
+                encoder_output=x_dst,
+                is_causal=False,
+                max_length=self.max_length,
+                enc_padding_mask=None,
+                n_generated_tokens=self.max_length + 1,
+            )
 
     def _shift_src_output(self, src_out):
         if self.relay_semantic_encoder.mode == "predict":
