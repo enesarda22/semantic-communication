@@ -147,6 +147,7 @@ class SemanticDecoder(nn.Module):
 
         return logits, loss
 
+    @torch.no_grad()
     def generate(
         self,
         encoder_output,
@@ -159,68 +160,65 @@ class SemanticDecoder(nn.Module):
         B = encoder_output.shape[0]
         T = n_generated_tokens
 
-        with torch.no_grad():
-            Y = self.pad_idx * torch.ones(B, T).to(self.device).long()
-            Y[:, 0] = 1
+        Y = self.pad_idx * torch.ones(B, T).to(self.device).long()
+        Y[:, 0] = 1
 
-            next_logits, _ = self(
-                Y[:, :max_length], encoder_output, is_causal, enc_padding_mask
+        next_logits, _ = self(
+            Y[:, :max_length], encoder_output, is_causal, enc_padding_mask
+        )
+        next_logits = next_logits[:, 0, :]
+        vocab_size = next_logits.shape[-1]
+
+        probabilities, next_chars = F.log_softmax(next_logits, dim=-1).topk(
+            k=beam_width, dim=-1
+        )
+
+        Y = Y.repeat_interleave(beam_width, dim=0)
+        encoder_output = encoder_output.repeat_interleave(beam_width, dim=0)
+
+        Y[:, 1] = next_chars.flatten()
+
+        for i in range(1, T - 1):
+            start_idx = max(i - max_length, 0)
+            end_idx = start_idx + max_length
+            dataset = TensorDataset(Y[:, -start_idx:end_idx], encoder_output)
+            dl = DataLoader(dataset, batch_size=B)
+            next_probabilities = []
+
+            for x in dl:
+                next_logits, _ = self(x[0], x[1], is_causal, enc_padding_mask)
+                next_logits = next_logits[:, i, :]
+                next_probabilities.append(F.log_softmax(next_logits, dim=-1))
+
+            next_probabilities = torch.cat(next_probabilities, axis=0)
+            next_probabilities = next_probabilities.reshape(
+                (-1, beam_width, next_probabilities.shape[-1])
             )
-            next_logits = next_logits[:, 0, :]
-            vocab_size = next_logits.shape[-1]
+            probabilities = probabilities.unsqueeze(-1) + next_probabilities
+            probabilities = probabilities.flatten(start_dim=1)
+            probabilities, idx = probabilities.topk(k=beam_width, axis=-1)
+            next_chars = torch.remainder(idx, vocab_size).flatten().unsqueeze(-1)
 
-            probabilities, next_chars = F.log_softmax(next_logits, dim=-1).topk(
-                k=beam_width, dim=-1
+            best_candidates = (idx / vocab_size).long()
+            best_candidates += (
+                torch.arange(Y.shape[0] // beam_width, device=self.device).unsqueeze(-1)
+                * beam_width
             )
 
-            Y = Y.repeat((beam_width, 1))
-            Y[:, 1] = next_chars.flatten()
+            Y = Y[best_candidates].flatten(end_dim=-2)
+            Y[:, i + 1] = next_chars.flatten()
 
-            for i in range(1, T - 1):
-                start_idx = max(i - max_length, 0)
-                end_idx = start_idx + max_length
-                dataset = TensorDataset(Y[:, -start_idx:end_idx])
-                dl = DataLoader(dataset, batch_size=B)
-                next_probabilities = []
+            if torch.all(torch.any(Y == 2, dim=1)):
+                break
 
-                for x in dl:
-                    next_logits, _ = self(
-                        x[0], encoder_output, is_causal, enc_padding_mask
-                    )
-                    next_logits = next_logits[:, i, :]
-                    next_probabilities.append(F.log_softmax(next_logits, dim=-1))
+        best_indices = torch.argmax(probabilities, dim=1)
+        Y = torch.gather(
+            Y.reshape(-1, beam_width, Y.shape[-1]),
+            1,
+            best_indices.reshape(-1, 1, 1).repeat((1, 1, Y.shape[-1])),
+        ).squeeze(1)
 
-                next_probabilities = torch.cat(next_probabilities, axis=0)
-                next_probabilities = next_probabilities.reshape(
-                    (-1, beam_width, next_probabilities.shape[-1])
-                )
-                probabilities = probabilities.unsqueeze(-1) + next_probabilities
-                probabilities = probabilities.flatten(start_dim=1)
-                probabilities, idx = probabilities.topk(k=beam_width, axis=-1)
-                next_chars = torch.remainder(idx, vocab_size).flatten().unsqueeze(-1)
-
-                best_candidates = (idx / vocab_size).long()
-                best_candidates += (
-                    torch.arange(
-                        Y.shape[0] // beam_width, device=self.device
-                    ).unsqueeze(-1)
-                    * beam_width
-                )
-
-                Y = Y[best_candidates].flatten(end_dim=-2)
-                Y[:, i + 1] = next_chars.flatten()
-
-                if torch.all(torch.any(Y == 2, dim=1)):
-                    break
-
-            best_indices = torch.argmax(probabilities, dim=1)
-            Y = torch.gather(
-                Y.reshape(-1, beam_width, Y.shape[-1]),
-                1,
-                best_indices.reshape(-1, 1, 1).repeat((1, 1, Y.shape[-1])),
-            ).squeeze(1)
-
-            return Y, probabilities[torch.arange(B), best_indices]
+        return Y, probabilities[torch.arange(B), best_indices]
 
     def generate_next(
         self,

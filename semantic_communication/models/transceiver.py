@@ -168,6 +168,7 @@ class SrcRelayBlock(nn.Module):
 
         return logits, loss
 
+    @torch.no_grad()
     def generate(
         self,
         messages: Optional[List[str]] = None,
@@ -175,34 +176,32 @@ class SrcRelayBlock(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         d_sr: Optional[float] = None,
     ):
-        self.eval()
-        with torch.no_grad():
-            x = self.semantic_encoder(
-                messages=messages,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-            )
-            x = self.src_channel_encoder(x)
-            x = self._shift_relay_input(x)
+        x = self.semantic_encoder(
+            messages=messages,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        x = self.src_channel_encoder(x)
+        x = self._shift_relay_input(x)
 
-            x = self.channel(x, d_sr)
-            x = self.relay_channel_decoder(x)
+        x = self.channel(x, d_sr)
+        x = self.relay_channel_decoder(x)
 
-            B, R, C = x.shape
-            x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+        B, R, _ = x.shape
+        x = torch.repeat_interleave(input=x, repeats=R, dim=0)
 
-            x_padding_mask = torch.tril(
-                torch.ones(R, R, device=self.device), -1
-            ).T.bool()
-            x_padding_mask = x_padding_mask.repeat(B, 1)
+        x_padding_mask = torch.tril(
+            torch.ones(R, R, device=self.device), -1
+        ).T.bool()
+        x_padding_mask = x_padding_mask.repeat(B, 1)
 
-            return self.semantic_decoder.generate(
-                encoder_output=x,
-                is_causal=False,
-                max_length=self.semantic_encoder.max_length - 1,
-                enc_padding_mask=x_padding_mask,
-                n_generated_tokens=self.semantic_encoder.max_length,
-            )
+        return self.semantic_decoder.generate(
+            encoder_output=x,
+            is_causal=False,
+            max_length=self.semantic_encoder.max_length - 1,
+            enc_padding_mask=x_padding_mask,
+            n_generated_tokens=self.semantic_encoder.max_length,
+        )
 
     def _shift_relay_input(self, x):
         if self.semantic_encoder.mode == "predict":

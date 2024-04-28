@@ -7,9 +7,16 @@ from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.models.semantic_transformer import SemanticTransformer
+from semantic_communication.models.transceiver import (
+    ChannelDecoder,
+    ChannelEncoder,
+    SrcRelayBlock,
+)
+from semantic_communication.utils.channel import init_channel
 from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_data_args,
+    add_channel_model_args,
     set_seed,
     get_device,
     load_model,
@@ -23,12 +30,13 @@ def generate_text():
 
         encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-        predicted_ids, probs = semantic_transformer.generate(
+        # d_sd = get_distance(args.d_min, args.d_max)
+        # d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+
+        predicted_ids, _ = src_relay_block.generate(
             input_ids=encoder_idx,
             attention_mask=encoder_attention_mask,
-            snr_db=args.snr_db,
-            max_length=args.max_length,
-            n_generated_tokens=args.max_length + 1,
+            d_sr=1000.0,
         )
 
         # find the end of sentences
@@ -56,19 +64,19 @@ def generate_text():
             skip_special_tokens=True,
         )
 
-        _, indices = torch.sort(probs)
-        for i in indices:
-            print(f"Probability: {torch.exp(probs[i]):.2e}")
-            print(f"{input_tokens[i]}\n{predicted_tokens[i]}\n")
+        for i in range(len(input_tokens)):
+            print(f"\nTrue Sentence: {input_tokens[i]}")
+            for k in range(args.rate):
+                print(f"Predicted Sentence {k}: {predicted_tokens[i * args.rate + k]}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--semantic-transformer-path", type=str)
+    parser.add_argument("--src-relay-block-path", type=str)
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--snr-db", default=None, type=float)
     add_semantic_decoder_args(parser)
     add_data_args(parser)
+    add_channel_model_args(parser)
     args = parser.parse_args()
 
     set_seed()
@@ -100,7 +108,26 @@ if __name__ == "__main__":
         semantic_encoder=semantic_encoder,
         semantic_decoder=semantic_decoder,
     ).to(device)
-    load_model(semantic_transformer, args.semantic_transformer_path)
 
-    semantic_transformer.eval()
+    src_channel_encoder = ChannelEncoder(
+        nin=args.channel_block_input_dim,
+        nout=args.channel_block_latent_dim,
+    ).to(device)
+
+    relay_channel_decoder = ChannelDecoder(
+        nin=args.channel_block_latent_dim,
+        nout=args.channel_block_input_dim,
+    ).to(device)
+
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
+
+    src_relay_block = SrcRelayBlock(
+        semantic_transformer=semantic_transformer,
+        src_channel_encoder=src_channel_encoder,
+        relay_channel_decoder=relay_channel_decoder,
+        channel=channel,
+    ).to(device)
+    load_model(src_relay_block, args.src_relay_block_path)
+
+    src_relay_block.eval()
     generate_text()

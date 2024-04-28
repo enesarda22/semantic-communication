@@ -57,8 +57,8 @@ class SemanticTransformer(nn.Module):
         snr_db: Optional[float] = None,
         beam_width=5,
         max_length=20,
+        n_generated_tokens=20,
     ):
-        self.eval()
         with torch.no_grad():
             encoder_output = self.semantic_encoder(
                 messages=messages,
@@ -69,8 +69,11 @@ class SemanticTransformer(nn.Module):
 
             return self.semantic_decoder.generate(
                 encoder_output=encoder_output,
-                beam_width=beam_width,
+                is_causal=False,
                 max_length=max_length,
+                enc_padding_mask=None,
+                beam_width=beam_width,
+                n_generated_tokens=n_generated_tokens,
             )
 
     @staticmethod
