@@ -9,7 +9,11 @@ from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.models.semantic_transformer import SemanticTransformer
-from semantic_communication.models.transceiver import ChannelEncoder, ChannelDecoder, SrcRelayBlock
+from semantic_communication.models.transceiver import (
+    ChannelEncoder,
+    ChannelDecoder,
+    SrcRelayBlock,
+)
 
 from semantic_communication.utils.channel import init_channel, get_distance
 from semantic_communication.utils.general import (
@@ -21,7 +25,10 @@ from semantic_communication.utils.general import (
     add_data_args,
     add_train_args,
     add_channel_model_args,
-    load_model, load_optimizer, load_scheduler, get_start_epoch,
+    load_model,
+    load_optimizer,
+    load_scheduler,
+    get_start_epoch,
 )
 
 
@@ -162,7 +169,9 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=src_relay_block.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
+                scheduler_state_dict=scheduler.state_dict(),
                 mean_val_loss=mean_loss,
+                epoch=epoch,
             )
             best_loss = mean_loss
         else:
@@ -170,5 +179,7 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=None,
                 optimizer_state_dict=None,
+                scheduler_state_dict=None,
                 mean_val_loss=mean_loss,
+                epoch=epoch,
             )

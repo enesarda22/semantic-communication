@@ -222,7 +222,9 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=transceiver.state_dict(),
                 optimizer_state_dict=optimizer.state_dict(),
+                scheduler_state_dict=scheduler.state_dict(),
                 mean_val_loss=mean_loss,
+                epoch=epoch,
             )
             best_loss = mean_loss
         else:
@@ -230,5 +232,7 @@ if __name__ == "__main__":
                 path=checkpoint_path,
                 model_state_dict=None,
                 optimizer_state_dict=None,
+                scheduler_state_dict=None,
                 mean_val_loss=mean_loss,
+                epoch=epoch,
             )
