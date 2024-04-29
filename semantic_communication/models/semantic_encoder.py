@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 import torch
+from torch.nn import functional as F
 from torch import nn
 
 from transformers import AutoTokenizer, AutoModel
@@ -27,7 +28,7 @@ class SemanticEncoder(nn.Module):
         )
 
         if self.rate is not None and self.mode == "sentence":
-            self.pooling_head = nn.Linear(max_length + 1, rate, bias=False)
+            self.pooling_head = nn.Parameter(torch.randn(max_length + 1, rate))
 
     def forward(
         self,
@@ -57,7 +58,8 @@ class SemanticEncoder(nn.Module):
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
-            encoder_output = self.pooling_head(encoder_lhs.transpose(1, 2))
+            weights = F.softmax(self.pooling_head, dim=0)
+            encoder_output = encoder_lhs.transpose(1, 2) @ weights
             encoder_output = encoder_output.transpose(1, 2)
         else:
             raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")

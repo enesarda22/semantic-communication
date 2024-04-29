@@ -9,6 +9,7 @@ from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.models.semantic_transformer import SemanticTransformer
+from semantic_communication.models.transceiver import ChannelDecoder, ChannelEncoder
 from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_data_args,
@@ -21,6 +22,7 @@ from semantic_communication.utils.general import (
     get_start_epoch,
     create_checkpoint,
     print_loss,
+    add_channel_model_args,
 )
 
 
@@ -33,6 +35,7 @@ if __name__ == "__main__":
     add_semantic_decoder_args(parser)
     add_data_args(parser)
     add_train_args(parser)
+    add_channel_model_args(parser)
     args = parser.parse_args()
 
     set_seed()
@@ -61,9 +64,21 @@ if __name__ == "__main__":
     ).to(device)
     load_model(semantic_decoder, args.semantic_decoder_path)
 
+    channel_encoder = ChannelEncoder(
+        nin=args.channel_block_input_dim,
+        nout=args.channel_block_latent_dim,
+    ).to(device)
+
+    channel_decoder = ChannelDecoder(
+        nin=args.channel_block_latent_dim,
+        nout=args.channel_block_input_dim,
+    ).to(device)
+
     semantic_transformer = SemanticTransformer(
         semantic_encoder=semantic_encoder,
         semantic_decoder=semantic_decoder,
+        channel_encoder=channel_encoder,
+        channel_decoder=channel_decoder,
     ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
 

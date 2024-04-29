@@ -1,72 +1,17 @@
 from typing import Optional, List
 
-import numpy as np
 import torch
 from torch import nn
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.models.semantic_transformer import SemanticTransformer
+from semantic_communication.models.semantic_transformer import (
+    SemanticTransformer,
+    ChannelEncoder,
+    ChannelDecoder,
+)
 from semantic_communication.utils.channel import Channel
 from semantic_communication.utils.general import get_device, shift_inputs
-
-
-class ChannelEncComp(nn.Module):
-    def __init__(self, in_dim, out_dim):
-        super(ChannelEncComp, self).__init__()
-        self.linear = nn.Linear(in_dim, out_dim)
-        self.ln = nn.LayerNorm(out_dim)
-        self.prelu = nn.PReLU()
-
-    def forward(self, x):
-        x = self.linear(x)
-        x = self.ln(x)
-        out = self.prelu(x)
-        return out
-
-
-class ChannelEncoder(nn.Module):
-    def __init__(self, nin, nout):
-        super(ChannelEncoder, self).__init__()
-        up_dim = int(np.floor(np.log2(nin) / 2))
-        low_dim = int(np.ceil(np.log2(nout) / 2))
-
-        dims = [nin]
-        for i in range(up_dim - low_dim + 1):
-            dims.append(np.power(4, up_dim - i))
-
-        self.layers = nn.ModuleList(
-            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
-        )
-
-        self.linear = nn.Linear(dims[-1], nout)
-
-    def forward(self, x):
-        for l in self.layers:
-            x = l(x)
-        return self.linear(x)
-
-
-class ChannelDecoder(nn.Module):
-    def __init__(self, nin, nout):
-        super(ChannelDecoder, self).__init__()
-        up_dim = int(np.floor(np.log2(nout) / 2))
-        low_dim = int(np.ceil(np.log2(nin) / 2))
-        dims = [nin]
-        for i in range(up_dim - low_dim + 1):
-            dims.append(np.power(4, low_dim + i))
-
-        self.layers = nn.ModuleList(
-            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
-        )
-
-        self.linear = nn.Linear(dims[-1], nout)
-
-    def forward(self, x):
-        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize
-        for l in self.layers:
-            x = l(x)
-        return self.linear(x)
 
 
 # class SrcRelayChannelModel(nn.Module):
@@ -190,9 +135,7 @@ class SrcRelayBlock(nn.Module):
         B, R, _ = x.shape
         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
 
-        x_padding_mask = torch.tril(
-            torch.ones(R, R, device=self.device), -1
-        ).T.bool()
+        x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
         x_padding_mask = x_padding_mask.repeat(B, 1)
 
         return self.semantic_decoder.generate(

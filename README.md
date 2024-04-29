@@ -28,7 +28,9 @@ python train_semantic_transformer.py \
 --n-epochs 20 \
 --lr 5e-4 \
 --n-blocks 6 \
---n-heads 6
+--n-heads 6 \
+--channel-block-input-dim 384 \
+--channel-block-latent-dim 64
 ```
 
 ```
