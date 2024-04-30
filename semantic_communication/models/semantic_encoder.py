@@ -58,7 +58,14 @@ class SemanticEncoder(nn.Module):
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
-            weights = F.softmax(self.pooling_head, dim=0)
+            B, T, C = encoder_lhs.shape
+            pooling_head_logits = self.pooling_head.repeat(B, 1, 1)
+            pooling_head_logits = torch.where(
+                condition=attention_mask[:, :, None].repeat(1, 1, self.rate) == 1,
+                input=pooling_head_logits,
+                other=-torch.inf,
+            )
+            weights = F.softmax(pooling_head_logits, dim=1)
             encoder_output = encoder_lhs.transpose(1, 2) @ weights
             encoder_output = encoder_output.transpose(1, 2)
         else:
