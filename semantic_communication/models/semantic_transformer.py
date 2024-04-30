@@ -6,7 +6,7 @@ from torch import nn
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.utils.general import shift_inputs
+from semantic_communication.utils.general import shift_inputs, get_device
 
 
 class ChannelEncComp(nn.Module):
@@ -81,6 +81,7 @@ class SemanticTransformer(nn.Module):
         self.channel_encoder = channel_encoder
         self.channel_decoder = channel_decoder
         self.mode = semantic_encoder.mode
+        self.device = get_device()
 
     def forward(
         self,
@@ -148,11 +149,17 @@ class SemanticTransformer(nn.Module):
         x = self._add_noise(x, snr_db)
         x = self.channel_decoder(x)
 
+        B, R, _ = x.shape
+        x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+
+        x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
+        x_padding_mask = x_padding_mask.repeat(B, 1)
+
         return self.semantic_decoder.generate(
             encoder_output=x,
             is_causal=False,
             max_length=max_length,
-            enc_padding_mask=None,
+            enc_padding_mask=x_padding_mask,
             beam_width=beam_width,
             n_generated_tokens=n_generated_tokens,
         )

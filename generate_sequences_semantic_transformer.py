@@ -61,10 +61,10 @@ def generate_text():
             skip_special_tokens=True,
         )
 
-        _, indices = torch.sort(probs)
-        for i in indices:
-            print(f"Probability: {torch.exp(probs[i]):.2e}")
-            print(f"{input_tokens[i]}\n{predicted_tokens[i]}\n")
+        for i in range(len(input_tokens)):
+            print(f"\nTrue Sentence: {input_tokens[i]}")
+            for k in range(args.rate):
+                print(f"Predicted Sentence {k}: {predicted_tokens[i * args.rate + k]}")
 
 
 if __name__ == "__main__":
