@@ -8,8 +8,11 @@ from tqdm import tqdm
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-from semantic_communication.models.semantic_transformer import SemanticTransformer
-from semantic_communication.models.transceiver import ChannelDecoder, ChannelEncoder
+from semantic_communication.models.semantic_transformer import (
+    SemanticTransformer,
+    ChannelEncoder,
+    ChannelDecoder,
+)
 from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_data_args,
