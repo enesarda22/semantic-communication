@@ -110,6 +110,7 @@ class SemanticTransformer(nn.Module):
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.mode,
+            rate=self.semantic_encoder.rate,
         )
 
         logits, loss = self.semantic_decoder(

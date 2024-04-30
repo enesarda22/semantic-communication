@@ -35,7 +35,7 @@ class DecoderBlock(nn.Module):
 
         self.ff_net = nn.Sequential(
             nn.Linear(n_embeddings, 4 * n_embeddings),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(4 * n_embeddings, n_embeddings),  # projection
             nn.Dropout(0.1),
         )

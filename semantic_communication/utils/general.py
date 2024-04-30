@@ -108,7 +108,7 @@ def add_channel_model_args(parser):
     parser.add_argument("--gamma-max", default=0.8, type=float)
 
 
-def shift_inputs(xb, attention_mask, mode):
+def shift_inputs(xb, attention_mask, mode, rate=None):
     if mode == "predict":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
@@ -122,7 +122,12 @@ def shift_inputs(xb, attention_mask, mode):
     elif mode == "sentence":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
-        enc_padding_mask = None
+
+        B = attention_mask.shape[0]
+        device = attention_mask.device
+        enc_padding_mask = torch.arange(5, device=device).repeat(B, 1) > torch.randint(
+            high=rate, size=(B, 1), device=device
+        )
         is_causal = False
     else:
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
