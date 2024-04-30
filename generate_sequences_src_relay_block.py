@@ -12,7 +12,7 @@ from semantic_communication.models.transceiver import (
     ChannelEncoder,
     SrcRelayBlock,
 )
-from semantic_communication.utils.channel import init_channel
+from semantic_communication.utils.channel import init_channel, get_distance
 from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_data_args,
@@ -30,13 +30,13 @@ def generate_text():
 
         encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-        # d_sd = get_distance(args.d_min, args.d_max)
-        # d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+        d_sd = get_distance(args.d_min, args.d_max)
+        d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
         predicted_ids, _ = src_relay_block.generate(
             input_ids=encoder_idx,
             attention_mask=encoder_attention_mask,
-            d_sr=1000.0,
+            d_sr=d_sr,
         )
 
         # find the end of sentences

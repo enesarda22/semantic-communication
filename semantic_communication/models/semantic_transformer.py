@@ -121,6 +121,7 @@ class SemanticTransformer(nn.Module):
 
         return logits, loss
 
+    @torch.no_grad()
     def generate(
         self,
         messages: Optional[List[str]] = None,
@@ -131,22 +132,30 @@ class SemanticTransformer(nn.Module):
         max_length=20,
         n_generated_tokens=20,
     ):
-        with torch.no_grad():
-            encoder_output = self.semantic_encoder(
-                messages=messages,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-            )
-            encoder_output = self._add_noise(encoder_output, snr_db)
+        x = self.semantic_encoder(
+            messages=messages,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        x = self.channel_encoder(x)
 
-            return self.semantic_decoder.generate(
-                encoder_output=encoder_output,
-                is_causal=False,
-                max_length=max_length,
-                enc_padding_mask=None,
-                beam_width=beam_width,
-                n_generated_tokens=n_generated_tokens,
-            )
+        # signal power constraint
+        last_dim = int(x.shape[-1] / 2)
+        x = torch.complex(*torch.split(x, last_dim, dim=-1))
+        x = x / torch.abs(x)
+        x = torch.cat((x.real, x.imag), dim=-1)
+
+        x = self._add_noise(x, snr_db)
+        x = self.channel_decoder(x)
+
+        return self.semantic_decoder.generate(
+            encoder_output=x,
+            is_causal=False,
+            max_length=max_length,
+            enc_padding_mask=None,
+            beam_width=beam_width,
+            n_generated_tokens=n_generated_tokens,
+        )
 
     @staticmethod
     def _add_noise(signal, snr_db):
