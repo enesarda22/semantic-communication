@@ -98,7 +98,7 @@ def add_channel_model_args(parser):
     parser.add_argument("--channel-block-input-dim", default=384, type=int)
     parser.add_argument("--channel-block-latent-dim", default=256, type=int)
 
-    parser.add_argument("--channel-type", default="AWGN", type=str)
+    parser.add_argument("--channel-type", default="", type=str)
     parser.add_argument("--alpha", default=4.0, type=float)
     parser.add_argument("--sig-pow", default=1.0, type=float)
     parser.add_argument("--noise-pow", default=4e-15, type=float)

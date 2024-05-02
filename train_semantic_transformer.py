@@ -13,6 +13,7 @@ from semantic_communication.models.semantic_transformer import (
     ChannelEncoder,
     ChannelDecoder,
 )
+from semantic_communication.utils.channel import init_channel, get_distance
 from semantic_communication.utils.general import (
     add_semantic_decoder_args,
     add_data_args,
@@ -77,11 +78,14 @@ if __name__ == "__main__":
         nout=args.channel_block_input_dim,
     ).to(device)
 
+    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
+
     semantic_transformer = SemanticTransformer(
         semantic_encoder=semantic_encoder,
         semantic_decoder=semantic_decoder,
         channel_encoder=channel_encoder,
         channel_decoder=channel_decoder,
+        channel=channel,
     ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
 
@@ -109,10 +113,14 @@ if __name__ == "__main__":
 
             encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
+            d_sd = get_distance(args.d_min, args.d_max)
+            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+
             _, loss = semantic_transformer(
                 input_ids=encoder_idx,
                 attention_mask=encoder_attention_mask,
                 snr_db=args.snr_db,
+                d=d_sr,
             )
 
             optimizer.zero_grad(set_to_none=True)
@@ -130,11 +138,15 @@ if __name__ == "__main__":
 
             encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
+            d_sd = get_distance(args.d_min, args.d_max)
+            d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
+
             with torch.no_grad():
                 _, loss = semantic_transformer(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
                     snr_db=args.snr_db,
+                    d=d_sr,
                 )
             val_losses.append(loss.item())
 

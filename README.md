@@ -21,12 +21,12 @@ batch_size = 64
 ```
 python train_semantic_transformer.py \
 --data-fp ~/data \
---checkpoint-path ~/data/checkpoints/relay-decoder-with-rate5 \
+--checkpoint-path ~/data/checkpoints/improved-semantic-transformer \
 --mode sentence \
 --rate 5 \
---batch-size 512 \
---n-epochs 20 \
---lr 5e-4 \
+--batch-size 1024 \
+--n-epochs 30 \
+--lr 6e-4 \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \
@@ -34,14 +34,38 @@ python train_semantic_transformer.py \
 ```
 
 ```
+python train_semantic_transformer.py \
+--data-fp ~/data \
+--checkpoint-path ~/data/checkpoints/improved-semantic-transformer-with-channel \
+--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \
+--mode sentence \
+--rate 5 \
+--batch-size 1024 \
+--n-epochs 40 \
+--lr 5e-4 \
+--n-blocks 6 \
+--n-heads 6 \
+--channel-block-input-dim 384 \
+--channel-block-latent-dim 64 \
+--channel-type AWGN \
+--alpha 4 \
+--sig-pow 1 \
+--noise-pow 4e-15 \
+--d-min 2e3 \
+--d-max 7e3 \
+--gamma-min 0.2 \
+--gamma-max 0.8
+```
+
+```
 python train_src_relay_block.py \
 --data-fp ~/data \
 --checkpoint-path ~/data/checkpoints/ \
---semantic-transformer-path ~/data/checkpoints/relay-decoder-with-rate5/semantic_transformer_19.pt \
+--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \
 --mode sentence \
 --rate 5 \
 --batch-size 512 \
---n-epochs 20 \
+--n-epochs 30 \
 --lr 5e-4 \
 --n-blocks 6 \
 --n-heads 6 \

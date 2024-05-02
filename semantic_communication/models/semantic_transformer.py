@@ -6,6 +6,7 @@ from torch import nn
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
+from semantic_communication.utils.channel import Channel
 from semantic_communication.utils.general import shift_inputs, get_device
 
 
@@ -74,12 +75,15 @@ class SemanticTransformer(nn.Module):
         semantic_decoder: SemanticDecoder,
         channel_encoder: ChannelEncoder,
         channel_decoder: ChannelDecoder,
+        channel: Optional[Channel] = None,
     ):
         super().__init__()
         self.semantic_encoder = semantic_encoder
         self.semantic_decoder = semantic_decoder
         self.channel_encoder = channel_encoder
         self.channel_decoder = channel_decoder
+
+        self.channel = channel
         self.mode = semantic_encoder.mode
         self.device = get_device()
 
@@ -89,6 +93,7 @@ class SemanticTransformer(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         snr_db: Optional[float] = None,
+        d: Optional[float] = None,
     ):
         x = self.semantic_encoder(
             messages=messages,
@@ -97,13 +102,17 @@ class SemanticTransformer(nn.Module):
         )
         x = self.channel_encoder(x)
 
-        # signal power constraint
-        last_dim = int(x.shape[-1] / 2)
-        x = torch.complex(*torch.split(x, last_dim, dim=-1))
-        x = x / torch.abs(x)
-        x = torch.cat((x.real, x.imag), dim=-1)
+        if self.channel is None:
+            # signal power constraint
+            last_dim = int(x.shape[-1] / 2)
+            x = torch.complex(*torch.split(x, last_dim, dim=-1))
+            x = x / torch.abs(x)
+            x = torch.cat((x.real, x.imag), dim=-1)
 
-        x = self._add_noise(x, snr_db)
+            x = self._add_noise(x, snr_db)
+        else:
+            x = self.channel(x=x, d=d)
+
         x = self.channel_decoder(x)
 
         decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(

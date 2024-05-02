@@ -1,3 +1,4 @@
+import warnings
 from abc import ABC
 from typing import Optional
 
@@ -20,7 +21,7 @@ class Channel(ABC):
     def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
         pass
 
-    def signal_process(self, x: torch.Tensor, d: float, h=None) -> torch.Tensor:
+    def signal_process(self, x: torch.Tensor, h=None) -> torch.Tensor:
         # convert to complex
         last_dim = int(x.shape[-1] / 2)
         x = torch.complex(*torch.split(x, last_dim, dim=-1))
@@ -43,7 +44,7 @@ class AWGN(Channel):
         if d is None:
             return x
 
-        x = self.signal_process(x, d)
+        x = self.signal_process(x)
 
         noise = torch.normal(
             mean=0.0,
@@ -71,7 +72,7 @@ class Rayleigh(Channel):
             dtype=torch.cfloat,
         ).to(self.device)
 
-        x = self.signal_process(x, d, h)
+        x = self.signal_process(x, h)
 
         noise = torch.normal(
             mean=0.0,
@@ -89,13 +90,14 @@ def init_channel(
     signal_power_constraint: float,
     alpha: float,
     noise_pow: float,
-) -> Channel:
+) -> Optional[Channel]:
     if channel_type == "AWGN":
         return AWGN(signal_power_constraint, alpha, noise_pow)
     elif channel_type == "Rayleigh":
         return Rayleigh(signal_power_constraint, alpha, noise_pow)
     else:
-        raise ValueError("Channel type should be AWGN or Rayleigh!")
+        warnings.warn("Channel is None!")
+        return None
 
 
 def get_distance(d_min, d_max):

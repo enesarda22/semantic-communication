@@ -52,104 +52,103 @@ from semantic_communication.utils.general import get_device, shift_inputs
 #         return x_hat
 
 
-class SrcRelayBlock(nn.Module):
-    def __init__(
-        self,
-        semantic_transformer: SemanticTransformer,
-        src_channel_encoder: ChannelEncoder,
-        relay_channel_decoder: ChannelDecoder,
-        channel: Channel,
-    ):
-        super().__init__()
-        self.semantic_encoder = semantic_transformer.semantic_encoder
-        self.semantic_decoder = semantic_transformer.semantic_decoder
-
-        self.channel = channel
-        self.src_channel_encoder = src_channel_encoder
-        self.relay_channel_decoder = relay_channel_decoder
-
-        self.device = get_device()
-
-    def forward(
-        self,
-        messages: Optional[List[str]] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        d_sr: Optional[float] = None,
-    ):
-        x = self.semantic_encoder(
-            messages=messages,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
-        x = self.src_channel_encoder(x)
-        x = self._shift_relay_input(x)
-
-        x = self.channel(x, d_sr)
-        x = self.relay_channel_decoder(x)
-
-        B, R, C = x.shape
-        x = torch.repeat_interleave(input=x, repeats=R, dim=0)
-
-        enc_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
-        enc_padding_mask = enc_padding_mask.repeat(B, 1)
-
-        decoder_idx, targets, _, is_causal = shift_inputs(
-            xb=input_ids,
-            attention_mask=attention_mask,
-            mode=self.semantic_encoder.mode,
-        )
-
-        decoder_idx = torch.repeat_interleave(input=decoder_idx, repeats=R, dim=0)
-        targets = torch.repeat_interleave(input=targets, repeats=R, dim=0)
-
-        logits, loss = self.semantic_decoder(
-            idx=decoder_idx,
-            encoder_output=x,
-            is_causal=is_causal,
-            enc_padding_mask=enc_padding_mask,
-            targets=targets,
-        )
-
-        return logits, loss
-
-    @torch.no_grad()
-    def generate(
-        self,
-        messages: Optional[List[str]] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        d_sr: Optional[float] = None,
-    ):
-        x = self.semantic_encoder(
-            messages=messages,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
-        x = self.src_channel_encoder(x)
-        x = self._shift_relay_input(x)
-
-        x = self.channel(x, d_sr)
-        x = self.relay_channel_decoder(x)
-
-        B, R, _ = x.shape
-        x = torch.repeat_interleave(input=x, repeats=R, dim=0)
-
-        x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
-        x_padding_mask = x_padding_mask.repeat(B, 1)
-
-        return self.semantic_decoder.generate(
-            encoder_output=x,
-            is_causal=False,
-            max_length=self.semantic_encoder.max_length - 1,
-            enc_padding_mask=x_padding_mask,
-            n_generated_tokens=self.semantic_encoder.max_length,
-        )
-
-    def _shift_relay_input(self, x):
-        if self.semantic_encoder.mode == "predict":
-            x = x[:, :-1, :]
-        return x
+# class SrcRelayBlock(nn.Module):
+#     def __init__(
+#         self,
+#         semantic_transformer: SemanticTransformer,
+#         channel: Channel,
+#     ):
+#         super().__init__()
+#         self.semantic_encoder = semantic_transformer.semantic_encoder
+#         self.semantic_decoder = semantic_transformer.semantic_decoder
+#
+#         self.channel = channel
+#         self.src_channel_encoder = semantic_transformer.channel_encoder
+#         self.relay_channel_decoder = semantic_transformer.channel_decoder
+#
+#         self.device = get_device()
+#
+#     def forward(
+#         self,
+#         messages: Optional[List[str]] = None,
+#         input_ids: Optional[torch.Tensor] = None,
+#         attention_mask: Optional[torch.Tensor] = None,
+#         d_sr: Optional[float] = None,
+#     ):
+#         x = self.semantic_encoder(
+#             messages=messages,
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#         )
+#         x = self.src_channel_encoder(x)
+#         x = self._shift_relay_input(x)
+#
+#         x = self.channel(x, d_sr)
+#         x = self.relay_channel_decoder(x)
+#
+#         B, R, C = x.shape
+#         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+#
+#         enc_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
+#         enc_padding_mask = enc_padding_mask.repeat(B, 1)
+#
+#         decoder_idx, targets, _, is_causal = shift_inputs(
+#             xb=input_ids,
+#             attention_mask=attention_mask,
+#             mode=self.semantic_encoder.mode,
+#             rate=R,
+#         )
+#
+#         decoder_idx = torch.repeat_interleave(input=decoder_idx, repeats=R, dim=0)
+#         targets = torch.repeat_interleave(input=targets, repeats=R, dim=0)
+#
+#         logits, loss = self.semantic_decoder(
+#             idx=decoder_idx,
+#             encoder_output=x,
+#             is_causal=is_causal,
+#             enc_padding_mask=enc_padding_mask,
+#             targets=targets,
+#         )
+#
+#         return logits, loss
+#
+#     @torch.no_grad()
+#     def generate(
+#         self,
+#         messages: Optional[List[str]] = None,
+#         input_ids: Optional[torch.Tensor] = None,
+#         attention_mask: Optional[torch.Tensor] = None,
+#         d_sr: Optional[float] = None,
+#     ):
+#         x = self.semantic_encoder(
+#             messages=messages,
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#         )
+#         x = self.src_channel_encoder(x)
+#         x = self._shift_relay_input(x)
+#
+#         x = self.channel(x, d_sr)
+#         x = self.relay_channel_decoder(x)
+#
+#         B, R, _ = x.shape
+#         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+#
+#         x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
+#         x_padding_mask = x_padding_mask.repeat(B, 1)
+#
+#         return self.semantic_decoder.generate(
+#             encoder_output=x,
+#             is_causal=False,
+#             max_length=self.semantic_encoder.max_length - 1,
+#             enc_padding_mask=x_padding_mask,
+#             n_generated_tokens=self.semantic_encoder.max_length,
+#         )
+#
+#     def _shift_relay_input(self, x):
+#         if self.semantic_encoder.mode == "predict":
+#             x = x[:, :-1, :]
+#         return x
 
 
 class Transceiver(nn.Module):
