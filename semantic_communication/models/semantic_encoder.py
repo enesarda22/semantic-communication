@@ -37,7 +37,7 @@ class SemanticEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if messages is not None:
-            tokens = self.tokenize(messages=messages)
+            tokens = self.tokenize(messages=messages, label_encoder=True)
             input_ids = tokens["input_ids"]
             attention_mask = tokens["attention_mask"]
 
@@ -73,14 +73,19 @@ class SemanticEncoder(nn.Module):
 
         return encoder_output
 
-    def tokenize(self, messages: List[str]):
-        return self.tokenizer(
+    def tokenize(self, messages: List[str], label_encoder=False):
+        tokens = self.tokenizer(
             messages,
             padding="max_length",
             max_length=self.max_length,
             truncation=True,
             return_tensors="pt",
         ).to(self.device)
+
+        if label_encoder:
+            tokens["input_ids"] = self.label_encoder.transform(tokens["input_ids"])
+
+        return tokens
 
     def get_tokens(
         self,
