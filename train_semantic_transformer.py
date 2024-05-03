@@ -101,8 +101,10 @@ if __name__ == "__main__":
     )
     if args.load_scheduler:
         load_scheduler(scheduler, args.semantic_transformer_path)
+        start_epoch = get_start_epoch(args.semantic_transformer_path)
+    else:
+        start_epoch = 1
 
-    start_epoch = get_start_epoch(args.semantic_transformer_path)
     best_loss = torch.inf
     for epoch in range(start_epoch, args.n_epochs + 1):
         train_losses = []
