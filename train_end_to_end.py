@@ -44,7 +44,7 @@ from semantic_communication.utils.general import (
 
 def main(rank, world_size, args):
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    os.environ["MASTER_PORT"] = "12355231"
     init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
     set_seed(rank)
