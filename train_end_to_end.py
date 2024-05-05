@@ -143,7 +143,7 @@ def main(args):
         max_length=args.max_length,
     )
     load_model(transceiver, args.transceiver_path)
-    transceiver = DDP(transceiver, device_ids=[local_rank])
+    transceiver = DDP(transceiver, device_ids=[local_rank], find_unused_parameters=True)
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
     if args.load_optimizer:
