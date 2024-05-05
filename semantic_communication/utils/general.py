@@ -20,9 +20,8 @@ def set_seed(offset=0):
 
 
 def get_device():
-    return torch.device(
-        f"cuda:{os.environ['LOCAL_RANK']}" if torch.cuda.is_available() else "cpu"
-    )
+    local_rank = int(os.environ["SLURM_LOCALID"])
+    return torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
 
 def print_loss(losses, group):

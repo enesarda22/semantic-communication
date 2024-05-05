@@ -3,7 +3,6 @@ import os
 
 import numpy as np
 import torch
-import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import (
     init_process_group,
@@ -42,18 +41,19 @@ from semantic_communication.utils.general import (
 )
 
 
-def main(rank, world_size, args):
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "43371"
-    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+def main(args):
+    world_size = int(os.environ["SLURM_NTASKS"])
+    rank = int(os.environ["SLURM_PROCID"])
+    local_rank = int(os.environ["SLURM_LOCALID"])
 
-    set_seed(rank)
+    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    set_seed(local_rank)
     device = get_device()
 
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
-        rank=rank,
+        rank=local_rank,
         world_size=world_size,
     )
 
@@ -143,7 +143,7 @@ def main(rank, world_size, args):
         max_length=args.max_length,
     )
     load_model(transceiver, args.transceiver_path)
-    transceiver = DDP(transceiver, device_ids=[rank])
+    transceiver = DDP(transceiver, device_ids=[local_rank])
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
     if args.load_optimizer:
@@ -211,7 +211,7 @@ def main(rank, world_size, args):
                 )
             val_losses.append(loss.item())
 
-        if rank == 0:
+        if local_rank == 0:
             print("\n")
             print_loss(train_losses, "Train")
 
@@ -259,5 +259,7 @@ if __name__ == "__main__":
     add_channel_model_args(parser)
     args = parser.parse_args()
 
-    world_size = 4
-    mp.spawn(main, args=(world_size, args), nprocs=world_size)
+    main(args=args)
+
+    # world_size = 4
+    # mp.spawn(main, args=(world_size, args), nprocs=world_size)
