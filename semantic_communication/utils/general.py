@@ -20,7 +20,7 @@ def set_seed(offset=0):
 
 
 def get_device():
-    local_rank = int(os.environ["SLURM_LOCALID"])
+    local_rank = int(os.environ["LOCAL_RANK"])
     return torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
 

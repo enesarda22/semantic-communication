@@ -43,10 +43,10 @@ from semantic_communication.utils.general import (
 
 def main(args):
     world_size = int(os.environ["SLURM_NTASKS"])
-    rank = int(os.environ["SLURM_PROCID"])
-    local_rank = int(os.environ["SLURM_LOCALID"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    print(world_size, local_rank)
 
-    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    init_process_group(backend="nccl")
     set_seed(local_rank)
     device = get_device()
 
