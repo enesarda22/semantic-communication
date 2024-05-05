@@ -6,8 +6,10 @@ from pathlib import Path
 import torch
 import numpy as np
 
+RANDOM_STATE = 42
 
-def set_seed(random_state=42):
+
+def set_seed(random_state=RANDOM_STATE):
     random.seed(random_state)
     torch.manual_seed(random_state)
     torch.cuda.manual_seed(random_state)
