@@ -221,15 +221,15 @@ def main(args):
             if iter > 1:
                 break
 
+        all_val_losses = [None for _ in range(world_size)]
+        all_gather_object(all_val_losses, val_losses)
+
         if local_rank == 0:
             print("\n")
             print_loss(train_losses, "Train")
+            print_loss(all_val_losses, "Val")
 
-            all_val_losses = [None for _ in range(world_size)]
-            all_gather_object(all_val_losses, val_losses)
-            print_loss(val_losses, "Val")
-
-            mean_loss = np.mean(val_losses)
+            mean_loss = np.mean(all_val_losses)
 
             checkpoint_path = os.path.join(
                 args.checkpoint_path,
