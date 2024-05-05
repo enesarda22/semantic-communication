@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import (
     RandomSampler,
     DataLoader,
+    DistributedSampler,
 )
 
 from semantic_communication.data_processing.preprocessor import Preprocessor
@@ -16,10 +17,14 @@ class DataHandler:
         self,
         data_fp: str,
         batch_size: int,
+        rank,
+        world_size,
     ):
         self.device = get_device()
         self.data_fp = data_fp
         self.batch_size = batch_size
+        self.rank = rank
+        self.world_size = world_size
 
         label_encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
         self.label_encoder = torch.load(label_encoder_fp)
@@ -34,10 +39,18 @@ class DataHandler:
         fp = os.path.join(self.data_fp, fn)
 
         dataset = torch.load(fp, map_location=self.device)
-        sampler = RandomSampler(dataset)
+        sampler = DistributedSampler(
+            dataset=dataset,
+            num_replicas=self.world_size,
+            rank=self.rank,
+            shuffle=True,
+            drop_last=False,
+        )
 
         return DataLoader(
             dataset=dataset,
             sampler=sampler,
             batch_size=self.batch_size,
+            num_workers=0,
+            pin_memory=False,
         )

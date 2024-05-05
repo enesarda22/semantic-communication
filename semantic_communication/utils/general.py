@@ -1,3 +1,4 @@
+import os
 import random
 import warnings
 from pathlib import Path
@@ -5,21 +6,21 @@ from pathlib import Path
 import torch
 import numpy as np
 
-RANDOM_STATE = 42
 
-
-def set_seed():
-    random.seed(RANDOM_STATE)
-    torch.manual_seed(RANDOM_STATE)
-    torch.cuda.manual_seed(RANDOM_STATE)
-    np.random.seed(RANDOM_STATE)
+def set_seed(random_state=42):
+    random.seed(random_state)
+    torch.manual_seed(random_state)
+    torch.cuda.manual_seed(random_state)
+    np.random.seed(random_state)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmarks = False
     torch.autograd.set_detect_anomaly(True)
 
 
 def get_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(
+        f"cuda:{os.environ['LOCAL_RANK']}" if torch.cuda.is_available() else "cpu"
+    )
 
 
 def print_loss(losses, group):
