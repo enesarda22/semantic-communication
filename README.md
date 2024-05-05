@@ -88,9 +88,9 @@ torchrun --standalone --nproc_per_node=4 train_end_to_end.py \
 --semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer-with-channel/semantic-transformer/semantic_transformer_39.pt \
 --mode sentence \
 --rate 5 \
---batch-size 512 \
+--batch-size 500 \
 --n-epochs 20 \
---lr 1e-3 \
+--lr 9e-4 \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \

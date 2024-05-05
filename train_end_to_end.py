@@ -161,6 +161,7 @@ def main(args):
     else:
         start_epoch = 1
 
+    iter = 0
     best_loss = torch.inf
     for epoch in range(start_epoch, args.n_epochs + 1):
         data_handler.train_dataloader.sampler.set_epoch(epoch)
@@ -190,6 +191,10 @@ def main(args):
 
             train_losses.append(loss.item())
 
+            iter += 1
+            if iter > 3:
+                break
+        iter = 0
         data_handler.val_dataloader.sampler.set_epoch(epoch)
         val_losses = []
         transceiver.eval()
@@ -210,6 +215,10 @@ def main(args):
                     d_sr=d_sr,
                 )
             val_losses.append(loss.item())
+
+            iter += 1
+            if iter > 3:
+                break
 
         if local_rank == 0:
             print("\n")
@@ -260,6 +269,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args=args)
-
-    # world_size = 4
-    # mp.spawn(main, args=(world_size, args), nprocs=world_size)
