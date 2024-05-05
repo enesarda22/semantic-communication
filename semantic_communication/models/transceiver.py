@@ -154,7 +154,7 @@ from semantic_communication.utils.general import get_device, shift_inputs
 class Transceiver(nn.Module):
     def __init__(
         self,
-        src_relay_block: SrcRelayBlock,
+        src_relay_transformer: SemanticTransformer,
         relay_semantic_encoder: SemanticEncoder,
         relay_channel_encoder: ChannelEncoder,
         dst_channel_decoder: ChannelDecoder,
@@ -164,12 +164,21 @@ class Transceiver(nn.Module):
     ):
         super().__init__()
         # source
-        self.src_semantic_encoder = src_relay_block.semantic_encoder
-        self.src_channel_encoder = src_relay_block.src_channel_encoder
+        self.src_semantic_encoder = src_relay_transformer.semantic_encoder
+        self.src_channel_encoder = src_relay_transformer.channel_encoder
+
+        # freeze source params
+        self._freeze(self.src_semantic_encoder)
+        self._freeze(self.src_channel_encoder)
 
         # relay
-        self.relay_channel_decoder = src_relay_block.relay_channel_decoder
-        self.relay_semantic_decoder = src_relay_block.semantic_decoder
+        self.relay_channel_decoder = src_relay_transformer.channel_decoder
+        self.relay_semantic_decoder = src_relay_transformer.semantic_decoder
+
+        # freeze relay decoding params
+        self._freeze(self.relay_channel_decoder)
+        self._freeze(self.relay_semantic_decoder)
+
         self.relay_semantic_encoder = relay_semantic_encoder
         self.relay_channel_encoder = relay_channel_encoder
 
@@ -180,6 +189,11 @@ class Transceiver(nn.Module):
         self.channel = channel
         self.max_length = max_length
         self.device = get_device()
+
+    @staticmethod
+    def _freeze(m):
+        for p in m.parameters():
+            p.requires_grad = False
 
     def forward(
         self,
@@ -215,16 +229,17 @@ class Transceiver(nn.Module):
 
     def _destination_forward(self, x_dst, input_ids, attention_mask):
         x_dst = self.dst_channel_decoder(x_dst)
-        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
+        decoder_idx, targets, _, is_causal = shift_inputs(
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.relay_semantic_encoder.mode,
+            rate=x_dst.shape[1],
         )
         logits, loss = self.dst_semantic_decoder(
             idx=decoder_idx,
             encoder_output=x_dst,
             is_causal=is_causal,
-            enc_padding_mask=enc_padding_mask,
+            enc_padding_mask=None,
             targets=targets,
         )
         return logits, loss
@@ -245,7 +260,7 @@ class Transceiver(nn.Module):
             max_length=self.max_length,  # TODO: fix +1 discrepancy
             enc_padding_mask=x_relay_padding_mask,
             n_generated_tokens=self.max_length + 1,
-        )  # TODO: relay sees all the embeddings?
+        )
 
         # create attention mask based on [SEP] token
         relay_attention_mask = torch.ones(
@@ -321,6 +336,18 @@ class Transceiver(nn.Module):
             src_to_dst = src_out
 
         return src_to_relay, src_to_dst
+
+
+def init_dst_channel_decoder(semantic_transformer):
+    state_dict = semantic_transformer.channel_decoder.state_dict()
+    state_dict["layers.0.linear.weight"] = state_dict["layers.1.linear.weight"].repeat(
+        1, 2
+    )
+    state_dict["layers.0.linear.bias"] = state_dict["layers.1.linear.bias"]
+    state_dict["layers.0.ln.weight"] = state_dict["layers.1.ln.weight"]
+    state_dict["layers.0.ln.bias"] = state_dict["layers.1.ln.bias"]
+    state_dict["layers.0.prelu.weight"] = state_dict["layers.1.prelu.weight"]
+    return state_dict
 
 
 # class RelayEncoder:

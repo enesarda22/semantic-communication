@@ -139,6 +139,7 @@ class SemanticTransformer(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         snr_db: Optional[float] = None,
+        d: Optional[float] = None,
         beam_width=5,
         max_length=20,
         n_generated_tokens=20,
@@ -150,13 +151,17 @@ class SemanticTransformer(nn.Module):
         )
         x = self.channel_encoder(x)
 
-        # signal power constraint
-        last_dim = int(x.shape[-1] / 2)
-        x = torch.complex(*torch.split(x, last_dim, dim=-1))
-        x = x / torch.abs(x)
-        x = torch.cat((x.real, x.imag), dim=-1)
+        if self.channel is None:
+            # signal power constraint
+            last_dim = int(x.shape[-1] / 2)
+            x = torch.complex(*torch.split(x, last_dim, dim=-1))
+            x = x / torch.abs(x)
+            x = torch.cat((x.real, x.imag), dim=-1)
 
-        x = self._add_noise(x, snr_db)
+            x = self._add_noise(x, snr_db)
+        else:
+            x = self.channel(x=x, d=d)
+
         x = self.channel_decoder(x)
 
         B, R, _ = x.shape

@@ -40,7 +40,7 @@ python train_semantic_transformer.py \
 --semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \
 --mode sentence \
 --rate 5 \
---batch-size 1024 \
+--batch-size 512 \
 --n-epochs 40 \
 --lr 5e-4 \
 --n-blocks 6 \
@@ -85,10 +85,10 @@ python train_src_relay_block.py \
 python train_end_to_end.py \
 --data-fp ~/data \
 --checkpoint-path ~/data/checkpoints/ \
---src-relay-block-path ~/data/checkpoints/src-relay-block/src_relay_block_17.pt \
+--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer-with-channel/semantic-transformer/semantic_transformer_39.pt \
 --mode sentence \
 --rate 5 \
---batch-size 2048 \
+--batch-size 1024 \
 --n-epochs 20 \
 --lr 5e-4 \
 --n-blocks 6 \

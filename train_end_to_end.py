@@ -12,7 +12,7 @@ from semantic_communication.models.transceiver import (
     Transceiver,
     ChannelEncoder,
     ChannelDecoder,
-    SrcRelayBlock,
+    init_dst_channel_decoder,
 )
 from semantic_communication.utils.channel import (
     init_channel,
@@ -38,7 +38,7 @@ from semantic_communication.utils.general import (
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--transceiver-path", type=str)
-    parser.add_argument("--src-relay-block-path", default=None, type=str)
+    parser.add_argument("--semantic-transformer-path", default=None, type=str)
     add_semantic_decoder_args(parser)
     add_data_args(parser)
     add_train_args(parser)
@@ -72,30 +72,26 @@ if __name__ == "__main__":
         pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
 
-    semantic_transformer = SemanticTransformer(
-        semantic_encoder=semantic_encoder,
-        semantic_decoder=semantic_decoder,
-    ).to(device)
-
-    src_channel_encoder = ChannelEncoder(
+    channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
 
-    relay_channel_decoder = ChannelDecoder(
+    channel_decoder = ChannelDecoder(
         nin=args.channel_block_latent_dim,
         nout=args.channel_block_input_dim,
     ).to(device)
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
 
-    src_relay_block = SrcRelayBlock(
-        semantic_transformer=semantic_transformer,
-        src_channel_encoder=src_channel_encoder,
-        relay_channel_decoder=relay_channel_decoder,
+    semantic_transformer = SemanticTransformer(
+        semantic_encoder=semantic_encoder,
+        semantic_decoder=semantic_decoder,
+        channel_encoder=channel_encoder,
+        channel_decoder=channel_decoder,
         channel=channel,
     ).to(device)
-    load_model(src_relay_block, args.src_relay_block_path)
+    load_model(semantic_transformer, args.semantic_transformer_path)
 
     relay_semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
@@ -104,7 +100,7 @@ if __name__ == "__main__":
         rate=args.rate,
     ).to(device)
     relay_semantic_encoder.load_state_dict(
-        src_relay_block.semantic_encoder.state_dict()
+        semantic_transformer.semantic_encoder.state_dict()
     )
 
     relay_channel_encoder = ChannelEncoder(
@@ -112,13 +108,15 @@ if __name__ == "__main__":
         nout=args.channel_block_latent_dim,
     ).to(device)
     relay_channel_encoder.load_state_dict(
-        src_relay_block.src_channel_encoder.state_dict()
+        semantic_transformer.channel_encoder.state_dict()
     )
 
     dst_channel_decoder = ChannelDecoder(
         nin=args.channel_block_latent_dim * 2,
         nout=args.channel_block_input_dim,
     ).to(device)
+    state_dict = init_dst_channel_decoder(semantic_transformer)
+    dst_channel_decoder.load_state_dict(state_dict, strict=False)
 
     dst_semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -126,13 +124,15 @@ if __name__ == "__main__":
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
-        bert=semantic_encoder.bert,
+        bert=relay_semantic_encoder.bert,
         pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
-    dst_semantic_decoder.load_state_dict(src_relay_block.semantic_decoder.state_dict())
+    dst_semantic_decoder.load_state_dict(
+        semantic_transformer.semantic_decoder.state_dict()
+    )
 
     transceiver = Transceiver(
-        src_relay_block=src_relay_block,
+        src_relay_transformer=semantic_transformer,
         relay_semantic_encoder=relay_semantic_encoder,
         relay_channel_encoder=relay_channel_encoder,
         dst_channel_decoder=dst_channel_decoder,
@@ -156,8 +156,10 @@ if __name__ == "__main__":
     )
     if args.load_scheduler:
         load_scheduler(scheduler, args.transceiver_path)
+        start_epoch = get_start_epoch(args.transceiver_path)
+    else:
+        start_epoch = 1
 
-    start_epoch = get_start_epoch(args.transceiver_path)
     best_loss = torch.inf
     for epoch in range(start_epoch, args.n_epochs + 1):
         train_losses = []
