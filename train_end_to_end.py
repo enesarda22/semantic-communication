@@ -49,6 +49,7 @@ def main(args):
     init_process_group(backend="nccl")
     set_seed(local_rank)
     device = get_device()
+    torch.cuda.set_device(device)
 
     data_handler = DataHandler(
         batch_size=args.batch_size,
@@ -192,7 +193,7 @@ def main(args):
             train_losses.append(loss.item())
 
             iter += 1
-            if iter > 3:
+            if iter > 1:
                 break
         iter = 0
         data_handler.val_dataloader.sampler.set_epoch(epoch)
@@ -217,7 +218,7 @@ def main(args):
             val_losses.append(loss.item())
 
             iter += 1
-            if iter > 3:
+            if iter > 1:
                 break
 
         if local_rank == 0:
