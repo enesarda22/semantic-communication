@@ -9,11 +9,11 @@ import numpy as np
 RANDOM_STATE = 42
 
 
-def set_seed(random_state=RANDOM_STATE):
-    random.seed(random_state)
-    torch.manual_seed(random_state)
-    torch.cuda.manual_seed(random_state)
-    np.random.seed(random_state)
+def set_seed(offset=0):
+    random.seed(RANDOM_STATE + offset)
+    torch.manual_seed(RANDOM_STATE + offset)
+    torch.cuda.manual_seed(RANDOM_STATE + offset)
+    np.random.seed(RANDOM_STATE + offset)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmarks = False
     torch.autograd.set_detect_anomaly(True)

@@ -42,7 +42,7 @@ from semantic_communication.utils.general import (
 )
 
 
-def main(rank, world_size):
+def main(rank, world_size, args):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
     init_process_group(backend="nccl", rank=rank, world_size=world_size)
@@ -211,12 +211,12 @@ def main(rank, world_size):
                 )
             val_losses.append(loss.item())
 
-        all_val_losses = [None for _ in range(world_size)]
-        all_gather_object(all_val_losses, val_losses)
-
         if rank == 0:
             print("\n")
-            # print_loss(train_losses, "Train")
+            print_loss(train_losses, "Train")
+
+            all_val_losses = [None for _ in range(world_size)]
+            all_gather_object(all_val_losses, val_losses)
             print_loss(val_losses, "Val")
 
             mean_loss = np.mean(val_losses)
@@ -260,4 +260,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     world_size = 4
-    mp.spawn(main, args=(world_size,), nprocs=world_size)
+    mp.spawn(main, args=(world_size, args), nprocs=world_size)
