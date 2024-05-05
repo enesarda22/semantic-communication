@@ -49,7 +49,7 @@ def main(args):
     init_process_group(backend="nccl")
     set_seed(local_rank)
     device = get_device()
-    torch.cuda.set_device(device)
+    torch.cuda.set_device(local_rank)
 
     data_handler = DataHandler(
         batch_size=args.batch_size,
