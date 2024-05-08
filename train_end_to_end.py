@@ -190,11 +190,12 @@ def main(args):
             scheduler.step()
 
             train_losses.append(loss.item())
+            break
 
         data_handler.val_dataloader.sampler.set_epoch(epoch)
         val_losses = []
         transceiver.eval()
-        for b in tqdm(data_handler.val_dataloader):
+        for i, b in tqdm(enumerate(data_handler.val_dataloader)):
             encoder_idx = b[0].to(device)
             encoder_attention_mask = b[1].to(device)
 
@@ -211,6 +212,9 @@ def main(args):
                     d_sr=d_sr,
                 )
             val_losses.append(loss.item())
+
+            if i >= args.eval_iter:
+                break
 
         all_val_losses = [None for _ in range(world_size)]
         all_gather_object(all_val_losses, val_losses)
