@@ -90,7 +90,7 @@ python train_end_to_end.py \
 --rate 5 \
 --batch-size 1024 \
 --n-epochs 20 \
---lr 5e-4 \
+--lr 1e-3 \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \
