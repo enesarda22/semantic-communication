@@ -17,7 +17,8 @@ from semantic_communication.models.transceiver import (
     Transceiver,
     ChannelEncoder,
     ChannelDecoder,
-    init_dst_channel_decoder,
+    init_dst_channel_decoder_state_dict,
+    init_relay_semantic_encoder_state_dict,
 )
 from semantic_communication.utils.channel import (
     init_channel,
@@ -100,11 +101,10 @@ def main(args):
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
         mode=args.mode if args.mode == "sentence" else "forward",
-        rate=args.rate,
+        rate=1 if args.mode == "sentence" else None,
     ).to(device)
-    relay_semantic_encoder.load_state_dict(
-        semantic_transformer.semantic_encoder.state_dict()
-    )
+    state_dict = init_relay_semantic_encoder_state_dict(semantic_transformer)
+    relay_semantic_encoder.load_state_dict(state_dict)
 
     relay_channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
@@ -118,7 +118,7 @@ def main(args):
         nin=args.channel_block_latent_dim * 2,
         nout=args.channel_block_input_dim,
     ).to(device)
-    state_dict = init_dst_channel_decoder(semantic_transformer)
+    state_dict = init_dst_channel_decoder_state_dict(semantic_transformer)
     dst_channel_decoder.load_state_dict(state_dict, strict=False)
 
     dst_semantic_decoder = SemanticDecoder(

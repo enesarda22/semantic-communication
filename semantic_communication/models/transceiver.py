@@ -250,15 +250,15 @@ class Transceiver(nn.Module):
 
         # decode every sentence embedding using beam search
         x_relay = torch.repeat_interleave(input=x_relay, repeats=R, dim=0)
-        x_relay_padding_mask = torch.tril(
+        causal_padding_mask = torch.tril(
             torch.ones(R, R, device=self.device), -1
         ).T.bool()
-        x_relay_padding_mask = x_relay_padding_mask.repeat(B, 1)
+        causal_padding_mask = causal_padding_mask.repeat(B, 1)
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
             is_causal=self.relay_semantic_encoder.mode != "sentence",
             max_length=self.max_length,  # TODO: fix +1 discrepancy
-            enc_padding_mask=x_relay_padding_mask,
+            enc_padding_mask=causal_padding_mask,
             n_generated_tokens=self.max_length + 1,
         )
 
@@ -277,7 +277,6 @@ class Transceiver(nn.Module):
             input_ids=x_relay,
             attention_mask=relay_attention_mask,
         )
-        x_relay = x_relay[torch.arange(B * R), torch.arange(R).repeat(B), :]
         x_relay = x_relay.reshape(B, R, C)
         x_relay = self.relay_channel_encoder(x_relay)
         return x_relay
@@ -338,7 +337,13 @@ class Transceiver(nn.Module):
         return src_to_relay, src_to_dst
 
 
-def init_dst_channel_decoder(semantic_transformer):
+def init_relay_semantic_encoder_state_dict(semantic_transformer):
+    state_dict = semantic_transformer.semantic_encoder.state_dict()
+    state_dict["pooling_head"] = state_dict["pooling_head"][:, [0]]
+    return state_dict
+
+
+def init_dst_channel_decoder_state_dict(semantic_transformer):
     state_dict = semantic_transformer.channel_decoder.state_dict()
     state_dict["layers.0.linear.weight"] = state_dict["layers.1.linear.weight"].repeat(
         1, 2
