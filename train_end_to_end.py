@@ -184,9 +184,9 @@ def main(args):
                 d_sr=d_sr,
             )
 
-            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
             scheduler.step()
 
             train_losses.append(loss.item())
