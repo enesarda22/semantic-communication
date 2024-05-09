@@ -190,7 +190,6 @@ def main(args):
             scheduler.step()
 
             train_losses.append(loss.item())
-            break
 
         data_handler.val_dataloader.sampler.set_epoch(epoch)
         val_losses = []
