@@ -10,12 +10,13 @@ from semantic_communication.utils.general import (
     add_channel_model_args,
     add_train_args,
     add_data_args,
+    round_to_nearest_even
 )
 from semantic_communication.utils.channel import (
     init_channel,
     get_distance,
 )
-from semantic_communication.models.semantic_encoder import SemanticEncoder
+
 from semantic_communication.data_processing.data_handler import DataHandler
 import torch
 import numpy as np
@@ -33,20 +34,33 @@ if __name__ == "__main__":
     set_seed()
     device = get_device()
 
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
     data_handler = DataHandler(
-        semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
+
+    sentence_lengths = []
+    for b in tqdm(data_handler.train_dataloader):
+        encoder_idx = b[0].to(device)
+        encoder_attention_mask = b[1].to(device)
+
+        encoder_idx = data_handler.label_encoder.transform(encoder_idx)
+
+        sentence_lengths.append(len(torch.nonzero(encoder_idx)) / len(encoder_idx))
+
+    mean_sentence_len = np.mean(sentence_lengths)
+    print(f"Average token count: {mean_sentence_len}")
+    sentence_embedding_dim = 64*5
+    latent_dim = round_to_nearest_even(sentence_embedding_dim / mean_sentence_len)
+    print(f"Latent dim: {latent_dim}")
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
 
     num_classes = data_handler.vocab_size
     tx_relay_model = Tx_Relay(
-        num_classes,
-        args.channel_block_input_dim,
-        args.channel_block_latent_dim,
+        nin=num_classes,
+        n_emb=args.channel_block_input_dim,
+        n_latent=latent_dim,
         channel=channel,
         entire_network_train=1,
     ).to(device)
@@ -54,11 +68,11 @@ if __name__ == "__main__":
     tx_relay_model.load_state_dict(checkpoint["model_state_dict"])
 
     tx_relay_rx_model = Tx_Relay_Rx(
-        num_classes,
-        args.channel_block_input_dim,
-        args.channel_block_latent_dim,
-        channel,
-        tx_relay_model,
+        nin=num_classes,
+        n_emb=args.channel_block_input_dim,
+        n_latent=latent_dim,
+        channel=channel,
+        tx_relay_model=tx_relay_model,
     ).to(device)
 
     optimizer = torch.optim.AdamW(
@@ -78,16 +92,16 @@ if __name__ == "__main__":
         tx_relay_rx_model.train()
 
         for b in tqdm(data_handler.train_dataloader):
-            xb = b[0].to(device)
-            attention_mask = b[1].to(device)
-            xb = data_handler.encode_token_ids(xb)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
             d_rd = d_sd - d_sr
 
             x_hat, loss = tx_relay_rx_model(
-                xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd
+                encoder_idx[:, 1:], encoder_attention_mask[:, 1:], d_sd, d_sr, d_rd
             )
 
             optimizer.zero_grad(set_to_none=True)
@@ -100,9 +114,9 @@ if __name__ == "__main__":
         val_losses = []
         tx_relay_rx_model.eval()
         for b in data_handler.val_dataloader:
-            xb = b[0].to(device)
-            attention_mask = b[1].to(device)
-            xb = data_handler.encode_token_ids(xb)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
@@ -110,7 +124,7 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 x_hat, loss = tx_relay_rx_model(
-                    xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd
+                    encoder_idx[:, 1:], encoder_attention_mask[:, 1:], d_sd, d_sr, d_rd
                 )
 
             val_losses.append(loss.item())
