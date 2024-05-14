@@ -27,6 +27,11 @@ def round_to_nearest_even(num):
     return rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
 
 
+def round_to_nearest_even(num):
+    rounded = round(num)
+    return rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+
+
 def print_loss(losses, group):
     mean_loss = np.mean(losses)
     se = np.std(losses, ddof=1) / np.sqrt(len(losses))
