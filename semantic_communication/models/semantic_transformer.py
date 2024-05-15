@@ -31,12 +31,7 @@ class ChannelEncoder(nn.Module):
         up_dim = int(np.floor(np.log2(nin) / 2))
         low_dim = int(np.ceil(np.log2(nout) / 2))
 
-        log_val = math.log(nin, 4)
-        if not int(log_val) == log_val:
-            dims = [nin]
-        else:
-            dims = []
-
+        dims = [nin]
         for i in range(up_dim - low_dim + 1):
             dims.append(np.power(4, up_dim - i))
 
@@ -57,13 +52,7 @@ class ChannelDecoder(nn.Module):
         super(ChannelDecoder, self).__init__()
         up_dim = int(np.floor(np.log2(nout) / 2))
         low_dim = int(np.ceil(np.log2(nin) / 2))
-
-        log_val = math.log(nin, 4)
-        if not int(log_val) == log_val:
-            dims = [nin]
-        else:
-            dims = []
-
+        dims = [nin]
         for i in range(up_dim - low_dim + 1):
             dims.append(np.power(4, low_dim + i))
 
@@ -74,7 +63,7 @@ class ChannelDecoder(nn.Module):
         self.linear = nn.Linear(dims[-1], nout)
 
     def forward(self, x):
-        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize
+        x = x / torch.norm(x, dim=2, keepdim=True)
         for l in self.layers:
             x = l(x)
         return self.linear(x)

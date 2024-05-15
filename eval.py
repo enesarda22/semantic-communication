@@ -1,5 +1,7 @@
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
+from openai import OpenAI
 
 from nltk.translate.bleu_score import sentence_bleu
 
@@ -9,6 +11,7 @@ from semantic_communication.models.transceiver import (
     ChannelEncoder,
     ChannelDecoder,
 )
+
 from semantic_communication.utils.general import (
     get_device,
     set_seed,
@@ -21,6 +24,34 @@ from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.utils.channel import init_channel
+
+
+def plotter(x_axis_values, y_axis_values, x_label, y_label, title):
+    plt.figure()
+    plt.plot(x_axis_values, y_axis_values)
+    plt.grid()
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.savefig(f"{title}.png", dpi=400)
+
+
+def semantic_similarity_score(target_sentences, received_sentences):
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system",
+             "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
+                        "and 1 denoting the semantic similarity score for given sentences A and B with precision "
+                        "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
+                        "meanings are uncorrelated."},
+            {"role": "user", "content": f"A=({target_sentences})  B=({received_sentences})"}
+        ]
+    )
+    if completion.choices[0].finish_reason == "stop":
+        return float(completion.choices[0].message.content)
+    else:
+        raise ValueError("Finish reason is not stop.")
 
 
 def bleu_1gram(target_sentences, received_sentences):
@@ -44,6 +75,8 @@ if __name__ == "__main__":
 
     # model args
     parser.add_argument("--transceiver-path", type=str)
+    parser.add_argument("--API-KEY", type=str)  # API KEY
+
     add_semantic_decoder_args(parser)
     add_channel_model_args(parser)
     add_data_args(parser)
@@ -52,11 +85,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=128, type=int)
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
-    parser.add_argument("--n-test", default=10000, type=int)
+    parser.add_argument("--n-test", default=50, type=int)
 
     args = parser.parse_args()
     device = get_device()
     set_seed()
+
+    client = OpenAI(api_key=args.API_KEY)
 
     data_handler = DataHandler(
         batch_size=args.batch_size,
@@ -144,9 +179,11 @@ if __name__ == "__main__":
     n_d = len(args.d_list)
     n_gamma = len(args.gamma_list)
 
+    mean_semantic_sim = np.zeros((n_d, n_gamma))
     mean_bleu_1 = np.zeros((n_d, n_gamma))
     mean_bleu_3 = np.zeros((n_d, n_gamma))
 
+    std_semantic_sim = np.zeros((n_d, n_gamma))
     std_bleu_1 = np.zeros((n_d, n_gamma))
     std_bleu_3 = np.zeros((n_d, n_gamma))
 
@@ -165,7 +202,6 @@ if __name__ == "__main__":
             for b in data_handler.test_dataloader:
                 encoder_idx = b[0].to(device)
                 encoder_attention_mask = b[1].to(device)
-
                 encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
                 predicted_ids, probs = transceiver.generate(
@@ -187,20 +223,26 @@ if __name__ == "__main__":
 
                 for s1, s2 in zip(input_tokens, predicted_tokens):
                     print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
-
-                    bleu1_score = bleu_1gram(s1, s2)
-                    bleu3_score = bleu_3gram(s1, s2)
-
-                    bleu1_scores.append(bleu1_score)
-                    bleu3_scores.append(bleu3_score)
+                    cosine_scores.append(semantic_similarity_score(s1, s2))
+                    bleu1_scores.append(bleu_1gram(s1, s2))
+                    bleu3_scores.append(bleu_3gram(s1, s2))
 
                 if len(cosine_scores) > args.n_test:
                     break
 
             n_test_samples = len(cosine_scores)
+            mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
+            mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
+            mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)
 
-    np.save("spf_mean_bleu_1.npy", mean_bleu_1)
-    np.save("spf_mean_bleu_3.npy", mean_bleu_3)
+            std_semantic_sim[distance_index, gamma_index] = np.std(cosine_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(n_test_samples)
 
-    np.save("spf_std_bleu_1.npy", std_bleu_1)
-    np.save("spf_std_bleu_3.npy", std_bleu_3)
+            np.save("proposed_mean_semantic_sim.npy", mean_semantic_sim)
+            np.save("proposed_mean_bleu_1.npy", mean_bleu_1)
+            np.save("proposed_mean_bleu_3.npy", mean_bleu_3)
+
+            np.save("proposed_std_semantic_sim.npy", std_semantic_sim)
+            np.save("proposed_std_bleu_1.npy", std_bleu_1)
+            np.save("proposed_std_bleu_3.npy", std_bleu_3)

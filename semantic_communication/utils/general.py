@@ -106,7 +106,7 @@ def add_data_args(parser):
 
 def add_channel_model_args(parser):
     parser.add_argument("--channel-block-input-dim", default=384, type=int)
-    parser.add_argument("--channel-block-latent-dim", default=256, type=int)
+    parser.add_argument("--channel-block-latent-dim", default=64, type=int)
 
     parser.add_argument("--channel-type", default="", type=str)
     parser.add_argument("--alpha", default=4.0, type=float)

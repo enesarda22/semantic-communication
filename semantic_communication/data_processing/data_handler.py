@@ -22,7 +22,7 @@ class DataHandler:
         self.batch_size = batch_size
 
         label_encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
-        self.label_encoder = torch.load(label_encoder_fp)
+        self.label_encoder = torch.load(label_encoder_fp, map_location=self.device)
 
         self.vocab_size = len(self.label_encoder.classes)
 

@@ -39,7 +39,7 @@ def semantic_similarity_score(target_sentences, received_sentences):
              "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
                         "and 1 denoting the semantic similarity score for given sentences A and B with precision "
                         "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
-                        "meanings are uncorrelated."},
+                        "meanings are uncorrelated. Just provide a score without any words or symbols."},
             {"role": "user", "content": f"A=({target_sentences})  B=({received_sentences})"}
         ]
     )
@@ -78,10 +78,10 @@ if __name__ == "__main__":
     add_data_args(parser)
 
     # test args
-    parser.add_argument("--batch-size", default=128, type=int)
+    parser.add_argument("--batch-size", default=2, type=int)
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
-    parser.add_argument("--n-test", default=10000, type=int)
+    parser.add_argument("--n-test", default=2, type=int)
 
     args = parser.parse_args()
     device = get_device()
@@ -222,10 +222,10 @@ if __name__ == "__main__":
             std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
             std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(n_test_samples)
 
-    np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
-    np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
-    np.save("ae_conventional_mean_bleu_3.npy", mean_bleu_3)
+            np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
+            np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
+            np.save("ae_conventional_mean_bleu_3.npy", mean_bleu_3)
 
-    np.save("ae_conventional_std_semantic_sim.npy", std_semantic_sim)
-    np.save("ae_conventional_std_bleu_1.npy", std_bleu_1)
-    np.save("ae_conventional_std_bleu_3.npy", std_bleu_3)
+            np.save("ae_conventional_std_semantic_sim.npy", std_semantic_sim)
+            np.save("ae_conventional_std_bleu_1.npy", std_bleu_1)
+            np.save("ae_conventional_std_bleu_3.npy", std_bleu_3)
