@@ -2,14 +2,12 @@ import argparse
 import numpy as np
 
 from nltk.translate.bleu_score import sentence_bleu
-from torch import nn
 
 from semantic_communication.models.semantic_transformer import SemanticTransformer
 from semantic_communication.models.transceiver import (
     Transceiver,
     ChannelEncoder,
     ChannelDecoder,
-    SrcRelayBlock,
 )
 from semantic_communication.utils.general import (
     get_device,
@@ -83,27 +81,23 @@ if __name__ == "__main__":
         pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
 
-    semantic_transformer = SemanticTransformer(
-        semantic_encoder=semantic_encoder,
-        semantic_decoder=semantic_decoder,
-    ).to(device)
-
-    src_channel_encoder = ChannelEncoder(
+    channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
 
-    relay_channel_decoder = ChannelDecoder(
+    channel_decoder = ChannelDecoder(
         nin=args.channel_block_latent_dim,
         nout=args.channel_block_input_dim,
     ).to(device)
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
 
-    src_relay_block = SrcRelayBlock(
-        semantic_transformer=semantic_transformer,
-        src_channel_encoder=src_channel_encoder,
-        relay_channel_decoder=relay_channel_decoder,
+    semantic_transformer = SemanticTransformer(
+        semantic_encoder=semantic_encoder,
+        semantic_decoder=semantic_decoder,
+        channel_encoder=channel_encoder,
+        channel_decoder=channel_decoder,
         channel=channel,
     ).to(device)
 
@@ -111,7 +105,7 @@ if __name__ == "__main__":
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
         mode=args.mode if args.mode == "sentence" else "forward",
-        rate=args.rate,
+        rate=1 if args.mode == "sentence" else None,
     ).to(device)
 
     relay_channel_encoder = ChannelEncoder(
@@ -130,21 +124,19 @@ if __name__ == "__main__":
         n_heads=args.n_heads,
         n_embeddings=args.n_embeddings,
         block_size=args.max_length,
-        bert=semantic_encoder.bert,
+        bert=relay_semantic_encoder.bert,
         pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
 
     transceiver = Transceiver(
-        src_relay_block=src_relay_block,
+        src_relay_transformer=semantic_transformer,
         relay_semantic_encoder=relay_semantic_encoder,
         relay_channel_encoder=relay_channel_encoder,
         dst_channel_decoder=dst_channel_decoder,
         dst_semantic_decoder=dst_semantic_decoder,
         channel=channel,
         max_length=args.max_length,
-    )
-    transceiver = nn.DataParallel(transceiver)  # TODO: remove module. prefix?
-    transceiver = transceiver.to(device)
+    ).to(device)
     load_model(transceiver, args.transceiver_path)
 
     n_d = len(args.d_list)

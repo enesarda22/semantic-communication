@@ -1,0 +1,293 @@
+Index: semantic_communication/models/transceiver.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from typing import Optional, List\n\nimport numpy as np\nimport torch\nfrom torch import nn\n\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.models.semantic_transformer import SemanticTransformer\nfrom semantic_communication.utils.channel import Channel\nfrom semantic_communication.utils.general import get_device, shift_inputs\n\n\nclass ChannelEncComp(nn.Module):\n    def __init__(self, in_dim, out_dim):\n        super(ChannelEncComp, self).__init__()\n        self.linear = nn.Linear(in_dim, out_dim)\n        self.ln = nn.LayerNorm(out_dim)\n        self.prelu = nn.PReLU()\n\n    def forward(self, x):\n        x = self.linear(x)\n        x = self.ln(x)\n        out = self.prelu(x)\n        return out\n\n\nclass ChannelEncoder(nn.Module):\n    def __init__(self, nin, nout):\n        super(ChannelEncoder, self).__init__()\n        up_dim = int(np.floor(np.log2(nin) / 2))\n        low_dim = int(np.ceil(np.log2(nout) / 2))\n\n        dims = [nin]\n        for i in range(up_dim - low_dim + 1):\n            dims.append(np.power(4, up_dim - i))\n\n        self.layers = nn.ModuleList(\n            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]\n        )\n\n        self.linear = nn.Linear(dims[-1], nout)\n\n    def forward(self, x):\n        for l in self.layers:\n            x = l(x)\n        return self.linear(x)\n\n\nclass ChannelDecoder(nn.Module):\n    def __init__(self, nin, nout):\n        super(ChannelDecoder, self).__init__()\n        up_dim = int(np.floor(np.log2(nout) / 2))\n        low_dim = int(np.ceil(np.log2(nin) / 2))\n        dims = [nin]\n        for i in range(up_dim - low_dim + 1):\n            dims.append(np.power(4, low_dim + i))\n\n        self.layers = nn.ModuleList(\n            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]\n        )\n\n        self.linear = nn.Linear(dims[-1], nout)\n\n    def forward(self, x):\n        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize\n        for l in self.layers:\n            x = l(x)\n        return self.linear(x)\n\n\n# class SrcRelayChannelModel(nn.Module):\n#     def __init__(self, n_in, n_latent, channel: Channel):\n#         super().__init__()\n#         self.relay_decoder = ChannelDecoder(n_latent, n_in)\n#         self.channel = channel\n#\n#     def forward(self, src_out, d_sr):\n#         ch_output = self.channel(src_out, d_sr)\n#         relay_in = self.relay_decoder(ch_output)\n#         return relay_in\n\n\n# class SrcRelayDstChannelModel(nn.Module):\n#     def __init__(\n#         self,\n#         n_in,\n#         n_latent,\n#         channel: Channel,\n#     ):\n#         super().__init__()\n#         self.relay_encoder = ChannelEncoder(n_in, n_latent)\n#         self.src_dst_decoder = ChannelDecoder(n_latent, n_in)\n#         self.relay_dst_decoder = ChannelDecoder(n_latent, n_in)\n#         self.channel = channel\n#\n#     def forward(self, src_out, rel_x, d_rd, d_sd):\n#         src_dst_in = self.channel(src_out, d_sd)\n#\n#         rel_out = self.relay_encoder(rel_x)\n#         rel_dst_in = self.channel(rel_out, d_rd)\n#\n#         x_hat = torch.cat(\n#             [self.relay_dst_decoder(rel_dst_in), self.src_dst_decoder(src_dst_in)],\n#             dim=-1,\n#         )\n#         return x_hat\n\n\nclass SrcRelayBlock(nn.Module):\n    def __init__(\n        self,\n        semantic_transformer: SemanticTransformer,\n        src_channel_encoder: ChannelEncoder,\n        relay_channel_decoder: ChannelDecoder,\n        channel: Channel,\n    ):\n        super().__init__()\n        self.semantic_encoder = semantic_transformer.semantic_encoder\n        self.semantic_decoder = semantic_transformer.semantic_decoder\n\n        self.channel = channel\n        self.src_channel_encoder = src_channel_encoder\n        self.relay_channel_decoder = relay_channel_decoder\n\n        self.device = get_device()\n\n    def forward(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        d_sr: Optional[float] = None,\n    ):\n        x = self.semantic_encoder(\n            messages=messages,\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )\n        x = self.src_channel_encoder(x)\n        x = self._shift_relay_input(x)\n\n        x = self.channel(x, d_sr)\n        x = self.relay_channel_decoder(x)\n\n        B, R, C = x.shape\n        x = torch.repeat_interleave(input=x, repeats=R, dim=0)\n\n        enc_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()\n        enc_padding_mask = enc_padding_mask.repeat(B, 1)\n\n        decoder_idx, targets, _, is_causal = shift_inputs(\n            xb=input_ids,\n            attention_mask=attention_mask,\n            mode=self.semantic_encoder.mode,\n        )\n\n        decoder_idx = torch.repeat_interleave(input=decoder_idx, repeats=R, dim=0)\n        targets = torch.repeat_interleave(input=targets, repeats=R, dim=0)\n\n        logits, loss = self.semantic_decoder(\n            idx=decoder_idx,\n            encoder_output=x,\n            is_causal=is_causal,\n            enc_padding_mask=enc_padding_mask,\n            targets=targets,\n        )\n\n        return logits, loss\n\n    @torch.no_grad()\n    def generate(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        d_sr: Optional[float] = None,\n    ):\n        x = self.semantic_encoder(\n            messages=messages,\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )\n        x = self.src_channel_encoder(x)\n        x = self._shift_relay_input(x)\n\n        x = self.channel(x, d_sr)\n        x = self.relay_channel_decoder(x)\n\n        B, R, _ = x.shape\n        x = torch.repeat_interleave(input=x, repeats=R, dim=0)\n\n        x_padding_mask = torch.tril(\n            torch.ones(R, R, device=self.device), -1\n        ).T.bool()\n        x_padding_mask = x_padding_mask.repeat(B, 1)\n\n        return self.semantic_decoder.generate(\n            encoder_output=x,\n            is_causal=False,\n            max_length=self.semantic_encoder.max_length - 1,\n            enc_padding_mask=x_padding_mask,\n            n_generated_tokens=self.semantic_encoder.max_length,\n        )\n\n    def _shift_relay_input(self, x):\n        if self.semantic_encoder.mode == \"predict\":\n            x = x[:, :-1, :]\n        return x\n\n\nclass Transceiver(nn.Module):\n    def __init__(\n        self,\n        src_relay_block: SrcRelayBlock,\n        relay_semantic_encoder: SemanticEncoder,\n        relay_channel_encoder: ChannelEncoder,\n        dst_channel_decoder: ChannelDecoder,\n        dst_semantic_decoder: SemanticDecoder,\n        channel: Channel,\n        max_length: int,\n    ):\n        super().__init__()\n        # source\n        self.src_semantic_encoder = src_relay_block.semantic_encoder\n        self.src_channel_encoder = src_relay_block.src_channel_encoder\n\n        # relay\n        self.relay_channel_decoder = src_relay_block.relay_channel_decoder\n        self.relay_semantic_decoder = src_relay_block.semantic_decoder\n        self.relay_semantic_encoder = relay_semantic_encoder\n        self.relay_channel_encoder = relay_channel_encoder\n\n        # destination\n        self.dst_channel_decoder = dst_channel_decoder\n        self.dst_semantic_decoder = dst_semantic_decoder\n\n        self.channel = channel\n        self.max_length = max_length\n        self.device = get_device()\n\n    def forward(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        d_sd: Optional[float] = None,\n        d_sr: Optional[float] = None,\n    ):\n        # source\n        x_src_to_dst, x_src_to_relay = self._source_forward(\n            attention_mask=attention_mask,\n            input_ids=input_ids,\n            messages=messages,\n        )\n\n        # relay\n        x_relay = self.channel(x_src_to_relay, d_sr)\n        x_relay = self._relay_forward(x_relay=x_relay)\n\n        # destination\n        x_dst1 = self.channel(x_relay, d_sd - d_sr)\n        x_dst2 = self.channel(x_src_to_dst, d_sd)\n        x_dst = torch.cat((x_dst1, x_dst2), dim=-1)\n\n        logits, loss = self._destination_forward(\n            x_dst=x_dst,\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )\n\n        return logits, loss\n\n    def _destination_forward(self, x_dst, input_ids, attention_mask):\n        x_dst = self.dst_channel_decoder(x_dst)\n        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(\n            xb=input_ids,\n            attention_mask=attention_mask,\n            mode=self.relay_semantic_encoder.mode,\n        )\n        logits, loss = self.dst_semantic_decoder(\n            idx=decoder_idx,\n            encoder_output=x_dst,\n            is_causal=is_causal,\n            enc_padding_mask=enc_padding_mask,\n            targets=targets,\n        )\n        return logits, loss\n\n    def _relay_forward(self, x_relay):\n        x_relay = self.relay_channel_decoder(x_relay)\n        B, R, C = x_relay.shape\n\n        # decode every sentence embedding using beam search\n        x_relay = torch.repeat_interleave(input=x_relay, repeats=R, dim=0)\n        x_relay_padding_mask = torch.tril(\n            torch.ones(R, R, device=self.device), -1\n        ).T.bool()\n        x_relay_padding_mask = x_relay_padding_mask.repeat(B, 1)\n        x_relay, _ = self.relay_semantic_decoder.generate(\n            encoder_output=x_relay,\n            is_causal=self.relay_semantic_encoder.mode != \"sentence\",\n            max_length=self.max_length,  # TODO: fix +1 discrepancy\n            enc_padding_mask=x_relay_padding_mask,\n            n_generated_tokens=self.max_length + 1,\n        )  # TODO: relay sees all the embeddings?\n\n        # create attention mask based on [SEP] token\n        relay_attention_mask = torch.ones(\n            *x_relay.shape, dtype=torch.long, device=self.device\n        )\n        for i in range(x_relay.shape[0]):\n            k = torch.argmax((x_relay[i] == 2).long()).item()\n            if k == 0:\n                continue\n            relay_attention_mask[i, k + 1 :] = 0\n\n        # re-encode decoded sentences and forward\n        x_relay = self.relay_semantic_encoder(\n            input_ids=x_relay,\n            attention_mask=relay_attention_mask,\n        )\n        x_relay = x_relay[torch.arange(B * R), torch.arange(R).repeat(B), :]\n        x_relay = x_relay.reshape(B, R, C)\n        x_relay = self.relay_channel_encoder(x_relay)\n        return x_relay\n\n    def _source_forward(self, input_ids, messages, attention_mask):\n        x_src = self.src_semantic_encoder(\n            messages=messages,\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )\n        x_src = self.src_channel_encoder(x_src)\n        x_src_to_relay, x_src_to_dst = self._shift_src_output(x_src)\n        return x_src_to_dst, x_src_to_relay\n\n    def generate(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        d_sd: Optional[float] = None,\n        d_sr: Optional[float] = None,\n    ):\n        self.eval()\n        with torch.no_grad():\n            # source\n            x_src_to_dst, x_src_to_relay = self._source_forward(\n                attention_mask=attention_mask,\n                input_ids=input_ids,\n                messages=messages,\n            )\n\n            # relay\n            x_relay = self.channel(x_src_to_relay, d_sr)\n            x_relay = self._relay_forward(x_relay=x_relay)\n\n            # destination\n            x_dst1 = self.channel(x_relay, d_sd - d_sr)\n            x_dst2 = self.channel(x_src_to_dst, d_sd)\n            x_dst = torch.cat((x_dst1, x_dst2), dim=-1)\n\n            x_dst = self.dst_channel_decoder(x_dst)\n            return self.dst_semantic_decoder.generate(\n                encoder_output=x_dst,\n                is_causal=False,\n                max_length=self.max_length,\n                enc_padding_mask=None,\n                n_generated_tokens=self.max_length + 1,\n            )\n\n    def _shift_src_output(self, src_out):\n        if self.relay_semantic_encoder.mode == \"predict\":\n            src_to_relay = src_out[:, :-1, :]\n            src_to_dst = src_out[:, 1:, :]\n        else:\n            src_to_relay = src_out\n            src_to_dst = src_out\n\n        return src_to_relay, src_to_dst\n\n\n# class RelayEncoder:\n#     def __init__(\n#         self,\n#         semantic_encoder: SemanticEncoder,\n#         label_encoder: TensorLabelEncoder,\n#     ):\n#         super().__init__()\n#         self.device = get_device()\n#         self.semantic_encoder = semantic_encoder\n#         self.label_encoder = label_encoder\n#\n#     def __call__(self, logits):\n#         B, T, _ = logits.shape\n#         predicted_ids = torch.argmax(logits, dim=-1)\n#\n#         # append [CLS] token\n#         cls_padding = torch.full((B, 1), self.label_encoder.cls_id).to(self.device)\n#         predicted_ids = torch.cat(\n#             tensors=(cls_padding, predicted_ids),\n#             dim=1,\n#         )\n#\n#         # transform to bert token ids\n#         predicted_ids = self.label_encoder.inverse_transform(predicted_ids)\n#\n#         # ids are repeated to generate the embeddings sequentially\n#         predicted_ids = torch.repeat_interleave(predicted_ids, T, dim=0)\n#\n#         # tril mask to generate the embeddings sequentially\n#         tril_mask = (\n#             torch.tril(\n#                 torch.ones(T, T + 1, dtype=torch.long),\n#                 diagonal=1,\n#             ).repeat(B, 1)\n#         ).to(self.device)\n#\n#         out = self.semantic_encoder(\n#             input_ids=predicted_ids,\n#             attention_mask=tril_mask,\n#         )\n#\n#         # use eye mask to select the correct embeddings sequentially\n#         eye_mask = (torch.eye(T).repeat(1, B) == 1).to(self.device)\n#         out = torch.masked_select(out[:, 1:, :].transpose(-1, 0), eye_mask)\n#         out = out.view(B, T, -1)\n#\n#         return out\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/transceiver.py b/semantic_communication/models/transceiver.py
+--- a/semantic_communication/models/transceiver.py	(revision 45492a70c1d093de8f7289792056b380cff9560e)
++++ b/semantic_communication/models/transceiver.py	(date 1714495420094)
+@@ -1,74 +1,19 @@
+ from typing import Optional, List
+ 
+-import numpy as np
+ import torch
+ from torch import nn
+ 
+ from semantic_communication.models.semantic_decoder import SemanticDecoder
+ from semantic_communication.models.semantic_encoder import SemanticEncoder
+-from semantic_communication.models.semantic_transformer import SemanticTransformer
++from semantic_communication.models.semantic_transformer import (
++    SemanticTransformer,
++    ChannelEncoder,
++    ChannelDecoder,
++)
+ from semantic_communication.utils.channel import Channel
+ from semantic_communication.utils.general import get_device, shift_inputs
+ 
+ 
+-class ChannelEncComp(nn.Module):
+-    def __init__(self, in_dim, out_dim):
+-        super(ChannelEncComp, self).__init__()
+-        self.linear = nn.Linear(in_dim, out_dim)
+-        self.ln = nn.LayerNorm(out_dim)
+-        self.prelu = nn.PReLU()
+-
+-    def forward(self, x):
+-        x = self.linear(x)
+-        x = self.ln(x)
+-        out = self.prelu(x)
+-        return out
+-
+-
+-class ChannelEncoder(nn.Module):
+-    def __init__(self, nin, nout):
+-        super(ChannelEncoder, self).__init__()
+-        up_dim = int(np.floor(np.log2(nin) / 2))
+-        low_dim = int(np.ceil(np.log2(nout) / 2))
+-
+-        dims = [nin]
+-        for i in range(up_dim - low_dim + 1):
+-            dims.append(np.power(4, up_dim - i))
+-
+-        self.layers = nn.ModuleList(
+-            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+-        )
+-
+-        self.linear = nn.Linear(dims[-1], nout)
+-
+-    def forward(self, x):
+-        for l in self.layers:
+-            x = l(x)
+-        return self.linear(x)
+-
+-
+-class ChannelDecoder(nn.Module):
+-    def __init__(self, nin, nout):
+-        super(ChannelDecoder, self).__init__()
+-        up_dim = int(np.floor(np.log2(nout) / 2))
+-        low_dim = int(np.ceil(np.log2(nin) / 2))
+-        dims = [nin]
+-        for i in range(up_dim - low_dim + 1):
+-            dims.append(np.power(4, low_dim + i))
+-
+-        self.layers = nn.ModuleList(
+-            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+-        )
+-
+-        self.linear = nn.Linear(dims[-1], nout)
+-
+-    def forward(self, x):
+-        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize
+-        for l in self.layers:
+-            x = l(x)
+-        return self.linear(x)
+-
+-
+ # class SrcRelayChannelModel(nn.Module):
+ #     def __init__(self, n_in, n_latent, channel: Channel):
+ #         super().__init__()
+@@ -190,9 +135,7 @@
+         B, R, _ = x.shape
+         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
+ 
+-        x_padding_mask = torch.tril(
+-            torch.ones(R, R, device=self.device), -1
+-        ).T.bool()
++        x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
+         x_padding_mask = x_padding_mask.repeat(B, 1)
+ 
+         return self.semantic_decoder.generate(
+Index: semantic_communication/models/semantic_transformer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from typing import Optional, List\n\nimport torch\nfrom torch import nn\n\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.general import shift_inputs\n\n\nclass SemanticTransformer(nn.Module):\n    def __init__(\n        self,\n        semantic_encoder: SemanticEncoder,\n        semantic_decoder: SemanticDecoder,\n    ):\n        super().__init__()\n        self.semantic_encoder = semantic_encoder\n        self.semantic_decoder = semantic_decoder\n        self.mode = semantic_encoder.mode\n\n    def forward(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        snr_db: Optional[float] = None,\n    ):\n        encoder_output = self.semantic_encoder(\n            messages=messages,\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )\n        encoder_output = self._add_noise(encoder_output, snr_db)\n\n        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(\n            xb=input_ids,\n            attention_mask=attention_mask,\n            mode=self.mode,\n        )\n\n        logits, loss = self.semantic_decoder(\n            idx=decoder_idx,\n            encoder_output=encoder_output,\n            is_causal=is_causal,\n            enc_padding_mask=enc_padding_mask,\n            targets=targets,\n        )\n\n        return logits, loss\n\n    def generate(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        snr_db: Optional[float] = None,\n        beam_width=5,\n        max_length=20,\n        n_generated_tokens=20,\n    ):\n        with torch.no_grad():\n            encoder_output = self.semantic_encoder(\n                messages=messages,\n                input_ids=input_ids,\n                attention_mask=attention_mask,\n            )\n            encoder_output = self._add_noise(encoder_output, snr_db)\n\n            return self.semantic_decoder.generate(\n                encoder_output=encoder_output,\n                is_causal=False,\n                max_length=max_length,\n                enc_padding_mask=None,\n                beam_width=beam_width,\n                n_generated_tokens=n_generated_tokens,\n            )\n\n    @staticmethod\n    def _add_noise(signal, snr_db):\n        if snr_db is not None:\n            signal_pow = torch.mean(torch.pow(signal, 2), dim=-1, keepdim=True)\n            noise_pow = signal_pow / (10 ** (snr_db / 10))\n\n            noise = torch.sqrt(noise_pow) * torch.randn(\n                size=signal.shape, device=signal.device\n            )\n            return signal + noise\n\n        else:\n            return signal\n\n    def init_optimizer(self, weight_decay, learning_rate, betas, device_type):\n        param_dict = {pn: p for pn, p in self.named_parameters()}\n        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}\n\n        # 2D parameters will be weight decayed\n        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]\n        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]\n        optim_groups = [\n            {\"params\": decay_params, \"weight_decay\": weight_decay},\n            {\"params\": nodecay_params, \"weight_decay\": 0.0},\n        ]\n\n        extra_args = dict(fused=True) if device_type == \"cuda\" else dict()\n        optimizer = torch.optim.AdamW(\n            optim_groups, lr=learning_rate, betas=betas, **extra_args\n        )\n        return optimizer\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_transformer.py b/semantic_communication/models/semantic_transformer.py
+--- a/semantic_communication/models/semantic_transformer.py	(revision 45492a70c1d093de8f7289792056b380cff9560e)
++++ b/semantic_communication/models/semantic_transformer.py	(date 1714495400284)
+@@ -1,11 +1,70 @@
+ from typing import Optional, List
+ 
++import numpy as np
+ import torch
+ from torch import nn
+ 
+ from semantic_communication.models.semantic_decoder import SemanticDecoder
+ from semantic_communication.models.semantic_encoder import SemanticEncoder
+-from semantic_communication.utils.general import shift_inputs
++from semantic_communication.utils.general import shift_inputs, get_device
++
++
++class ChannelEncComp(nn.Module):
++    def __init__(self, in_dim, out_dim):
++        super(ChannelEncComp, self).__init__()
++        self.linear = nn.Linear(in_dim, out_dim)
++        self.ln = nn.LayerNorm(out_dim)
++        self.prelu = nn.PReLU()
++
++    def forward(self, x):
++        x = self.linear(x)
++        x = self.ln(x)
++        out = self.prelu(x)
++        return out
++
++
++class ChannelEncoder(nn.Module):
++    def __init__(self, nin, nout):
++        super(ChannelEncoder, self).__init__()
++        up_dim = int(np.floor(np.log2(nin) / 2))
++        low_dim = int(np.ceil(np.log2(nout) / 2))
++
++        dims = [nin]
++        for i in range(up_dim - low_dim + 1):
++            dims.append(np.power(4, up_dim - i))
++
++        self.layers = nn.ModuleList(
++            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
++        )
++
++        self.linear = nn.Linear(dims[-1], nout)
++
++    def forward(self, x):
++        for l in self.layers:
++            x = l(x)
++        return self.linear(x)
++
++
++class ChannelDecoder(nn.Module):
++    def __init__(self, nin, nout):
++        super(ChannelDecoder, self).__init__()
++        up_dim = int(np.floor(np.log2(nout) / 2))
++        low_dim = int(np.ceil(np.log2(nin) / 2))
++        dims = [nin]
++        for i in range(up_dim - low_dim + 1):
++            dims.append(np.power(4, low_dim + i))
++
++        self.layers = nn.ModuleList(
++            [ChannelEncComp(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
++        )
++
++        self.linear = nn.Linear(dims[-1], nout)
++
++    def forward(self, x):
++        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize
++        for l in self.layers:
++            x = l(x)
++        return self.linear(x)
+ 
+ 
+ class SemanticTransformer(nn.Module):
+@@ -13,11 +72,16 @@
+         self,
+         semantic_encoder: SemanticEncoder,
+         semantic_decoder: SemanticDecoder,
++        channel_encoder: ChannelEncoder,
++        channel_decoder: ChannelDecoder,
+     ):
+         super().__init__()
+         self.semantic_encoder = semantic_encoder
+         self.semantic_decoder = semantic_decoder
++        self.channel_encoder = channel_encoder
++        self.channel_decoder = channel_decoder
+         self.mode = semantic_encoder.mode
++        self.device = get_device()
+ 
+     def forward(
+         self,
+@@ -26,12 +90,21 @@
+         attention_mask: Optional[torch.Tensor] = None,
+         snr_db: Optional[float] = None,
+     ):
+-        encoder_output = self.semantic_encoder(
++        x = self.semantic_encoder(
+             messages=messages,
+             input_ids=input_ids,
+             attention_mask=attention_mask,
+         )
+-        encoder_output = self._add_noise(encoder_output, snr_db)
++        x = self.channel_encoder(x)
++
++        # signal power constraint
++        last_dim = int(x.shape[-1] / 2)
++        x = torch.complex(*torch.split(x, last_dim, dim=-1))
++        x = x / torch.abs(x)
++        x = torch.cat((x.real, x.imag), dim=-1)
++
++        x = self._add_noise(x, snr_db)
++        x = self.channel_decoder(x)
+ 
+         decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
+             xb=input_ids,
+@@ -41,7 +114,7 @@
+ 
+         logits, loss = self.semantic_decoder(
+             idx=decoder_idx,
+-            encoder_output=encoder_output,
++            encoder_output=x,
+             is_causal=is_causal,
+             enc_padding_mask=enc_padding_mask,
+             targets=targets,
+@@ -49,6 +122,7 @@
+ 
+         return logits, loss
+ 
++    @torch.no_grad()
+     def generate(
+         self,
+         messages: Optional[List[str]] = None,
+@@ -59,22 +133,36 @@
+         max_length=20,
+         n_generated_tokens=20,
+     ):
+-        with torch.no_grad():
+-            encoder_output = self.semantic_encoder(
+-                messages=messages,
+-                input_ids=input_ids,
+-                attention_mask=attention_mask,
+-            )
+-            encoder_output = self._add_noise(encoder_output, snr_db)
++        x = self.semantic_encoder(
++            messages=messages,
++            input_ids=input_ids,
++            attention_mask=attention_mask,
++        )
++        x = self.channel_encoder(x)
++
++        # signal power constraint
++        last_dim = int(x.shape[-1] / 2)
++        x = torch.complex(*torch.split(x, last_dim, dim=-1))
++        x = x / torch.abs(x)
++        x = torch.cat((x.real, x.imag), dim=-1)
++
++        x = self._add_noise(x, snr_db)
++        x = self.channel_decoder(x)
++
++        B, R, _ = x.shape
++        x = torch.repeat_interleave(input=x, repeats=R, dim=0)
++
++        x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
++        x_padding_mask = x_padding_mask.repeat(B, 1)
+ 
+-            return self.semantic_decoder.generate(
+-                encoder_output=encoder_output,
+-                is_causal=False,
+-                max_length=max_length,
+-                enc_padding_mask=None,
+-                beam_width=beam_width,
+-                n_generated_tokens=n_generated_tokens,
+-            )
++        return self.semantic_decoder.generate(
++            encoder_output=x,
++            is_causal=False,
++            max_length=max_length,
++            enc_padding_mask=x_padding_mask,
++            beam_width=beam_width,
++            n_generated_tokens=n_generated_tokens,
++        )
+ 
+     @staticmethod
+     def _add_noise(signal, snr_db):

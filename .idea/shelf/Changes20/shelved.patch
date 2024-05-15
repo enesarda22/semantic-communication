@@ -1,0 +1,31 @@
+Index: semantic_communication/models/semantic_transformer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from typing import Optional, List\n\nimport torch\nfrom torch import nn\n\nfrom semantic_communication.models.semantic_decoder import SemanticDecoder\nfrom semantic_communication.models.semantic_encoder import SemanticEncoder\nfrom semantic_communication.utils.general import shift_inputs\n\n\nclass SemanticTransformer(nn.Module):\n    def __init__(\n        self,\n        semantic_encoder: SemanticEncoder,\n        semantic_decoder: SemanticDecoder,\n    ):\n        super().__init__()\n        self.semantic_encoder = semantic_encoder\n        self.semantic_decoder = semantic_decoder\n        self.mode = semantic_encoder.mode\n\n    def forward(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        snr_db: Optional[float] = None,\n    ):\n        encoder_output = self.semantic_encoder(\n            messages=messages,\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )\n        encoder_output = self._add_noise(encoder_output, snr_db)\n\n        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(\n            xb=input_ids,\n            attention_mask=attention_mask,\n            mode=self.mode,\n        )\n\n        logits, loss = self.semantic_decoder(\n            idx=decoder_idx,\n            encoder_output=encoder_output,\n            is_causal=is_causal,\n            enc_padding_mask=enc_padding_mask,\n            targets=targets,\n        )\n\n        return logits, loss\n\n    def generate(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n        snr_db: Optional[float] = None,\n        beam_width=5,\n        max_length=20,\n    ):\n        self.eval()\n        with torch.no_grad():\n            encoder_output = self.semantic_encoder(\n                messages=messages,\n                input_ids=input_ids,\n                attention_mask=attention_mask,\n            )\n            encoder_output = self._add_noise(encoder_output, snr_db)\n\n            return self.semantic_decoder.generate(\n                encoder_output=encoder_output,\n                beam_width=beam_width,\n                max_length=max_length,\n            )\n\n    @staticmethod\n    def _add_noise(signal, snr_db):\n        if snr_db is not None:\n            signal_pow = torch.mean(torch.pow(signal, 2), dim=-1, keepdim=True)\n            noise_pow = signal_pow / (10 ** (snr_db / 10))\n\n            noise = torch.sqrt(noise_pow) * torch.randn(\n                size=signal.shape, device=signal.device\n            )\n            return signal + noise\n\n        else:\n            return signal\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_transformer.py b/semantic_communication/models/semantic_transformer.py
+--- a/semantic_communication/models/semantic_transformer.py	(revision a4534af2ac0a8ada3b6555410c9306e667a85fe2)
++++ b/semantic_communication/models/semantic_transformer.py	(date 1714331203134)
+@@ -57,6 +57,7 @@
+         snr_db: Optional[float] = None,
+         beam_width=5,
+         max_length=20,
++        n_generated_tokens=20,
+     ):
+         self.eval()
+         with torch.no_grad():
+@@ -69,8 +70,11 @@
+ 
+             return self.semantic_decoder.generate(
+                 encoder_output=encoder_output,
+-                beam_width=beam_width,
++                is_causal=False,
+                 max_length=max_length,
++                enc_padding_mask=None,
++                beam_width=beam_width,
++                n_generated_tokens=n_generated_tokens,
+             )
+ 
+     @staticmethod
