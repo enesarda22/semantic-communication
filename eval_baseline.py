@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+from openai import OpenAI
 from nltk.translate.bleu_score import sentence_bleu
 from semantic_communication.utils.general import (
     get_device,
@@ -9,21 +9,44 @@ from semantic_communication.utils.general import (
     add_channel_model_args,
     add_data_args,
     load_model,
+    round_to_nearest_even
 )
 from semantic_communication.models.baseline_models import Tx_Relay, Tx_Relay_Rx
-from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.utils.channel import init_channel
+from semantic_communication.models.semantic_encoder import SemanticEncoder
+
 import torch
 import argparse
 from torch.nn import functional as F
 
 
+def plotter(x_axis_values, y_axis_values, x_label, y_label, title):
+    plt.figure()
+    plt.plot(x_axis_values, y_axis_values)
+    plt.grid()
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.savefig(f"{title}.png", dpi=400)
+
+
 def semantic_similarity_score(target_sentences, received_sentences):
-    target_emb = semantic_encoder(messages=target_sentences)
-    received_emb = semantic_encoder(messages=received_sentences)
-    scores = F.cosine_similarity(target_emb, received_emb)
-    return scores
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system",
+             "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
+                        "and 1 denoting the semantic similarity score for given sentences A and B with precision "
+                        "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
+                        "meanings are uncorrelated."},
+            {"role": "user", "content": f"A=({target_sentences})  B=({received_sentences})"}
+        ]
+    )
+    if completion.choices[0].finish_reason == "stop":
+        return float(completion.choices[0].message.content)
+    else:
+        raise ValueError("Finish reason is not stop.")
 
 
 def bleu_1gram(target_sentences, received_sentences):
@@ -48,6 +71,7 @@ if __name__ == "__main__":
     # model args
     parser.add_argument("--tx-relay-path", type=str)
     parser.add_argument("--tx-relay-rx-path", type=str)
+    parser.add_argument("--API-KEY", type=str)  # API KEY
 
     add_semantic_decoder_args(parser)
     add_channel_model_args(parser)
@@ -58,62 +82,75 @@ if __name__ == "__main__":
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
     parser.add_argument("--n-test", default=10000, type=int)
-    parser.add_argument("--semantic-similarity-threshold", default=0.8, type=float)
-    parser.add_argument("--bleu-1-threshold", default=0.5, type=float)
-    parser.add_argument("--bleu-3-threshold", default=0.5, type=float)
 
     args = parser.parse_args()
     device = get_device()
     set_seed()
 
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
+    client = OpenAI(api_key=args.API_KEY)
+
     data_handler = DataHandler(
-        semantic_encoder=semantic_encoder,
         batch_size=args.batch_size,
         data_fp=args.data_fp,
     )
+
+    semantic_encoder = SemanticEncoder(
+        label_encoder=data_handler.label_encoder,
+        max_length=args.max_length,
+        mode=args.mode,
+        rate=args.rate,
+    ).to(device)
+
+    sentence_lengths = []
+    for b in data_handler.train_dataloader:
+        encoder_idx = b[0].to(device)
+        encoder_attention_mask = b[1].to(device)
+
+        encoder_idx = data_handler.label_encoder.transform(encoder_idx)
+
+        sentence_lengths.append(len(torch.nonzero(encoder_idx)) / len(encoder_idx))
+
+    mean_sentence_len = np.mean(sentence_lengths)
+    print(f"Average token count: {mean_sentence_len}")
+    sentence_embedding_dim = 64*5
+    latent_dim = round_to_nearest_even(sentence_embedding_dim / mean_sentence_len)
+    print(f"Latent dim: {latent_dim}")
 
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     num_classes = data_handler.vocab_size
 
     # Create Transceiver
     tx_relay_model = Tx_Relay(
-        num_classes,
+        nin=num_classes,
         n_emb=args.channel_block_input_dim,
-        n_latent=args.channel_block_latent_dim,
+        n_latent=latent_dim,
         channel=channel,
         entire_network_train=1,
     ).to(device)
     load_model(tx_relay_model, args.tx_relay_path)
 
     tx_relay_rx_model = Tx_Relay_Rx(
-        num_classes,
-        args.channel_block_input_dim,
-        args.channel_block_latent_dim,
-        channel,
-        tx_relay_model,
+        nin=num_classes,
+        n_emb=args.channel_block_input_dim,
+        n_latent=latent_dim,
+        channel=channel,
+        tx_relay_model=tx_relay_model,
     ).to(device)
     load_model(tx_relay_rx_model, args.tx_relay_rx_path)
 
-    mean_semantic_sim = np.zeros((len(args.d_list), len(args.gamma_list)))
-    mean_bleu_1 = np.zeros((len(args.d_list), len(args.gamma_list)))
-    mean_bleu_3 = np.zeros((len(args.d_list), len(args.gamma_list)))
+    n_d = len(args.d_list)
+    n_gamma = len(args.gamma_list)
 
-    std_semantic_sim = np.zeros((len(args.d_list), len(args.gamma_list)))
-    std_bleu_1 = np.zeros((len(args.d_list), len(args.gamma_list)))
-    std_bleu_3 = np.zeros((len(args.d_list), len(args.gamma_list)))
+    mean_semantic_sim = np.zeros((n_d, n_gamma))
+    mean_bleu_1 = np.zeros((n_d, n_gamma))
+    mean_bleu_3 = np.zeros((n_d, n_gamma))
 
-    semantic_sim_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
-    bleu_1_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
-    bleu_3_efficiency = np.zeros((len(args.d_list), len(args.gamma_list)))
-
-    semantic_sim_efficiency_se = np.zeros((len(args.d_list), len(args.gamma_list)))
-    bleu_1_efficiency_se = np.zeros((len(args.d_list), len(args.gamma_list)))
-    bleu_3_efficiency_se = np.zeros((len(args.d_list), len(args.gamma_list)))
+    std_semantic_sim = np.zeros((n_d, n_gamma))
+    std_bleu_1 = np.zeros((n_d, n_gamma))
+    std_bleu_3 = np.zeros((n_d, n_gamma))
 
     # For each d_sd
     for distance_index, d_sd in enumerate(args.d_list):
-
         # For each gamma in gamma list
         for gamma_index, gamma in enumerate(args.gamma_list):
             print(f"Simulating for distance: {d_sd}  - Gamma: {gamma}")
@@ -127,111 +164,55 @@ if __name__ == "__main__":
 
             tx_relay_rx_model.eval()
 
-            time_slot = 0
-            semantic_similarity_num_correct_sentences = 0
-            bleu_1_num_correct_sentences = 0
-            bleu_3_num_correct_sentences = 0
-
             for b in data_handler.test_dataloader:
-                xb = b[0].to(device)
-                attention_mask = b[1].to(device)
-                xb = data_handler.encode_token_ids(xb)
-                time_slot += (torch.sum(attention_mask) - attention_mask.shape[0]).item()
+                encoder_idx = b[0].to(device)
+                encoder_attention_mask = b[1].to(device)
+                encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-                B, T = xb.shape
+                B, T = encoder_idx.shape
                 with torch.no_grad():
                     logits, _ = tx_relay_rx_model(
-                        xb[:, 1:], attention_mask[:, 1:], d_sd, d_sr, d_rd
+                        encoder_idx[:, 1:], encoder_attention_mask[:, 1:], d_sd, d_sr, d_rd
                     )
                     probs = F.softmax(logits, dim=-1)
                     predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
                         B, args.max_length
                     )
 
-                    end_token_id = data_handler.encoder.transform([102])[0]
-                    end_prediction_idx = torch.argmax(
-                        predicted_ids.eq(end_token_id).double(), dim=1
-                    )
+                    # find the end of sentences
+                    sep_indices = torch.argmax((predicted_ids == 2).long(), dim=1)
+                    input_ids_list = []
+                    for i in range(predicted_ids.shape[0]):
+                        k = sep_indices[i]
+                        if k == 0:  # no [SEP] predicted
+                            input_ids_list.append(predicted_ids[i, :])
+                        else:
+                            input_ids_list.append(predicted_ids[i, : k + 1])
 
-                    # zero means no end token prediction
-                    end_prediction_idx[end_prediction_idx == 0] = T - 1
+                    token_ids_list = [
+                        semantic_encoder.label_encoder.inverse_transform(input_ids)
+                        for input_ids in input_ids_list
+                    ]
 
-                    # prediction mask is created based on end token predictions
-                    pred_mask = (torch.arange(T - 1).to(device)).le(
-                        end_prediction_idx.view(-1, 1)
-                    )
-
-                    predicted_sentences = data_handler.get_tokens(
-                        ids=predicted_ids,
-                        attention_mask=pred_mask,
+                    predicted_sentences = semantic_encoder.get_tokens(
+                        token_ids=token_ids_list,
                         skip_special_tokens=True,
                     )
 
-                    original_sentences = data_handler.get_tokens(
-                        ids=xb,
-                        attention_mask=attention_mask,
+                    original_sentences = semantic_encoder.get_tokens(
+                        ids=encoder_idx,
                         skip_special_tokens=True,
                     )
 
                     for s1, s2 in zip(original_sentences, predicted_sentences):
-                        cosine_score = semantic_similarity_score([s1], [s2])[0][0]. item()
-                        bleu1_score = bleu_1gram(s1, s2)
-                        bleu3_score = bleu_3gram(s1, s2)
+                        cosine_scores.append(semantic_similarity_score([s1], [s2]))
+                        bleu1_scores.append(bleu_1gram(s1, s2))
+                        bleu3_scores.append(bleu_3gram(s1, s2))
 
-                        if args.semantic_similarity_threshold <= cosine_score:
-                            semantic_similarity_num_correct_sentences += 1
-
-                        if args.bleu_1_threshold <= bleu1_score:
-                            bleu_1_num_correct_sentences += 1
-
-                        if args.bleu_3_threshold <= bleu3_score:
-                            bleu_3_num_correct_sentences += 1
-
-                        cosine_scores.append(cosine_score)
-                        bleu1_scores.append(bleu1_score)
-                        bleu3_scores.append(bleu3_score)
                 if len(cosine_scores) > args.n_test:
                     break
 
             n_test_samples = len(cosine_scores)
-            time_slot = time_slot * 2
-
-            semantic_sim_efficiency[distance_index, gamma_index] = (
-                    semantic_similarity_num_correct_sentences / time_slot
-            )
-            bleu_1_efficiency[distance_index, gamma_index] = (
-                    bleu_1_num_correct_sentences / time_slot
-            )
-            bleu_3_efficiency[distance_index, gamma_index] = (
-                    bleu_3_num_correct_sentences / time_slot
-            )
-
-            semantic_sim_efficiency_se[distance_index, gamma_index] = (
-                (n_test_samples**0.5) / time_slot
-            ) * (
-                semantic_similarity_num_correct_sentences
-                * (1 - semantic_similarity_num_correct_sentences / n_test_samples) ** 2
-                + (n_test_samples - semantic_similarity_num_correct_sentences)
-                * (semantic_similarity_num_correct_sentences / n_test_samples) ** 2
-            ) ** 0.5
-
-            bleu_1_efficiency_se[distance_index, gamma_index] = (
-                (n_test_samples**0.5) / time_slot
-            ) * (
-                bleu_1_num_correct_sentences
-                * (1 - bleu_1_num_correct_sentences / n_test_samples) ** 2
-                + (n_test_samples - bleu_1_num_correct_sentences)
-                * (bleu_1_num_correct_sentences / n_test_samples) ** 2
-            ) ** 0.5
-
-            bleu_3_efficiency_se[distance_index, gamma_index] = (
-                (n_test_samples**0.5) / time_slot
-            ) * (
-                bleu_3_num_correct_sentences
-                * (1 - bleu_3_num_correct_sentences / n_test_samples) ** 2
-                + (n_test_samples - bleu_3_num_correct_sentences)
-                * (bleu_3_num_correct_sentences / n_test_samples) ** 2
-            ) ** 0.5
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
@@ -241,60 +222,10 @@ if __name__ == "__main__":
             std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
             std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(n_test_samples)
 
-    np.save("conventional_mean_semantic_sim.npy", mean_semantic_sim)
-    np.save("conventional_mean_bleu_1.npy", mean_bleu_1)
-    np.save("conventional_mean_bleu_3.npy", mean_bleu_3)
+    np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
+    np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
+    np.save("ae_conventional_mean_bleu_3.npy", mean_bleu_3)
 
-    np.save("conventional_std_semantic_sim.npy", std_semantic_sim)
-    np.save("conventional_std_bleu_1.npy", std_bleu_1)
-    np.save("conventional_std_bleu_3.npy", std_bleu_3)
-
-    np.save("conventional_efficiency_semantic_sim.npy", semantic_sim_efficiency)
-    np.save("conventional_efficiency_bleu_1.npy", bleu_1_efficiency)
-    np.save("conventional_efficiency_bleu_3.npy", bleu_3_efficiency)
-
-    np.save("conventional_efficiency_semantic_sim_se.npy", semantic_sim_efficiency_se)
-    np.save("conventional_efficiency_bleu_1_se.npy", bleu_1_efficiency_se)
-    np.save("conventional_efficiency_bleu_3_se.npy", bleu_3_efficiency_se)
-
-    # d_sr_np = np.array(args.gamma_list) * args.d
-    #
-    # plt.figure()
-    # plt.plot(d_sr_np, mean_semantic_sim)
-    # plt.grid()
-    # plt.xlabel("S-R Distance")
-    # plt.ylabel("Semantic Similarity")
-    # plt.title("Semantic Similarity v. S-R Distance Ratio")
-    # plt.savefig("SemanticSimilarty_v_distance.png", dpi=400)
-    #
-    # plt.figure()
-    # plt.plot(d_sr_np, mean_bleu_1)
-    # plt.grid()
-    # plt.xlabel("S-R Distance")
-    # plt.ylabel("BLEU 1-gram")
-    # plt.title("BLEU 1-gram v. S-R Distance")
-    # plt.savefig("BLEU1gram_v_distance.png", dpi=400)
-    #
-    # plt.figure()
-    # plt.plot(d_sr_np, mean_bleu_2)
-    # plt.grid()
-    # plt.xlabel("S-R Distance")
-    # plt.ylabel("BLEU 2-gram")
-    # plt.title("BLEU 2-gram v. S-R Distance")
-    # plt.savefig("BLEU2gam_v_distance.png", dpi=400)
-    #
-    # plt.figure()
-    # plt.plot(d_sr_np, mean_bleu_3)
-    # plt.grid()
-    # plt.xlabel("S-R Distance")
-    # plt.ylabel("BLEU 3-gram")
-    # plt.title("BLEU 3-gram v. S-R Distance")
-    # plt.savefig("BLEU3gram_v_distance.png", dpi=400)
-    #
-    # plt.figure()
-    # plt.plot(d_sr_np, mean_bleu_4)
-    # plt.grid()
-    # plt.xlabel("S-R Distance")
-    # plt.ylabel("BLEU 4-gram")
-    # plt.title("BLEU 4-gram v. S-R Distance")
-    # plt.savefig("BLEU4gram_v_distance.png", dpi=400)
+    np.save("ae_conventional_std_semantic_sim.npy", std_semantic_sim)
+    np.save("ae_conventional_std_bleu_1.npy", std_bleu_1)
+    np.save("ae_conventional_std_bleu_3.npy", std_bleu_3)
