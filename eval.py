@@ -166,7 +166,7 @@ if __name__ == "__main__":
 
                 encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-                predicted_ids, probs = transceiver.module.generate(
+                predicted_ids, probs = transceiver.generate(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
                     d_sd=d_sd,
