@@ -139,6 +139,8 @@ if __name__ == "__main__":
     ).to(device)
     load_model(transceiver, args.transceiver_path)
 
+    transceiver.eval()
+
     n_d = len(args.d_list)
     n_gamma = len(args.gamma_list)
 

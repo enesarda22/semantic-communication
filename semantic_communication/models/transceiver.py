@@ -291,6 +291,7 @@ class Transceiver(nn.Module):
         x_src_to_relay, x_src_to_dst = self._shift_src_output(x_src)
         return x_src_to_dst, x_src_to_relay
 
+    @torch.no_grad()
     def generate(
         self,
         messages: Optional[List[str]] = None,
@@ -299,32 +300,30 @@ class Transceiver(nn.Module):
         d_sd: Optional[float] = None,
         d_sr: Optional[float] = None,
     ):
-        self.eval()
-        with torch.no_grad():
-            # source
-            x_src_to_dst, x_src_to_relay = self._source_forward(
-                attention_mask=attention_mask,
-                input_ids=input_ids,
-                messages=messages,
-            )
+        # source
+        x_src_to_dst, x_src_to_relay = self._source_forward(
+            attention_mask=attention_mask,
+            input_ids=input_ids,
+            messages=messages,
+        )
 
-            # relay
-            x_relay = self.channel(x_src_to_relay, d_sr)
-            x_relay = self._relay_forward(x_relay=x_relay)
+        # relay
+        x_relay = self.channel(x_src_to_relay, d_sr)
+        x_relay = self._relay_forward(x_relay=x_relay)
 
-            # destination
-            x_dst1 = self.channel(x_relay, d_sd - d_sr)
-            x_dst2 = self.channel(x_src_to_dst, d_sd)
-            x_dst = torch.cat((x_dst1, x_dst2), dim=-1)
+        # destination
+        x_dst1 = self.channel(x_relay, d_sd - d_sr)
+        x_dst2 = self.channel(x_src_to_dst, d_sd)
+        x_dst = torch.cat((x_dst1, x_dst2), dim=-1)
 
-            x_dst = self.dst_channel_decoder(x_dst)
-            return self.dst_semantic_decoder.generate(
-                encoder_output=x_dst,
-                is_causal=False,
-                max_length=self.max_length,
-                enc_padding_mask=None,
-                n_generated_tokens=self.max_length + 1,
-            )
+        x_dst = self.dst_channel_decoder(x_dst)
+        return self.dst_semantic_decoder.generate(
+            encoder_output=x_dst,
+            is_causal=False,
+            max_length=self.max_length,
+            enc_padding_mask=None,
+            n_generated_tokens=self.max_length + 1,
+        )
 
     def _shift_src_output(self, src_out):
         if self.relay_semantic_encoder.mode == "predict":
