@@ -1,0 +1,124 @@
+Index: OpenAI Semantic Similarity.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from openai import OpenAI\nimport numpy as np\n\nAPI_KEY = 'sk-proj-OqUG4THzpZ9aCVUKrSBXT3BlbkFJuUlBHJ66iEEPO4FWWCDK'\nclient = OpenAI(api_key=API_KEY)\n\n\ndef get_embedding_semantic_similarity(sentence1, sentence2):\n    vec1 = client.embeddings.create(input=[sentence1], model=\"text-embedding-3-large\").data[0].embedding\n    vec2 = client.embeddings.create(input=[sentence1], model=\"text-embedding-3-large\").data[0].embedding\n\n    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))\n\n\n\ncompletion = client.chat.completions.create(\n  model=\"gpt-3.5-turbo\",\n  messages=[\n    {\"role\": \"system\", \"content\": \"You are an NLP assistant, skilled in evaluating how similar given two sentences are.\"},\n    {\"role\": \"user\", \"content\": \"Provide a semantic similarity score for given sentences A and B. Semantic similarity score is between -1 and 1 where 1 means they are perfectly similar and -1 mean they are opposite while 0 means their meaning are uncorrelated. Sentence A=(The cat sat on the mat.) Sentence B=(The feline rested on the rug.)\"}\n  ]\n)\n\nprint(completion.choices[0].message)\n\n# # Example usage\nsentence1 = \"enes went to the grocery store and bought some oranges\"\nsentence2 = \"oranges went to the grocery store and bought some enes\"\nsimilarity_score = get_embedding_semantic_similarity(sentence1, sentence2)\nprint(f\"Sentence 1: {sentence1}\")\nprint(f\"Sentence 2: {sentence2}\")\nprint(\"Semantic Similarity:\", similarity_score)\n\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/OpenAI Semantic Similarity.py b/OpenAI Semantic Similarity.py
+--- a/OpenAI Semantic Similarity.py	(revision 6a9ed552b3690a882bcd175e56d599b4022f5a62)
++++ b/OpenAI Semantic Similarity.py	(date 1715794616582)
+@@ -1,33 +1,45 @@
+ from openai import OpenAI
+ import numpy as np
+ 
+-API_KEY = 'sk-proj-OqUG4THzpZ9aCVUKrSBXT3BlbkFJuUlBHJ66iEEPO4FWWCDK'
++API_KEY = "sk-proj-OqUG4THzpZ9aCVUKrSBXT3BlbkFJuUlBHJ66iEEPO4FWWCDK"
+ client = OpenAI(api_key=API_KEY)
+ 
+ 
+ def get_embedding_semantic_similarity(sentence1, sentence2):
+-    vec1 = client.embeddings.create(input=[sentence1], model="text-embedding-3-large").data[0].embedding
+-    vec2 = client.embeddings.create(input=[sentence1], model="text-embedding-3-large").data[0].embedding
++    vec1 = (
++        client.embeddings.create(input=[sentence1], model="text-embedding-3-large")
++        .data[0]
++        .embedding
++    )
++    vec2 = (
++        client.embeddings.create(input=[sentence1], model="text-embedding-3-large")
++        .data[0]
++        .embedding
++    )
+ 
+     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+ 
+ 
+-
+-completion = client.chat.completions.create(
+-  model="gpt-3.5-turbo",
+-  messages=[
+-    {"role": "system", "content": "You are an NLP assistant, skilled in evaluating how similar given two sentences are."},
+-    {"role": "user", "content": "Provide a semantic similarity score for given sentences A and B. Semantic similarity score is between -1 and 1 where 1 means they are perfectly similar and -1 mean they are opposite while 0 means their meaning are uncorrelated. Sentence A=(The cat sat on the mat.) Sentence B=(The feline rested on the rug.)"}
+-  ]
+-)
+-
+-print(completion.choices[0].message)
++# completion = client.chat.completions.create(
++#     model="gpt-3.5-turbo",
++#     messages=[
++#         {
++#             "role": "system",
++#             "content": "You are an NLP assistant, skilled in evaluating how similar given two sentences are.",
++#         },
++#         {
++#             "role": "user",
++#             "content": "Provide a semantic similarity score for given sentences A and B. Semantic similarity score is between -1 and 1 where 1 means they are perfectly similar and -1 mean they are opposite while 0 means their meaning are uncorrelated. Sentence A=(The cat sat on the mat.) Sentence B=(The feline rested on the rug.)",
++#         },
++#     ],
++# )
++#
++# print(completion.choices[0].message)
+ 
+ # # Example usage
+-sentence1 = "enes went to the grocery store and bought some oranges"
+-sentence2 = "oranges went to the grocery store and bought some enes"
++sentence1 = "I love you."
++sentence2 = "I hate you."
+ similarity_score = get_embedding_semantic_similarity(sentence1, sentence2)
+ print(f"Sentence 1: {sentence1}")
+ print(f"Sentence 2: {sentence2}")
+ print("Semantic Similarity:", similarity_score)
+-
+Index: README.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+># semantic-communication\n\n## semantic decoder\n\nmulti head = 64 * 64 * 3 * 6 = 73_728\nfeed forward = 2 * 384 * 4 * 384 = 104_448\nx6 = 1_069_056\n\nlinear = 30522 * 384 = 11_720_448\n\nn_heads = 6\nn_decoder_block = 6\n\n### training\nn_samples = 50_000\nlr =  4e-5\nepoch = 20\nbatch_size = 64\n\n\n```\npython train_semantic_transformer.py \\\n--data-fp ~/data \\\n--checkpoint-path ~/data/checkpoints/improved-semantic-transformer \\\n--mode sentence \\\n--rate 5 \\\n--batch-size 1024 \\\n--n-epochs 30 \\\n--lr 6e-4 \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--channel-block-input-dim 384 \\\n--channel-block-latent-dim 64\n```\n\n```\npython train_semantic_transformer.py \\\n--data-fp ~/data \\\n--checkpoint-path ~/data/checkpoints/improved-semantic-transformer-with-channel \\\n--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \\\n--mode sentence \\\n--rate 5 \\\n--batch-size 512 \\\n--n-epochs 40 \\\n--lr 5e-4 \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--channel-block-input-dim 384 \\\n--channel-block-latent-dim 64 \\\n--channel-type AWGN \\\n--alpha 4 \\\n--sig-pow 1 \\\n--noise-pow 4e-15 \\\n--d-min 2e3 \\\n--d-max 7e3 \\\n--gamma-min 0.2 \\\n--gamma-max 0.8\n```\n\n```\npython train_src_relay_block.py \\\n--data-fp ~/data \\\n--checkpoint-path ~/data/checkpoints/ \\\n--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \\\n--mode sentence \\\n--rate 5 \\\n--batch-size 512 \\\n--n-epochs 30 \\\n--lr 5e-4 \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--channel-block-input-dim 384 \\\n--channel-block-latent-dim 64 \\\n--channel-type AWGN \\\n--alpha 4 \\\n--sig-pow 1 \\\n--noise-pow 4e-15 \\\n--d-min 2e3 \\\n--d-max 7e3 \\\n--gamma-min 0.2 \\\n--gamma-max 0.8\n```\n\n```\npython train_end_to_end.py \\\n--data-fp ~/data \\\n--checkpoint-path ~/data/checkpoints/ \\\n--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer-with-channel/semantic-transformer/semantic_transformer_39.pt \\\n--mode sentence \\\n--rate 5 \\\n--batch-size 1024 \\\n--n-epochs 20 \\\n--lr 1e-3 \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--channel-block-input-dim 384 \\\n--channel-block-latent-dim 64 \\\n--channel-type AWGN \\\n--alpha 4 \\\n--sig-pow 1 \\\n--noise-pow 4e-15 \\\n--d-min 2e3 \\\n--d-max 7e3 \\\n--gamma-min 0.2 \\\n--gamma-max 0.8\n```\n\n### old\n```\npython train_relay_decoder.py \\\n--batch-size 512 \\\n--n-epochs 20 \\\n--lr 5e-4 \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--data-fp /data \\\n--checkpoint-path /data/checkpoints\n```\n\n\n```\npython train_receiver_decoder.py \\\n--relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \\\n--batch-size 512 \\\n--n-epochs 20 \\\n--lr 5e-4 \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--data-fp /data \\\n--checkpoint-path /data/checkpoints\n```\n\n\n## channel\nn_latent = 128, 256\nmin_SNR = 3\nmax_SNR = 21\nSNR_step = 3\nSNR_window = 3\nchannel_type = AWGN\n\n### training\nn_samples = 50_000\nlr = 4e-6\nepoch = 25\nbatch_size = 64\n\n```\npython train_tx_relay_channel_block.py \\\n--batch-size 512 \\\n--n-epochs 25 \\\n--lr 5e-5 \\\n--channel-block-latent-dim 128 \\\n--SNR-min -6 \\\n--SNR-max 21 \\\n--channel-type AWGN \\\n--data-fp /data \\\n--checkpoint-path /data/checkpoints\n```\n\n\n## channel2\nSNR_diff = 3\n\n```\npython train_tx_relay_rx_channel_block.py \\\n--relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--batch-size 512 \\\n--n-epochs 25 \\\n--lr 5e-5 \\\n--channel-block-latent-dim 128 \\\n--SNR-min -6 \\\n--SNR-max 21 \\\n--SNR-diff 3 \\\n--channel-type AWGN \\\n--data-fp /data \\\n--checkpoint-path /data/checkpoints\n```\n\n## end to end\nlr = 1e-6\nepoch = 15\n\n```\npython train_end_to_end.py \\\n--relay-channel-block-path /data/checkpoints/relay-channel-block/relay_channel_block_8.pt \\\n--receiver-decoder-path /data/checkpoints/receiver-decoder-prediction-newdata/receiver_decoder_3.pt \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--batch-size 500 \\\n--n-epochs 10 \\\n--lr 5e-4 \\\n--channel-block-latent-dim 256 \\\n--alpha 4 \\\n--sig-pow 1 \\\n--noise-pow 4e-15 \\\n--d-min 2e3 \\\n--d-max 7e3 \\\n--gamma-min 0.2 \\\n--gamma-max 0.8 \\\n--channel-type Rayleigh \\\n--data-fp /data \\\n--checkpoint-path /data/checkpoints\n```\n\n## Relay Channel Block\n```\npython train_relay_channel_block.py \\\n--relay-decoder-path /data/checkpoints/relay-decoder-prediction-newdata/relay_decoder_19.pt \\\n--n-blocks 6 \\\n--n-heads 6 \\\n--batch-size 512 \\\n--n-epochs 10 \\\n--lr 5e-4 \\\n--channel-block-latent-dim 256 \\\n--alpha 4 \\\n--sig-pow 1 \\\n--noise-pow 4e-15 \\\n--d-min 2e3 \\\n--d-max 7e3 \\\n--gamma-min 0.2 \\\n--gamma-max 0.8 \\\n--channel-type Rayleigh \\\n--data-fp /data \\\n--checkpoint-path /data/checkpoints\n```\n\n## Baseline source-relay\n```\npython train_source_relay.py \\\n--batch-size 512 \\\n--n-epochs 25 \\\n--lr 5e-5 \\\n--channel-block-latent-dim 128 \\\n--SNR-min 3 \\\n--SNR-max 21 \\\n--SNR-step 3 \\\n--SNR-window 3 \\\n--channel-type AWGN  \\\n--checkpoint-path /data/checkpoints\n ```\n\n## Baseline entire network\n```\npython train_entire_network.py \\\n--batch-size 512 \\\n--n-epochs 25 \\\n--lr 5e-5 \\\n--channel-block-latent-dim 128 \\\n--SNR-min 3 \\\n--SNR-max 21 \\\n--SNR-step 3 \\\n--SNR-window 3 \\\n--channel-type AWGN  \\\n--checkpoint-path /data/checkpoints  \\\n--tx-relay-path /data/checkpoints/baseline-tx-relay/baseline_tx_relay_24.pt\n```\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/README.md b/README.md
+--- a/README.md	(revision 6a9ed552b3690a882bcd175e56d599b4022f5a62)
++++ b/README.md	(date 1715794616584)
+@@ -105,6 +105,41 @@
+ --gamma-max 0.8
+ ```
+ 
++```
++python baseline_train_source_relay.py \
++--data-fp ~/data \
++--checkpoint-path ~/data/checkpoints/ \
++--batch-size 512 \
++--n-epochs 15 \
++--lr 5e-4 \
++--channel-type AWGN \
++--alpha 4 \
++--sig-pow 1 \
++--noise-pow 4e-15 \
++--d-min 2e3 \
++--d-max 7e3 \
++--gamma-min 0.2 \
++--gamma-max 0.8
++```
++
++```
++python baseline_train_entire_network.py \
++--data-fp ~/data \
++--checkpoint-path ~/data/checkpoints/ \
++--baseline-tx-relay-path ~/data/checkpoints/baseline-tx-relay/baseline_tx_relay_8.pt \
++--batch-size 512 \
++--n-epochs 15 \
++--lr 5e-4 \
++--channel-type AWGN \
++--alpha 4 \
++--sig-pow 1 \
++--noise-pow 4e-15 \
++--d-min 2e3 \
++--d-max 7e3 \
++--gamma-min 0.2 \
++--gamma-max 0.8 
++```
++
+ ### old
+ ```
+ python train_relay_decoder.py \

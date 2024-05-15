@@ -1,0 +1,37 @@
+Index: semantic_communication/models/semantic_encoder.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from typing import List, Optional\n\nimport torch\nfrom torch import nn\n\nfrom transformers import AutoTokenizer, AutoModel\n\nfrom semantic_communication.utils.general import get_device\n\n\nclass SemanticEncoder(nn.Module):\n    model_name = \"sentence-transformers/all-MiniLM-L6-v2\"\n\n    def __init__(self, label_encoder, max_length, mode, rate=None):\n        super().__init__()\n        self.device = get_device()\n\n        self.label_encoder = label_encoder\n        self.max_length = max_length + 1  # TODO: fix +1 discrepancy\n        self.mode = mode\n        self.rate = rate\n\n        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)\n        self.bert = AutoModel.from_pretrained(self.model_name).to(self.device)\n        self.bert.embeddings.word_embeddings.weight = nn.Parameter(\n            self.bert.embeddings.word_embeddings.weight[label_encoder.classes, :]\n        )\n\n        if self.rate is not None and self.mode == \"sentence\":\n            self.pooling_head = nn.Linear(max_length + 1, rate, bias=False)\n\n    def forward(\n        self,\n        messages: Optional[List[str]] = None,\n        input_ids: Optional[torch.Tensor] = None,\n        attention_mask: Optional[torch.Tensor] = None,\n    ):\n        if messages is not None:\n            tokens = self.tokenize(messages=messages)\n            input_ids = tokens[\"input_ids\"]\n            attention_mask = tokens[\"attention_mask\"]\n\n        encoder_lhs = self.bert(\n            input_ids=input_ids,\n            attention_mask=attention_mask,\n        )[\"last_hidden_state\"]\n\n        if self.mode == \"predict\":\n            encoder_output = self.mean_pooling(\n                bert_lhs=encoder_lhs,\n                attention_mask=attention_mask,\n            )\n            encoder_output = torch.cat(\n                tensors=(encoder_output.unsqueeze(1), encoder_lhs[:, 1:, :]),\n                dim=1,\n            )\n        elif self.mode == \"forward\":\n            encoder_output = encoder_lhs[:, 1:, :]\n        elif self.mode == \"sentence\":\n            encoder_output = self.pooling_head(encoder_lhs.transpose(1, 2))\n            encoder_output = encoder_output.transpose(1, 2)\n        else:\n            raise ValueError(\"Mode needs to be 'predict', 'forward' or 'sentence'.\")\n\n        return encoder_output\n\n    def tokenize(self, messages: List[str]):\n        return self.tokenizer(\n            messages,\n            padding=\"max_length\",\n            max_length=self.max_length,\n            truncation=True,\n            return_tensors=\"pt\",\n        ).to(self.device)\n\n    def get_tokens(\n        self,\n        ids=None,\n        token_ids=None,\n        attention_mask=None,\n        skip_special_tokens=False,\n    ) -> List[str]:\n        if token_ids is None:\n            token_ids = self.label_encoder.inverse_transform(ids)\n\n        if attention_mask is not None:\n            token_ids = torch.masked_fill(token_ids, attention_mask == 0, 0)\n\n        tokens = [\n            self.tokenizer.decode(t, skip_special_tokens=skip_special_tokens)\n            for t in token_ids\n        ]\n        return tokens\n\n    @staticmethod\n    def mean_pooling(bert_lhs, attention_mask=None):\n        if attention_mask is None:\n            out = torch.mean(bert_lhs, 1)\n\n        else:\n            input_mask_expanded = (\n                attention_mask.unsqueeze(-1).expand(bert_lhs.size()).float()\n            )\n\n            out = torch.sum(bert_lhs * input_mask_expanded, 1) / torch.clamp(\n                input_mask_expanded.sum(1), min=1e-9\n            )\n\n        return out\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/semantic_communication/models/semantic_encoder.py b/semantic_communication/models/semantic_encoder.py
+--- a/semantic_communication/models/semantic_encoder.py	(revision a4534af2ac0a8ada3b6555410c9306e667a85fe2)
++++ b/semantic_communication/models/semantic_encoder.py	(date 1714332624188)
+@@ -1,6 +1,7 @@
+ from typing import List, Optional
+ 
+ import torch
++from torch.nn import functional as F
+ from torch import nn
+ 
+ from transformers import AutoTokenizer, AutoModel
+@@ -27,7 +28,7 @@
+         )
+ 
+         if self.rate is not None and self.mode == "sentence":
+-            self.pooling_head = nn.Linear(max_length + 1, rate, bias=False)
++            self.pooling_head = nn.Parameter(torch.randn(max_length + 1, rate))
+ 
+     def forward(
+         self,
+@@ -57,7 +58,8 @@
+         elif self.mode == "forward":
+             encoder_output = encoder_lhs[:, 1:, :]
+         elif self.mode == "sentence":
+-            encoder_output = self.pooling_head(encoder_lhs.transpose(1, 2))
++            weights = F.softmax(self.pooling_head, dim=0)
++            encoder_output = encoder_lhs.transpose(1, 2) @ weights
+             encoder_output = encoder_output.transpose(1, 2)
+         else:
+             raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
