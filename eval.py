@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 from openai import OpenAI
 
 from nltk.translate.bleu_score import sentence_bleu
@@ -40,13 +41,18 @@ def semantic_similarity_score(target_sentences, received_sentences):
     completion = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system",
-             "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
-                        "and 1 denoting the semantic similarity score for given sentences A and B with precision "
-                        "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
-                        "meanings are uncorrelated."},
-            {"role": "user", "content": f"A=({target_sentences})  B=({received_sentences})"}
-        ]
+            {
+                "role": "system",
+                "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
+                "and 1 denoting the semantic similarity score for given sentences A and B with precision "
+                "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
+                "meanings are uncorrelated.",
+            },
+            {
+                "role": "user",
+                "content": f"A=({target_sentences})  B=({received_sentences})",
+            },
+        ],
     )
     if completion.choices[0].finish_reason == "stop":
         return float(completion.choices[0].message.content)
@@ -211,8 +217,23 @@ if __name__ == "__main__":
                     d_sr=d_sr,
                 )
 
+                # find the end of sentences
+                sep_indices = torch.argmax((predicted_ids == 2).long(), dim=1)
+                input_ids_list = []
+                for i in range(predicted_ids.shape[0]):
+                    k = sep_indices[i]
+                    if k == 0:  # no [SEP] predicted
+                        input_ids_list.append(predicted_ids[i, :])
+                    else:
+                        input_ids_list.append(predicted_ids[i, : k + 1])
+
+                token_ids_list = [
+                    semantic_encoder.label_encoder.inverse_transform(input_ids)
+                    for input_ids in input_ids_list
+                ]
+
                 predicted_tokens = semantic_encoder.get_tokens(
-                    ids=predicted_ids,
+                    token_ids=token_ids_list,
                     skip_special_tokens=True,
                 )
 
@@ -235,9 +256,15 @@ if __name__ == "__main__":
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)
 
-            std_semantic_sim[distance_index, gamma_index] = np.std(cosine_scores, ddof=1) / np.sqrt(n_test_samples)
-            std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
-            std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_semantic_sim[distance_index, gamma_index] = np.std(
+                cosine_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
+            std_bleu_1[distance_index, gamma_index] = np.std(
+                bleu1_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
+            std_bleu_3[distance_index, gamma_index] = np.std(
+                bleu3_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
 
             np.save("proposed_mean_semantic_sim.npy", mean_semantic_sim)
             np.save("proposed_mean_bleu_1.npy", mean_bleu_1)
