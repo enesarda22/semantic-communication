@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from openai import OpenAI
+import re
 
 from nltk.translate.bleu_score import sentence_bleu
 
@@ -41,23 +42,25 @@ def semantic_similarity_score(target_sentences, received_sentences):
     completion = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {
-                "role": "system",
-                "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
-                "and 1 denoting the semantic similarity score for given sentences A and B with precision "
-                "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
-                "meanings are uncorrelated.",
-            },
-            {
-                "role": "user",
-                "content": f"A=({target_sentences})  B=({received_sentences})",
-            },
-        ],
+            {"role": "system",
+             "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
+                        "and 1 denoting the semantic similarity score for given sentences A and B with precision "
+                        "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
+                        "meanings are uncorrelated. Just provide a score without any words or symbols."},
+            {"role": "user", "content": f"A=({target_sentences})  B=({received_sentences})"}
+        ]
     )
+
     if completion.choices[0].finish_reason == "stop":
-        return float(completion.choices[0].message.content)
+        pattern = re.compile(r'(?<![\d.-])-?(?:0(?:\.\d+)?|1(?:\.0+)?)(?![\d.])')
+        res = pattern.findall(completion.choices[0].message.content)[0]
+        if len(res) == 1:
+            return float(res)
+        else:
+            print(res)
+            return float('nan')
     else:
-        raise ValueError("Finish reason is not stop.")
+        return float('nan')
 
 
 def bleu_1gram(target_sentences, received_sentences):
@@ -252,6 +255,7 @@ if __name__ == "__main__":
                     break
 
             n_test_samples = len(bleu1_scores)
+            cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)

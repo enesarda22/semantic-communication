@@ -15,7 +15,7 @@ from semantic_communication.models.baseline_models import Tx_Relay, Tx_Relay_Rx
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.utils.channel import init_channel
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-
+import re
 import torch
 import argparse
 from torch.nn import functional as F
@@ -43,10 +43,17 @@ def semantic_similarity_score(target_sentences, received_sentences):
             {"role": "user", "content": f"A=({target_sentences})  B=({received_sentences})"}
         ]
     )
+
     if completion.choices[0].finish_reason == "stop":
-        return float(completion.choices[0].message.content)
+        pattern = re.compile(r'(?<![\d.-])-?(?:0(?:\.\d+)?|1(?:\.0+)?)(?![\d.])')
+        res = pattern.findall(completion.choices[0].message.content)[0]
+        if len(res) == 1:
+            return float(res)
+        else:
+            print(res)
+            return float('nan')
     else:
-        raise ValueError("Finish reason is not stop.")
+        return float('nan')
 
 
 def bleu_1gram(target_sentences, received_sentences):
@@ -213,6 +220,7 @@ if __name__ == "__main__":
                     break
 
             n_test_samples = len(bleu1_scores)
+            cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
