@@ -175,21 +175,30 @@ class SemanticDecoder(nn.Module):
 
         Y = Y.repeat_interleave(beam_width, dim=0)
         encoder_output = encoder_output.repeat_interleave(beam_width, dim=0)
-        enc_padding_mask = enc_padding_mask.repeat_interleave(beam_width, dim=0)
+        if enc_padding_mask is not None:
+            enc_padding_mask = enc_padding_mask.repeat_interleave(beam_width, dim=0)
 
         Y[:, 1] = next_chars.flatten()
 
         for i in range(1, T - 1):
             start_idx = max(i - max_length, 0)
             end_idx = start_idx + max_length
-            dataset = TensorDataset(
-                Y[:, -start_idx:end_idx], encoder_output, enc_padding_mask
-            )
+
+            if enc_padding_mask is None:
+                dataset = TensorDataset(Y[:, -start_idx:end_idx], encoder_output)
+            else:
+                dataset = TensorDataset(
+                    Y[:, -start_idx:end_idx], encoder_output, enc_padding_mask
+                )
+
             dl = DataLoader(dataset, batch_size=B)
             next_probabilities = []
 
             for x in dl:
-                next_logits, _ = self(x[0], x[1], is_causal, x[2])
+                if enc_padding_mask is None:
+                    next_logits, _ = self(x[0], x[1], is_causal, None)
+                else:
+                    next_logits, _ = self(x[0], x[1], is_causal, x[2])
                 next_logits = next_logits[:, i, :]
                 next_probabilities.append(F.log_softmax(next_logits, dim=-1))
 
