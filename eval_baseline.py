@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from openai import OpenAI
-from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from nltk.tokenize import word_tokenize
+
 from semantic_communication.utils.general import (
     get_device,
     set_seed,
@@ -46,30 +48,14 @@ def semantic_similarity_score(target_sentences, received_sentences):
 
     if completion.choices[0].finish_reason == "stop":
         pattern = re.compile(r'(?<![\d.-])-?(?:0(?:\.\d+)?|1(?:\.0+)?)(?![\d.])')
-        res = pattern.findall(completion.choices[0].message.content)[0]
+        res = pattern.findall(completion.choices[0].message.content)
         if len(res) == 1:
-            return float(res)
+            return float(res[0])
         else:
             print(res)
             return float('nan')
     else:
         return float('nan')
-
-
-def bleu_1gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(1, 0, 0, 0))
-
-
-def bleu_2gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(0, 1, 0, 0))
-
-
-def bleu_3gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 1, 0))
-
-
-def bleu_4gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 0, 1))
 
 
 if __name__ == "__main__":
@@ -150,11 +136,12 @@ if __name__ == "__main__":
 
     mean_semantic_sim = np.zeros((n_d, n_gamma))
     mean_bleu_1 = np.zeros((n_d, n_gamma))
-    mean_bleu_3 = np.zeros((n_d, n_gamma))
+    mean_bleu = np.zeros((n_d, n_gamma))
 
     std_semantic_sim = np.zeros((n_d, n_gamma))
     std_bleu_1 = np.zeros((n_d, n_gamma))
-    std_bleu_3 = np.zeros((n_d, n_gamma))
+    std_bleu = np.zeros((n_d, n_gamma))
+    smoothing_function = SmoothingFunction().method1
 
     # For each d_sd
     for distance_index, d_sd in enumerate(args.d_list):
@@ -164,7 +151,7 @@ if __name__ == "__main__":
 
             cosine_scores = []
             bleu1_scores = []
-            bleu3_scores = []
+            bleu_scores = []
 
             d_sr = d_sd * gamma
             d_rd = d_sd - d_sr
@@ -213,8 +200,10 @@ if __name__ == "__main__":
 
                     for s1, s2 in zip(original_sentences, predicted_sentences):
                         cosine_scores.append(semantic_similarity_score(s1, s2))
-                        bleu1_scores.append(bleu_1gram(s1, s2))
-                        bleu3_scores.append(bleu_3gram(s1, s2))
+                        bleu1_scores.append(sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0],
+                                                          smoothing_function=smoothing_function))
+                        bleu_scores.append(sentence_bleu([word_tokenize(s1)], word_tokenize(s2),
+                                                         smoothing_function=smoothing_function))
 
                 if len(bleu1_scores) >= args.n_test:
                     break
@@ -224,16 +213,16 @@ if __name__ == "__main__":
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
-            mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)
+            mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
 
             std_semantic_sim[distance_index, gamma_index] = np.std(cosine_scores, ddof=1) / np.sqrt(n_test_samples)
             std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
-            std_bleu_3[distance_index, gamma_index] = np.std(bleu3_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_bleu[distance_index, gamma_index] = np.std(bleu_scores, ddof=1) / np.sqrt(n_test_samples)
 
             np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
             np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
-            np.save("ae_conventional_mean_bleu_3.npy", mean_bleu_3)
+            np.save("ae_conventional_mean_bleu.npy", mean_bleu)
 
             np.save("ae_conventional_std_semantic_sim.npy", std_semantic_sim)
             np.save("ae_conventional_std_bleu_1.npy", std_bleu_1)
-            np.save("ae_conventional_std_bleu_3.npy", std_bleu_3)
+            np.save("ae_conventional_std_bleu.npy", std_bleu)

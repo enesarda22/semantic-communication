@@ -5,7 +5,8 @@ import torch
 from openai import OpenAI
 import re
 
-from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from nltk.tokenize import word_tokenize
 
 from semantic_communication.models.semantic_transformer import SemanticTransformer
 from semantic_communication.models.transceiver import (
@@ -53,30 +54,14 @@ def semantic_similarity_score(target_sentences, received_sentences):
 
     if completion.choices[0].finish_reason == "stop":
         pattern = re.compile(r'(?<![\d.-])-?(?:0(?:\.\d+)?|1(?:\.0+)?)(?![\d.])')
-        res = pattern.findall(completion.choices[0].message.content)[0]
+        res = pattern.findall(completion.choices[0].message.content)
         if len(res) == 1:
-            return float(res)
+            return float(res[0])
         else:
             print(res)
             return float('nan')
     else:
         return float('nan')
-
-
-def bleu_1gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(1, 0, 0, 0))
-
-
-def bleu_2gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(0, 1, 0, 0))
-
-
-def bleu_3gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 1, 0))
-
-
-def bleu_4gram(target_sentences, received_sentences):
-    return sentence_bleu([target_sentences], received_sentences, weights=(0, 0, 0, 1))
 
 
 if __name__ == "__main__":
@@ -190,12 +175,12 @@ if __name__ == "__main__":
 
     mean_semantic_sim = np.zeros((n_d, n_gamma))
     mean_bleu_1 = np.zeros((n_d, n_gamma))
-    mean_bleu_3 = np.zeros((n_d, n_gamma))
+    mean_bleu = np.zeros((n_d, n_gamma))
 
     std_semantic_sim = np.zeros((n_d, n_gamma))
     std_bleu_1 = np.zeros((n_d, n_gamma))
-    std_bleu_3 = np.zeros((n_d, n_gamma))
-
+    std_bleu = np.zeros((n_d, n_gamma))
+    smoothing_function = SmoothingFunction().method1
     # for each d_sd
     for distance_index, d_sd in enumerate(args.d_list):
         # for each gamma in gamma list
@@ -204,7 +189,7 @@ if __name__ == "__main__":
 
             cosine_scores = []
             bleu1_scores = []
-            bleu3_scores = []
+            bleu_scores = []
 
             d_sr = d_sd * gamma
 
@@ -246,10 +231,10 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(input_tokens, predicted_tokens):
-                    # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
+                    print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
                     cosine_scores.append(semantic_similarity_score(s1, s2))
-                    bleu1_scores.append(bleu_1gram(s1, s2))
-                    bleu3_scores.append(bleu_3gram(s1, s2))
+                    bleu1_scores.append(sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0], smoothing_function=smoothing_function))
+                    bleu_scores.append(sentence_bleu([word_tokenize(s1)], word_tokenize(s2), smoothing_function=smoothing_function))
 
                 if len(bleu1_scores) >= args.n_test:
                     break
@@ -258,7 +243,7 @@ if __name__ == "__main__":
             cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
-            mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)
+            mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
 
             std_semantic_sim[distance_index, gamma_index] = np.std(
                 cosine_scores, ddof=1
@@ -266,14 +251,14 @@ if __name__ == "__main__":
             std_bleu_1[distance_index, gamma_index] = np.std(
                 bleu1_scores, ddof=1
             ) / np.sqrt(n_test_samples)
-            std_bleu_3[distance_index, gamma_index] = np.std(
-                bleu3_scores, ddof=1
+            std_bleu[distance_index, gamma_index] = np.std(
+                bleu_scores, ddof=1
             ) / np.sqrt(n_test_samples)
 
             np.save("proposed_mean_semantic_sim.npy", mean_semantic_sim)
             np.save("proposed_mean_bleu_1.npy", mean_bleu_1)
-            np.save("proposed_mean_bleu_3.npy", mean_bleu_3)
+            np.save("proposed_mean_bleu.npy", mean_bleu)
 
             np.save("proposed_std_semantic_sim.npy", std_semantic_sim)
             np.save("proposed_std_bleu_1.npy", std_bleu_1)
-            np.save("proposed_std_bleu_3.npy", std_bleu_3)
+            np.save("proposed_std_bleu.npy", std_bleu)
