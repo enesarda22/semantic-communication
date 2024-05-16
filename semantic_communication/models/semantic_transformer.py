@@ -31,7 +31,12 @@ class ChannelEncoder(nn.Module):
         up_dim = int(np.floor(np.log2(nin) / 2))
         low_dim = int(np.ceil(np.log2(nout) / 2))
 
-        dims = [nin]
+        log_val = math.log(nin, 4)
+        if not int(log_val) == log_val:
+            dims = [nin]
+        else:
+            dims = []
+
         for i in range(up_dim - low_dim + 1):
             dims.append(np.power(4, up_dim - i))
 
@@ -52,7 +57,13 @@ class ChannelDecoder(nn.Module):
         super(ChannelDecoder, self).__init__()
         up_dim = int(np.floor(np.log2(nout) / 2))
         low_dim = int(np.ceil(np.log2(nin) / 2))
-        dims = [nin]
+
+        log_val = math.log(nin, 4)
+        if not int(log_val) == log_val:
+            dims = [nin]
+        else:
+            dims = []
+
         for i in range(up_dim - low_dim + 1):
             dims.append(np.power(4, low_dim + i))
 

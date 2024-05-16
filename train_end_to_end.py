@@ -3,7 +3,12 @@ import os
 
 import numpy as np
 import torch
-from torch import nn
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import (
+    init_process_group,
+    destroy_process_group,
+    all_gather_object,
+)
 from tqdm import tqdm
 
 from semantic_communication.data_processing.data_handler import DataHandler
@@ -36,24 +41,22 @@ from semantic_communication.utils.general import (
     get_start_epoch,
 )
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--transceiver-path", type=str)
-    parser.add_argument("--semantic-transformer-path", default=None, type=str)
-    add_semantic_decoder_args(parser)
-    add_data_args(parser)
-    add_train_args(parser)
-    add_channel_model_args(parser)
-    args = parser.parse_args()
 
-    set_seed()
+def main(args):
+    world_size = int(os.environ["SLURM_NTASKS"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    print(world_size, local_rank)
+
+    init_process_group(backend="nccl")
+    set_seed(local_rank)
     device = get_device()
-
-    print(torch.cuda.device_count())
+    torch.cuda.set_device(local_rank)
 
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
+        rank=local_rank,
+        world_size=world_size,
     )
 
     semantic_encoder = SemanticEncoder(
@@ -140,9 +143,8 @@ if __name__ == "__main__":
         channel=channel,
         max_length=args.max_length,
     )
-    transceiver = nn.DataParallel(transceiver)
-    transceiver = transceiver.to(device)
     load_model(transceiver, args.transceiver_path)
+    transceiver = DDP(transceiver, device_ids=[local_rank], find_unused_parameters=True)
 
     optimizer = torch.optim.AdamW(transceiver.parameters(), lr=args.lr)
     if args.load_optimizer:
@@ -162,6 +164,7 @@ if __name__ == "__main__":
 
     best_loss = torch.inf
     for epoch in range(start_epoch, args.n_epochs + 1):
+        data_handler.train_dataloader.sampler.set_epoch(epoch)
         train_losses = []
         transceiver.train()
 
@@ -181,16 +184,17 @@ if __name__ == "__main__":
                 d_sr=d_sr,
             )
 
-            optimizer.zero_grad(set_to_none=True)
-            loss.mean().backward()
+            loss.backward()
             optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
             scheduler.step()
 
-            train_losses.append(loss.mean().item())
+            train_losses.append(loss.item())
 
+        data_handler.val_dataloader.sampler.set_epoch(epoch)
         val_losses = []
-        # transceiver.eval()
-        for b in tqdm(data_handler.val_dataloader):
+        transceiver.eval()
+        for i, b in tqdm(enumerate(data_handler.val_dataloader)):
             encoder_idx = b[0].to(device)
             encoder_attention_mask = b[1].to(device)
 
@@ -206,35 +210,57 @@ if __name__ == "__main__":
                     d_sd=d_sd,
                     d_sr=d_sr,
                 )
-            val_losses.append(loss.mean().item())
+            val_losses.append(loss.item())
 
-        print("\n")
-        print_loss(train_losses, "Train")
-        print_loss(val_losses, "Val")
+            if i >= args.eval_iter:
+                break
 
-        mean_loss = np.mean(val_losses)
+        all_val_losses = [None for _ in range(world_size)]
+        all_gather_object(all_val_losses, val_losses)
 
-        checkpoint_path = os.path.join(
-            args.checkpoint_path,
-            f"transceiver/transceiver_{epoch}.pt",
-        )
+        if local_rank == 0:
+            print("\n")
+            print_loss(train_losses, "Train")
+            print_loss(all_val_losses, "Val")
 
-        if mean_loss < best_loss:
-            create_checkpoint(
-                path=checkpoint_path,
-                model_state_dict=transceiver.state_dict(),
-                optimizer_state_dict=optimizer.state_dict(),
-                scheduler_state_dict=scheduler.state_dict(),
-                mean_val_loss=mean_loss,
-                epoch=epoch,
+            mean_loss = np.mean(all_val_losses)
+
+            checkpoint_path = os.path.join(
+                args.checkpoint_path,
+                f"transceiver/transceiver_{epoch}.pt",
             )
-            best_loss = mean_loss
-        else:
-            create_checkpoint(
-                path=checkpoint_path,
-                model_state_dict=None,
-                optimizer_state_dict=None,
-                scheduler_state_dict=None,
-                mean_val_loss=mean_loss,
-                epoch=epoch,
-            )
+
+            if mean_loss < best_loss:
+                create_checkpoint(
+                    path=checkpoint_path,
+                    model_state_dict=transceiver.module.state_dict(),
+                    optimizer_state_dict=optimizer.state_dict(),
+                    scheduler_state_dict=scheduler.state_dict(),
+                    mean_val_loss=mean_loss,
+                    epoch=epoch,
+                )
+                best_loss = mean_loss
+            else:
+                create_checkpoint(
+                    path=checkpoint_path,
+                    model_state_dict=None,
+                    optimizer_state_dict=None,
+                    scheduler_state_dict=None,
+                    mean_val_loss=mean_loss,
+                    epoch=epoch,
+                )
+
+    destroy_process_group()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--transceiver-path", type=str)
+    parser.add_argument("--semantic-transformer-path", default=None, type=str)
+    add_semantic_decoder_args(parser)
+    add_data_args(parser)
+    add_train_args(parser)
+    add_channel_model_args(parser)
+    args = parser.parse_args()
+
+    main(args=args)

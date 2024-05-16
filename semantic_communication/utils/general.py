@@ -1,3 +1,4 @@
+import os
 import random
 import warnings
 from pathlib import Path
@@ -8,18 +9,24 @@ import numpy as np
 RANDOM_STATE = 42
 
 
-def set_seed():
-    random.seed(RANDOM_STATE)
-    torch.manual_seed(RANDOM_STATE)
-    torch.cuda.manual_seed(RANDOM_STATE)
-    np.random.seed(RANDOM_STATE)
+def set_seed(offset=0):
+    random.seed(RANDOM_STATE + offset)
+    torch.manual_seed(RANDOM_STATE + offset)
+    torch.cuda.manual_seed(RANDOM_STATE + offset)
+    np.random.seed(RANDOM_STATE + offset)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmarks = False
     torch.autograd.set_detect_anomaly(True)
 
 
 def get_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    return torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+
+
+def round_to_nearest_even(num):
+    rounded = round(num)
+    return rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
 
 
 def round_to_nearest_even(num):
@@ -93,6 +100,7 @@ def add_semantic_decoder_args(parser):
 def add_train_args(parser):
     parser.add_argument("--n-epochs", default=10, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
+    parser.add_argument("--eval-iter", default=None, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--checkpoint-path", default="checkpoints", type=str)
     parser.add_argument("--load-optimizer", default=False, type=bool)

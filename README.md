@@ -82,14 +82,15 @@ python train_src_relay_block.py \
 ```
 
 ```
-python train_end_to_end.py \
+torchrun --standalone --nproc_per_node=4 train_end_to_end.py \
 --data-fp ~/data \
 --checkpoint-path ~/data/checkpoints/ \
 --semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer-with-channel/semantic-transformer/semantic_transformer_39.pt \
 --mode sentence \
 --rate 5 \
---batch-size 1024 \
+--batch-size 512 \
 --n-epochs 20 \
+--eval-iter 100 \
 --lr 1e-3 \
 --n-blocks 6 \
 --n-heads 6 \
