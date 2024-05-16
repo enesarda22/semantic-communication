@@ -209,10 +209,10 @@ if __name__ == "__main__":
                         bleu1_scores.append(bleu_1gram(s1, s2))
                         bleu3_scores.append(bleu_3gram(s1, s2))
 
-                if len(cosine_scores) > args.n_test:
+                if len(bleu1_scores) >= args.n_test:
                     break
 
-            n_test_samples = len(cosine_scores)
+            n_test_samples = len(bleu1_scores)
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)

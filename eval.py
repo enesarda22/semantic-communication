@@ -88,10 +88,10 @@ if __name__ == "__main__":
     add_data_args(parser)
 
     # test args
-    parser.add_argument("--batch-size", default=128, type=int)
+    parser.add_argument("--batch-size", default=125, type=int)
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
-    parser.add_argument("--n-test", default=50, type=int)
+    parser.add_argument("--n-test", default=500, type=int)
 
     args = parser.parse_args()
     device = get_device()
@@ -243,15 +243,15 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(input_tokens, predicted_tokens):
-                    print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
+                    # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
                     cosine_scores.append(semantic_similarity_score(s1, s2))
                     bleu1_scores.append(bleu_1gram(s1, s2))
                     bleu3_scores.append(bleu_3gram(s1, s2))
 
-                if len(cosine_scores) > args.n_test:
+                if len(bleu1_scores) >= args.n_test:
                     break
 
-            n_test_samples = len(cosine_scores)
+            n_test_samples = len(bleu1_scores)
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu_3[distance_index, gamma_index] = np.mean(bleu3_scores)
