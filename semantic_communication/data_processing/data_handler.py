@@ -17,8 +17,8 @@ class DataHandler:
         self,
         data_fp: str,
         batch_size: int,
-        rank,
-        world_size,
+        rank=None,
+        world_size=None,
     ):
         self.device = get_device()
         self.data_fp = data_fp
@@ -31,11 +31,16 @@ class DataHandler:
 
         self.vocab_size = len(self.label_encoder.classes)
 
-        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
-        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
-        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)
+        if rank is None or world_size is None:
+            self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
+            self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
+            self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)
+        else:
+            self.train_dataloader = self.init_dl_ddp(fn=Preprocessor.train_data_fn)
+            self.val_dataloader = self.init_dl_ddp(fn=Preprocessor.val_data_fn)
+            self.test_dataloader = self.init_dl_ddp(fn=Preprocessor.test_data_fn)
 
-    def init_dl(self, fn: str):
+    def init_dl_ddp(self, fn: str):
         fp = os.path.join(self.data_fp, fn)
 
         dataset = torch.load(fp, map_location=self.device)
@@ -53,4 +58,16 @@ class DataHandler:
             batch_size=self.batch_size,
             num_workers=0,
             pin_memory=False,
+        )
+
+    def init_dl(self, fn: str):
+        fp = os.path.join(self.data_fp, fn)
+
+        dataset = torch.load(fp, map_location=self.device)
+        sampler = RandomSampler(dataset)
+
+        return DataLoader(
+            dataset=dataset,
+            sampler=sampler,
+            batch_size=self.batch_size,
         )

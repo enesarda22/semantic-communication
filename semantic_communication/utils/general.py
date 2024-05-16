@@ -20,23 +20,32 @@ def set_seed(offset=0):
 
 
 def get_device():
-    local_rank = int(os.environ["LOCAL_RANK"])
-    return torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+    if "LOCAL_RANK" in os.environ:  # ddp
+        rank = int(os.environ["LOCAL_RANK"])
+        return torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
+    else:
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def round_to_nearest_even(num):
     rounded = round(num)
-    return rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+    return (
+        rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+    )
 
 
 def round_to_nearest_even(num):
     rounded = round(num)
-    return rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+    return (
+        rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+    )
 
 
 def round_to_nearest_even(num):
     rounded = round(num)
-    return rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+    return (
+        rounded if rounded % 2 == 0 else rounded + 1 if num >= rounded else rounded - 1
+    )
 
 
 def print_loss(losses, group):
