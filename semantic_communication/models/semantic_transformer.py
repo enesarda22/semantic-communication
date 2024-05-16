@@ -63,7 +63,7 @@ class ChannelDecoder(nn.Module):
         self.linear = nn.Linear(dims[-1], nout)
 
     def forward(self, x):
-        x = x / torch.norm(x, dim=2, keepdim=True)
+        # x = x / torch.norm(x, dim=2, keepdim=True)  # TODO: do not normalize
         for l in self.layers:
             x = l(x)
         return self.linear(x)

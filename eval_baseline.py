@@ -78,10 +78,10 @@ if __name__ == "__main__":
     add_data_args(parser)
 
     # test args
-    parser.add_argument("--batch-size", default=2, type=int)
+    parser.add_argument("--batch-size", default=125, type=int)
     parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
-    parser.add_argument("--n-test", default=2, type=int)
+    parser.add_argument("--n-test", default=500, type=int)
 
     args = parser.parse_args()
     device = get_device()
