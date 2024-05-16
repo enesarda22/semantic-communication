@@ -205,7 +205,7 @@ if __name__ == "__main__":
                     )
 
                     for s1, s2 in zip(original_sentences, predicted_sentences):
-                        cosine_scores.append(semantic_similarity_score([s1], [s2]))
+                        cosine_scores.append(semantic_similarity_score(s1, s2))
                         bleu1_scores.append(bleu_1gram(s1, s2))
                         bleu3_scores.append(bleu_3gram(s1, s2))
 
