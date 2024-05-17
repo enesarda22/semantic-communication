@@ -28,7 +28,7 @@ class Channel(ABC):
 
         # normalize
         sig_pow = self.signal_power_constraint  # TODO: path loss
-        gain = math.sqrt((sig_pow * last_dim)) / torch.norm(x, dim=-1)
+        gain = math.sqrt(sig_pow * last_dim / 2) / torch.norm(x, dim=-1)
         x = x * gain[:, :, None]
 
         # convert to complex
