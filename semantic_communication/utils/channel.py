@@ -1,3 +1,4 @@
+import math
 import warnings
 from abc import ABC
 from typing import Optional
@@ -21,18 +22,17 @@ class Channel(ABC):
     def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
         pass
 
-    def signal_process(self, x: torch.Tensor, h=None) -> torch.Tensor:
-        # convert to complex
-        last_dim = int(x.shape[-1] / 2)
-        x = torch.complex(*torch.split(x, last_dim, dim=-1))
-
-        if h is not None:
-            x = x / h
+    def signal_process(self, x: torch.Tensor) -> torch.Tensor:
+        last_dim = x.shape[-1]
+        assert last_dim % 2 == 0
 
         # normalize
         sig_pow = self.signal_power_constraint  # TODO: path loss
-        x = (x / torch.abs(x)) * (sig_pow**0.5)
+        gain = math.sqrt((sig_pow * last_dim)) / torch.norm(x, dim=-1)
+        x = x * gain[:, :, None]
 
+        # convert to complex
+        x = torch.complex(*torch.split(x, int(last_dim / 2), dim=-1))
         return x
 
 
