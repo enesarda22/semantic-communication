@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 from openai import OpenAI
 import re
-
+import pandas as pd
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from nltk.tokenize import word_tokenize
 
@@ -181,6 +181,8 @@ if __name__ == "__main__":
     std_bleu_1 = np.zeros((n_d, n_gamma))
     std_bleu = np.zeros((n_d, n_gamma))
     smoothing_function = SmoothingFunction().method1
+
+    records = []
     # for each d_sd
     for distance_index, d_sd in enumerate(args.d_list):
         # for each gamma in gamma list
@@ -231,10 +233,15 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(input_tokens, predicted_tokens):
-                    print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
-                    cosine_scores.append(semantic_similarity_score(s1, s2))
-                    bleu1_scores.append(sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0], smoothing_function=smoothing_function))
-                    bleu_scores.append(sentence_bleu([word_tokenize(s1)], word_tokenize(s2), smoothing_function=smoothing_function))
+                    # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
+                    sim_score = semantic_similarity_score(s1, s2)
+                    bleu_1_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0], smoothing_function=smoothing_function)
+                    bleu_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), smoothing_function=smoothing_function)
+                    cosine_scores.append(sim_score)
+                    bleu1_scores.append(bleu_1_score)
+                    bleu_scores.append(bleu_score)
+
+                    records.append([d_sd, gamma, s1, s2, sim_score, bleu_1_score, bleu_score])
 
                 if len(bleu1_scores) >= args.n_test:
                     break
@@ -262,3 +269,6 @@ if __name__ == "__main__":
             np.save("proposed_std_semantic_sim.npy", std_semantic_sim)
             np.save("proposed_std_bleu_1.npy", std_bleu_1)
             np.save("proposed_std_bleu.npy", std_bleu)
+
+            df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score'])
+            df.to_excel('proposed_output.xlsx', index=False)
