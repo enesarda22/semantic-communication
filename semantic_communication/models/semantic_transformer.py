@@ -110,8 +110,8 @@ class SemanticTransformer(nn.Module):
 
         if self.channel is None:
             # signal power constraint
-            gain = torch.sqrt(0.5 / torch.var(x, dim=-1))
-            x = x * gain[:, :, None]
+            gain = torch.sqrt(0.5 / torch.var(x))
+            x = x * gain
 
             x = self._add_noise(x, snr_db)
         else:
