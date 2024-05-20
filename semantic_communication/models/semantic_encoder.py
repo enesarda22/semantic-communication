@@ -27,9 +27,6 @@ class SemanticEncoder(nn.Module):
             self.bert.embeddings.word_embeddings.weight[label_encoder.classes, :]
         )
 
-        if self.rate is not None and self.mode == "sentence":
-            self.pooling_head = nn.Parameter(torch.randn(max_length + 1, rate))
-
     def forward(
         self,
         messages: Optional[List[str]] = None,
@@ -58,16 +55,7 @@ class SemanticEncoder(nn.Module):
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
-            B, T, C = encoder_lhs.shape
-            pooling_head_logits = self.pooling_head.repeat(B, 1, 1)
-            pooling_head_logits = torch.where(
-                condition=attention_mask[:, :, None].repeat(1, 1, self.rate) == 1,
-                input=pooling_head_logits,
-                other=-torch.inf,
-            )
-            weights = F.softmax(pooling_head_logits, dim=1)
-            encoder_output = encoder_lhs.transpose(1, 2) @ weights
-            encoder_output = encoder_output.transpose(1, 2)
+            encoder_output = encoder_lhs[:, [0], :]
         else:
             raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
