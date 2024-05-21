@@ -55,7 +55,11 @@ class SemanticEncoder(nn.Module):
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
         elif self.mode == "sentence":
-            encoder_output = encoder_lhs[:, [0], :]
+            encoder_output = self.mean_pooling(
+                bert_lhs=encoder_lhs,
+                attention_mask=attention_mask,
+            )
+            encoder_output = encoder_output[:, None, :]
         else:
             raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
