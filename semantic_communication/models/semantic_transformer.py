@@ -15,10 +15,12 @@ class ChannelEncComp(nn.Module):
     def __init__(self, in_dim, out_dim):
         super(ChannelEncComp, self).__init__()
         self.linear = nn.Linear(in_dim, out_dim)
+        self.ln = nn.LayerNorm(out_dim)
         self.prelu = nn.PReLU()
 
     def forward(self, x):
         x = self.linear(x)
+        x = self.ln(x)
         out = self.prelu(x)
         return out
 
