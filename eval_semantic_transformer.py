@@ -243,7 +243,6 @@ if __name__ == "__main__":
             records,
             columns=[
                 "d_sr",
-                "Gamma",
                 "Sentence 1",
                 "Sentence 2",
                 "Semantic Similarity Score",
