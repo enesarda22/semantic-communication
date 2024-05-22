@@ -36,13 +36,27 @@ python train_semantic_transformer.py \
 ```
 python train_semantic_transformer.py \
 --data-fp ~/data \
---checkpoint-path ~/data/checkpoints/improved-semantic-transformer-with-channel \
---semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \
+--checkpoint-path ~/data/checkpoints/improved-semantic-transformer \
 --mode sentence \
---rate 5 \
+--rate 3 \
 --batch-size 512 \
---n-epochs 40 \
---lr 5e-4 \
+--n-epochs 20 \
+--lr 6e-4 \
+--n-blocks 6 \
+--n-heads 6 \
+--channel-block-input-dim 384 \
+--channel-block-latent-dim 64
+```
+
+```
+python train_semantic_transformer.py \
+--data-fp ~/data \
+--checkpoint-path ~/data/checkpoints/improved-semantic-transformer-with-channel \
+--mode sentence \
+--rate 1 \
+--batch-size 512 \
+--n-epochs 20 \
+--lr 6e-4 \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \
@@ -51,8 +65,8 @@ python train_semantic_transformer.py \
 --alpha 4 \
 --sig-pow 1 \
 --noise-pow 4e-15 \
---d-min 2e3 \
---d-max 7e3 \
+--d-min 1e3 \
+--d-max 5e3 \
 --gamma-min 0.2 \
 --gamma-max 0.8
 ```
@@ -105,6 +119,26 @@ torchrun --standalone --nproc_per_node=4 train_end_to_end.py \
 --gamma-min 0.2 \
 --gamma-max 0.8
 ```
+
+```
+python baseline_train_source_relay.py \
+--data-fp ~/data \
+--checkpoint-path ~/data/checkpoints/ \
+--batch-size 512 \
+--n-epochs 15 \
+--lr 5e-4 \
+--channel-block-input-dim 384 \
+--channel-block-latent-dim 4 \
+--channel-type AWGN \
+--alpha 4 \
+--sig-pow 1 \
+--noise-pow 4e-15 \
+--d-min 1e3 \
+--d-max 5e3 \
+--gamma-min 0.2 \
+--gamma-max 0.8
+```
+
 
 ### old
 ```
