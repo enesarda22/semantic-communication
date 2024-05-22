@@ -11,7 +11,6 @@ from semantic_communication.utils.general import (
     add_channel_model_args,
     add_data_args,
     load_model,
-    round_to_nearest_even,
 )
 from semantic_communication.models.baseline_models import Tx_Relay
 from semantic_communication.data_processing.data_handler import DataHandler
@@ -76,7 +75,6 @@ if __name__ == "__main__":
 
     # test args
     parser.add_argument("--batch-size", default=125, type=int)
-    parser.add_argument("--gamma-list", nargs="+", type=float)
     parser.add_argument("--d-list", nargs="+", type=float)
     parser.add_argument("--n-test", default=500, type=int)
 
@@ -112,113 +110,105 @@ if __name__ == "__main__":
     load_model(tx_relay_model, args.tx_relay_path)
 
     n_d = len(args.d_list)
-    n_gamma = len(args.gamma_list)
 
-    mean_semantic_sim = np.zeros((n_d, n_gamma))
-    mean_bleu_1 = np.zeros((n_d, n_gamma))
-    mean_bleu = np.zeros((n_d, n_gamma))
+    mean_semantic_sim = np.zeros((n_d, 1))
+    mean_bleu_1 = np.zeros((n_d, 1))
+    mean_bleu = np.zeros((n_d, 1))
 
-    std_semantic_sim = np.zeros((n_d, n_gamma))
-    std_bleu_1 = np.zeros((n_d, n_gamma))
-    std_bleu = np.zeros((n_d, n_gamma))
+    std_semantic_sim = np.zeros((n_d, 1))
+    std_bleu_1 = np.zeros((n_d, 1))
+    std_bleu = np.zeros((n_d, 1))
     smoothing_function = SmoothingFunction().method1
     records = []
 
-    # For each d_sd
-    for distance_index, d_sd in enumerate(args.d_list):
-        # For each gamma in gamma list
-        for gamma_index, gamma in enumerate(args.gamma_list):
-            print(f"Simulating for distance: {d_sd}  - Gamma: {gamma}")
+    # For each d_sr
+    for distance_index, d_sr in enumerate(args.d_list):
+        print(f"Simulating for distance: {d_sr}")
 
-            cosine_scores = []
-            bleu1_scores = []
-            bleu_scores = []
+        cosine_scores = []
+        bleu1_scores = []
+        bleu_scores = []
 
-            d_sr = d_sd * gamma
-            d_rd = d_sd - d_sr
+        tx_relay_model.eval()
 
-            tx_relay_model.eval()
+        for b in data_handler.test_dataloader:
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-            for b in data_handler.test_dataloader:
-                encoder_idx = b[0].to(device)
-                encoder_attention_mask = b[1].to(device)
-                encoder_idx = data_handler.label_encoder.transform(encoder_idx)
+            B, T = encoder_idx.shape
+            with torch.no_grad():
+                logits, _ = tx_relay_model(
+                    encoder_idx[:, 1:], encoder_attention_mask[:, 1:], d_sr
+                )
+                probs = F.softmax(logits, dim=-1)
+                predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
+                    B, args.max_length
+                )
 
-                B, T = encoder_idx.shape
-                with torch.no_grad():
-                    logits, _ = tx_relay_model(
-                        encoder_idx[:, 1:], encoder_attention_mask[:, 1:], d_sr
+                # find the end of sentences
+                sep_indices = torch.argmax((predicted_ids == 2).long(), dim=1)
+                input_ids_list = []
+                for i in range(predicted_ids.shape[0]):
+                    k = sep_indices[i]
+                    if k == 0:  # no [SEP] predicted
+                        input_ids_list.append(predicted_ids[i, :])
+                    else:
+                        input_ids_list.append(predicted_ids[i, : k + 1])
+
+                token_ids_list = [
+                    semantic_encoder.label_encoder.inverse_transform(input_ids)
+                    for input_ids in input_ids_list
+                ]
+
+                predicted_sentences = semantic_encoder.get_tokens(
+                    token_ids=token_ids_list,
+                    skip_special_tokens=True,
+                )
+
+                original_sentences = semantic_encoder.get_tokens(
+                    ids=encoder_idx,
+                    skip_special_tokens=True,
+                )
+
+                for s1, s2 in zip(original_sentences, predicted_sentences):
+                    sim_score = semantic_similarity_score(s1, s2)
+                    bleu_1_score = sentence_bleu(
+                        [word_tokenize(s1)],
+                        word_tokenize(s2),
+                        weights=[1, 0, 0, 0],
+                        smoothing_function=smoothing_function,
                     )
-                    probs = F.softmax(logits, dim=-1)
-                    predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
-                        B, args.max_length
+                    bleu_score = sentence_bleu(
+                        [word_tokenize(s1)],
+                        word_tokenize(s2),
+                        smoothing_function=smoothing_function,
                     )
+                    cosine_scores.append(sim_score)
+                    bleu1_scores.append(bleu_1_score)
+                    bleu_scores.append(bleu_score)
 
-                    # find the end of sentences
-                    sep_indices = torch.argmax((predicted_ids == 2).long(), dim=1)
-                    input_ids_list = []
-                    for i in range(predicted_ids.shape[0]):
-                        k = sep_indices[i]
-                        if k == 0:  # no [SEP] predicted
-                            input_ids_list.append(predicted_ids[i, :])
-                        else:
-                            input_ids_list.append(predicted_ids[i, : k + 1])
+                    records.append([d_sr, s1, s2, sim_score, bleu_1_score, bleu_score])
 
-                    token_ids_list = [
-                        semantic_encoder.label_encoder.inverse_transform(input_ids)
-                        for input_ids in input_ids_list
-                    ]
-
-                    predicted_sentences = semantic_encoder.get_tokens(
-                        token_ids=token_ids_list,
-                        skip_special_tokens=True,
-                    )
-
-                    original_sentences = semantic_encoder.get_tokens(
-                        ids=encoder_idx,
-                        skip_special_tokens=True,
-                    )
-
-                    for s1, s2 in zip(original_sentences, predicted_sentences):
-                        sim_score = semantic_similarity_score(s1, s2)
-                        bleu_1_score = sentence_bleu(
-                            [word_tokenize(s1)],
-                            word_tokenize(s2),
-                            weights=[1, 0, 0, 0],
-                            smoothing_function=smoothing_function,
-                        )
-                        bleu_score = sentence_bleu(
-                            [word_tokenize(s1)],
-                            word_tokenize(s2),
-                            smoothing_function=smoothing_function,
-                        )
-                        cosine_scores.append(sim_score)
-                        bleu1_scores.append(bleu_1_score)
-                        bleu_scores.append(bleu_score)
-
-                        records.append(
-                            [d_sd, gamma, s1, s2, sim_score, bleu_1_score, bleu_score]
-                        )
-
-                if len(bleu1_scores) >= args.n_test:
-                    break
+            if len(bleu1_scores) >= args.n_test:
+                break
 
             n_test_samples = len(bleu1_scores)
             cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
-            mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
-            mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
-            mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
+            mean_semantic_sim[distance_index, 0] = np.mean(cosine_scores)
+            mean_bleu_1[distance_index, 0] = np.mean(bleu1_scores)
+            mean_bleu[distance_index, 0] = np.mean(bleu_scores)
 
-            std_semantic_sim[distance_index, gamma_index] = np.std(
+            std_semantic_sim[distance_index, 0] = np.std(
                 cosine_scores, ddof=1
             ) / np.sqrt(n_test_samples)
-            std_bleu_1[distance_index, gamma_index] = np.std(
-                bleu1_scores, ddof=1
-            ) / np.sqrt(n_test_samples)
-            std_bleu[distance_index, gamma_index] = np.std(
-                bleu_scores, ddof=1
-            ) / np.sqrt(n_test_samples)
+            std_bleu_1[distance_index, 0] = np.std(bleu1_scores, ddof=1) / np.sqrt(
+                n_test_samples
+            )
+            std_bleu[distance_index, 0] = np.std(bleu_scores, ddof=1) / np.sqrt(
+                n_test_samples
+            )
 
             np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
             np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
@@ -231,8 +221,7 @@ if __name__ == "__main__":
             df = pd.DataFrame(
                 records,
                 columns=[
-                    "d_sd",
-                    "Gamma",
+                    "d_sr",
                     "Sentence 1",
                     "Sentence 2",
                     "Semantic Similarity Score",
