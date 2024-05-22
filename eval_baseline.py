@@ -98,21 +98,6 @@ if __name__ == "__main__":
         rate=args.rate,
     ).to(device)
 
-    sentence_lengths = []
-    for b in data_handler.train_dataloader:
-        encoder_idx = b[0].to(device)
-        encoder_attention_mask = b[1].to(device)
-
-        encoder_idx = data_handler.label_encoder.transform(encoder_idx)
-
-        sentence_lengths.append(len(torch.nonzero(encoder_idx)) / len(encoder_idx))
-
-    mean_sentence_len = np.mean(sentence_lengths)
-    print(f"Average token count: {mean_sentence_len}")
-    sentence_embedding_dim = 64 * 5
-    latent_dim = round_to_nearest_even(sentence_embedding_dim / mean_sentence_len)
-    print(f"Latent dim: {latent_dim}")
-
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     num_classes = data_handler.vocab_size
 
@@ -120,7 +105,7 @@ if __name__ == "__main__":
     tx_relay_model = Tx_Relay(
         nin=num_classes,
         n_emb=args.channel_block_input_dim,
-        n_latent=latent_dim,
+        n_latent=args.channel_block_latent_dim,
         channel=channel,
         entire_network_train=1,
     ).to(device)

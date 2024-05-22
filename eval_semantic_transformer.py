@@ -170,8 +170,7 @@ if __name__ == "__main__":
                 predicted_ids, probs = semantic_transformer.generate(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
-                    d_sd=d_sd,
-                    d_sr=d_sr,
+                    d=d_sr,
                 )
 
                 # find the end of sentences
