@@ -88,6 +88,7 @@ class SemanticTransformer(nn.Module):
         self.semantic_decoder = semantic_decoder
         self.channel_encoder = channel_encoder
         self.channel_decoder = channel_decoder
+        self.max_length = semantic_encoder.max_length - 1
 
         self.channel = channel
         self.mode = semantic_encoder.mode
@@ -145,8 +146,6 @@ class SemanticTransformer(nn.Module):
         snr_db: Optional[float] = None,
         d: Optional[float] = None,
         beam_width=5,
-        max_length=20,
-        n_generated_tokens=20,
     ):
         x = self.semantic_encoder(
             messages=messages,
@@ -175,10 +174,10 @@ class SemanticTransformer(nn.Module):
         return self.semantic_decoder.generate(
             encoder_output=x,
             is_causal=False,
-            max_length=max_length,
+            max_length=self.max_length,
             enc_padding_mask=x_padding_mask,
             beam_width=beam_width,
-            n_generated_tokens=n_generated_tokens,
+            n_generated_tokens=self.max_length + 1,
         )
 
     @staticmethod
