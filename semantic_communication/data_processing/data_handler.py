@@ -6,6 +6,7 @@ from torch.utils.data import (
     RandomSampler,
     DataLoader,
     DistributedSampler,
+    SequentialSampler,
 )
 
 from semantic_communication.data_processing.preprocessor import Preprocessor
@@ -31,40 +32,28 @@ class DataHandler:
 
         self.vocab_size = len(self.label_encoder.classes)
 
-        if rank is None or world_size is None:
-            self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
-            self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
-            self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn)
+        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
+        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
+        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn, random=False)
+
+    def init_dl(self, fn: str, random=True):
+        fp = os.path.join(self.data_fp, fn)
+
+        dataset = torch.load(fp, map_location=self.device)
+
+        if self.rank is None or self.world_size is None:
+            if random:
+                sampler = RandomSampler(dataset)
+            else:
+                sampler = SequentialSampler(dataset)
         else:
-            self.train_dataloader = self.init_dl_ddp(fn=Preprocessor.train_data_fn)
-            self.val_dataloader = self.init_dl_ddp(fn=Preprocessor.val_data_fn)
-            self.test_dataloader = self.init_dl_ddp(fn=Preprocessor.test_data_fn)
-
-    def init_dl_ddp(self, fn: str):
-        fp = os.path.join(self.data_fp, fn)
-
-        dataset = torch.load(fp, map_location=self.device)
-        sampler = DistributedSampler(
-            dataset=dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=True,
-            drop_last=False,
-        )
-
-        return DataLoader(
-            dataset=dataset,
-            sampler=sampler,
-            batch_size=self.batch_size,
-            num_workers=0,
-            pin_memory=False,
-        )
-
-    def init_dl(self, fn: str):
-        fp = os.path.join(self.data_fp, fn)
-
-        dataset = torch.load(fp, map_location=self.device)
-        sampler = RandomSampler(dataset)
+            sampler = DistributedSampler(
+                dataset=dataset,
+                num_replicas=self.world_size,
+                rank=self.rank,
+                shuffle=random,
+                drop_last=False,
+            )
 
         return DataLoader(
             dataset=dataset,
