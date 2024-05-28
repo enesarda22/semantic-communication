@@ -20,6 +20,7 @@ import re
 import torch
 import argparse
 from torch.nn import functional as F
+from sentence_transformers import SentenceTransformer
 
 
 def plotter(x_axis_values, y_axis_values, x_label, y_label, title):
@@ -30,6 +31,13 @@ def plotter(x_axis_values, y_axis_values, x_label, y_label, title):
     plt.ylabel(y_label)
     plt.title(title)
     plt.savefig(f"{title}.png", dpi=400)
+
+
+def sbert_semantic_similarity_score(target_sentence, received_sentence, sbert_model):
+    target_emb = sbert_model.encode(target_sentence, convert_to_tensor=True).unsqueeze(0)
+    received_emb = sbert_model.encode(received_sentence, convert_to_tensor=True).unsqueeze(0)
+    scores = F.cosine_similarity(target_emb, received_emb)
+    return scores[0].item()
 
 
 def semantic_similarity_score(target_sentences, received_sentences):
@@ -83,6 +91,7 @@ if __name__ == "__main__":
     set_seed()
 
     client = OpenAI(api_key=args.API_KEY)
+    sbert_eval_model = SentenceTransformer("all-MiniLM-L6-v2")
 
     data_handler = DataHandler(
         batch_size=args.batch_size,
@@ -112,10 +121,12 @@ if __name__ == "__main__":
     n_d = len(args.d_list)
 
     mean_semantic_sim = np.zeros((n_d, 1))
+    mean_sbert_semantic_sim = np.zeros((n_d, 1))
     mean_bleu_1 = np.zeros((n_d, 1))
     mean_bleu = np.zeros((n_d, 1))
 
     std_semantic_sim = np.zeros((n_d, 1))
+    std_sbert_semantic_sim = np.zeros((n_d, 1))
     std_bleu_1 = np.zeros((n_d, 1))
     std_bleu = np.zeros((n_d, 1))
     smoothing_function = SmoothingFunction().method1
@@ -125,6 +136,7 @@ if __name__ == "__main__":
     for distance_index, d_sr in enumerate(args.d_list):
         print(f"Simulating for distance: {d_sr}")
 
+        sbert_semantic_sim_scores = []
         cosine_scores = []
         bleu1_scores = []
         bleu_scores = []
@@ -184,11 +196,14 @@ if __name__ == "__main__":
                         word_tokenize(s2),
                         smoothing_function=smoothing_function,
                     )
+                    sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
+
                     cosine_scores.append(sim_score)
                     bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
+                    sbert_semantic_sim_scores.append(sbert_sim_score)
 
-                    records.append([d_sr, s1, s2, sim_score, bleu_1_score, bleu_score])
+                    records.append([d_sr, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
 
             if len(bleu1_scores) >= args.n_test:
                 break
@@ -197,6 +212,7 @@ if __name__ == "__main__":
         cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
         mean_semantic_sim[distance_index, 0] = np.mean(cosine_scores)
+        mean_sbert_semantic_sim[distance_index, 0] = np.mean(sbert_semantic_sim_scores)
         mean_bleu_1[distance_index, 0] = np.mean(bleu1_scores)
         mean_bleu[distance_index, 0] = np.mean(bleu_scores)
 
@@ -210,11 +226,16 @@ if __name__ == "__main__":
             n_test_samples
         )
 
+        std_sbert_semantic_sim[distance_index, 0] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(
+            n_test_samples)
+
         np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
+        np.save("ae_conventional_mean_sbert_semantic_sim.npy", mean_sbert_semantic_sim)
         np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
         np.save("ae_conventional_mean_bleu.npy", mean_bleu)
 
         np.save("ae_conventional_std_semantic_sim.npy", std_semantic_sim)
+        np.save("ae_conventional_std_sbert_semantic_sim.npy", std_sbert_semantic_sim)
         np.save("ae_conventional_std_bleu_1.npy", std_bleu_1)
         np.save("ae_conventional_std_bleu.npy", std_bleu)
 
@@ -227,6 +248,7 @@ if __name__ == "__main__":
                 "Semantic Similarity Score",
                 "BLEU 1 Gram Score",
                 "BLEU Score",
+                "SBERT Semantic Score"
             ],
         )
         df.to_excel("baseline_output.xlsx", index=False)
