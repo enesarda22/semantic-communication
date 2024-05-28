@@ -246,13 +246,14 @@ if __name__ == "__main__":
         cosine_scores = []
         bleu1_scores = []
         bleu_scores = []
+        snr_db = 10 * np.log10(1 / (np.power(d_sr, args.alpha) * args.noise_pow))
 
         for b in data_handler.test_dataloader:
             encoder_idx = b[0]
             encoder_attention_mask = b[1]
             encoder_idx = data_handler.label_encoder.transform(encoder_idx).cpu().numpy()
 
-            snr_db = 10 * np.log10(1 / (np.power(d_sr, args.alpha) * args.noise_pow))
+
             predicted_ids = source_relay_comm.communicate(np.squeeze(encoder_idx), snr_db)
 
             predicted_ids = torch.tensor(predicted_ids, device=get_device())
