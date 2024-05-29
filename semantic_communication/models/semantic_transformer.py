@@ -107,6 +107,8 @@ class SemanticTransformer(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
         )
+        x, _ = self._shift_src_output(x, mode=self.mode)
+
         x = self.channel_encoder(x)
 
         if self.channel is None:
@@ -193,3 +195,14 @@ class SemanticTransformer(nn.Module):
 
         else:
             return signal
+
+    @staticmethod
+    def _shift_src_output(src_out, mode):
+        if mode == "predict":
+            src_to_relay = src_out[:, :-1, :]
+            src_to_dst = src_out[:, 1:, :]
+        else:
+            src_to_relay = src_out
+            src_to_dst = src_out
+
+        return src_to_relay, src_to_dst

@@ -325,16 +325,6 @@ class Transceiver(nn.Module):
             n_generated_tokens=self.max_length + 1,
         )
 
-    def _shift_src_output(self, src_out):
-        if self.relay_semantic_encoder.mode == "predict":
-            src_to_relay = src_out[:, :-1, :]
-            src_to_dst = src_out[:, 1:, :]
-        else:
-            src_to_relay = src_out
-            src_to_dst = src_out
-
-        return src_to_relay, src_to_dst
-
 
 def init_relay_semantic_encoder_state_dict(semantic_transformer):
     state_dict = semantic_transformer.semantic_encoder.state_dict()
