@@ -23,6 +23,8 @@ import torch
 import argparse
 from torch.nn import functional as F
 from sentence_transformers import SentenceTransformer
+from semantic_communication.utils.modulation import modulation
+from scipy.special import erfc
 
 class QPSK:
     def __init__(self, sig_pow=1.0):
@@ -90,11 +92,13 @@ class AWGN:
 
 
 class source_relay_p2p_com:
-    def __init__(self, dic_size, sig_pow=1.0):
+    def __init__(self, dic_size, modulation_order, sig_pow=1.0):
         self.codewords = self.init_codewords(dic_size)
         # self.channel_encoder =
-        self.qpsk = QPSK(sig_pow)
+        # self.qpsk = QPSK(sig_pow)
+        self.modulator = modulation(modulation_order)
         self.channel = AWGN()
+        self.modulation_order = modulation_order
 
     def init_codewords(self, num_symbols):
         codewords = []
@@ -107,24 +111,47 @@ class source_relay_p2p_com:
             codewords.append(x)
         return codewords
 
+    def bit_error_rate_control(self, order, n_test, SNRs):
+        test_modulator = modulation(order)
+        bits = np.random.randint(0, 2, size=n_test)
+        test_channel = AWGN()
+        bits_per_symbol = np.log2(order)
+        padding = int(len(bits) % bits_per_symbol)
+        if not padding == 0:
+            padding = int(bits_per_symbol - padding)
+            zeros = np.zeros(padding)
+            bits = np.concatenate((bits, zeros))
+        modulated = test_modulator.modulate(bits)
+        ch_in_re, ch_in_im = modulated[:, 0], modulated[:, 1]
+
+        for SNR in SNRs:
+            ch_out_re, ch_out_im = test_channel(ch_in_re, ch_in_im, SNR)
+            bit_seq_hat = test_modulator.demodulate(ch_out_re, ch_out_im)
+            print(f"Bit error rate: {1 - np.sum(bits == bit_seq_hat) / len(bits)}")
+            linear_snr = np.power(10, SNR / 10)
+            err_term = erfc(np.sqrt(3 * linear_snr / (2 * (order - 1))))
+            print(f"Theoretical: {2 * err_term * (1 - (1 / np.sqrt(order))) / bits_per_symbol}")
+            print("-" * 50)
+
     def communicate(self, token_indices, SNR):
         source_coded_bits = np.array(list("".join([self.codewords[i] for i in token_indices]))).astype(int)
 
         # channel_coded_bits = self.channel_encoder.encode(XXX)
         channel_coded_bits = source_coded_bits
 
-        if len(channel_coded_bits) % 2 == 0:
-            pad_flag = 0
-        else:
-            channel_coded_bits = np.append(channel_coded_bits, 0)
-            pad_flag = 1
+        bits_per_symbol = np.log2(self.modulation_order)
+        padding = int(len(channel_coded_bits) % bits_per_symbol)
+        if not padding == 0:
+            padding = int(bits_per_symbol - padding)
+            zeros = np.zeros(padding)
+            channel_coded_bits = np.concatenate((channel_coded_bits, zeros))
 
-        ch_in_re, ch_in_im = self.qpsk.modulate(channel_coded_bits)
+        modulated = self.modulator.modulate(channel_coded_bits)
+        ch_in_re, ch_in_im = modulated[:, 0], modulated[:, 1]
         ch_out_re, ch_out_im = self.channel(ch_in_re, ch_in_im, SNR)
-        bit_seq_hat = self.qpsk.demodulate(ch_out_re, ch_out_im)
-
-        if pad_flag == 1:
-            bit_seq_hat = bit_seq_hat[:-1]
+        bit_seq_hat = self.modulator.demodulate(ch_out_re, ch_out_im)
+        if not padding == 0:
+            bit_seq_hat = bit_seq_hat[:-padding]
 
         # channel_decoded_bits = self.channel_encoder.decode(bit_seq_hat)
         channel_decoded_bits = bit_seq_hat
@@ -236,7 +263,14 @@ if __name__ == "__main__":
     smoothing_function = SmoothingFunction().method1
     records = []
 
-    source_relay_comm = source_relay_p2p_com(data_handler.vocab_size)
+    source_relay_comm = source_relay_p2p_com(data_handler.vocab_size, 256)
+
+    # source_relay_comm.bit_error_rate_control(256, 1000000, [0, 3, 6, 9, 12, 15, 18, 21])
+    # source_relay_comm.bit_error_rate_control(128, 1000000, [0, 3, 6, 9, 12, 15, 18, 21])
+    # source_relay_comm.bit_error_rate_control(64, 1000000, [0, 3, 6, 9, 12, 15, 18, 21])
+    # source_relay_comm.bit_error_rate_control(32, 1000000, [0, 3, 6, 9, 12, 15, 18, 21])
+    # source_relay_comm.bit_error_rate_control(16, 1000000, [0, 3, 6, 9, 12, 15, 18, 21])
+    # source_relay_comm.bit_error_rate_control(4, 1000000, [0, 3, 6, 9, 12, 15, 18, 21])
 
     # For each d_sr
     for distance_index, d_sr in enumerate(args.d_list):
