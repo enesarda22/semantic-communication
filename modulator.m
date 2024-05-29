@@ -1,0 +1,6 @@
+function txSig = modulator(data, order)
+    complex_txSig = qammod(data,order, ...
+        InputType='bit', ...
+        UnitAveragePower=true);
+    txSig = [real(complex_txSig), imag(complex_txSig)];
+end

@@ -1,0 +1,6 @@
+function demodulated = demodulator(ch_out_re, ch_out_im, order)
+    data = complex(ch_out_re, ch_out_im);
+    demodulated = qamdemod(data,order, ...
+        OutputType='bit', ...
+        UnitAveragePower=true);
+end
