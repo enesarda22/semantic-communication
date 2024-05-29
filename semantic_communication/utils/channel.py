@@ -77,7 +77,7 @@ class Rayleigh(Channel):
 
         noise = torch.normal(
             mean=0.0,
-            std=self.noise_pow**0.5,
+            std=(self.noise_pow * (d**self.alpha)) ** 0.5,
             size=x.shape,
             dtype=torch.cfloat,
         ).to(self.device)
