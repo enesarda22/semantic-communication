@@ -154,6 +154,8 @@ class SemanticTransformer(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
         )
+        x, _ = self._shift_src_output(x, mode=self.mode)
+
         x = self.channel_encoder(x)
 
         if self.channel is None:
@@ -167,6 +169,14 @@ class SemanticTransformer(nn.Module):
 
         x = self.channel_decoder(x)
 
+        if self.mode == "sentence":
+            return self.generate_beam_search(x=x, beam_width=beam_width)
+        else:
+            return self.generate_greedy(
+                x=x, beam_width=beam_width, attention_mask=attention_mask
+            )
+
+    def generate_beam_search(self, x, beam_width):
         B, R, _ = x.shape
         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
 
@@ -176,6 +186,19 @@ class SemanticTransformer(nn.Module):
         return self.semantic_decoder.generate(
             encoder_output=x,
             is_causal=False,
+            max_length=self.max_length,
+            enc_padding_mask=x_padding_mask,
+            beam_width=beam_width,
+            n_generated_tokens=self.max_length + 1,
+        )
+
+    def generate_greedy(self, x, beam_width, attention_mask):
+        x_padding_mask = attention_mask[:, 1:] == 0
+        is_causal = True
+
+        return self.semantic_decoder.generate(
+            encoder_output=x,
+            is_causal=is_causal,
             max_length=self.max_length,
             enc_padding_mask=x_padding_mask,
             beam_width=beam_width,
