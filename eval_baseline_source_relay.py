@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from openai import OpenAI
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from nltk.tokenize import word_tokenize
@@ -16,59 +15,11 @@ from semantic_communication.models.baseline_models import Tx_Relay
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.utils.channel import init_channel
 from semantic_communication.models.semantic_encoder import SemanticEncoder
-import re
 import torch
 import argparse
-from torch.nn import functional as F
 from sentence_transformers import SentenceTransformer
-
-
-def plotter(x_axis_values, y_axis_values, x_label, y_label, title):
-    plt.figure()
-    plt.plot(x_axis_values, y_axis_values)
-    plt.grid()
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.title(title)
-    plt.savefig(f"{title}.png", dpi=400)
-
-
-def sbert_semantic_similarity_score(target_sentence, received_sentence, sbert_model):
-    target_emb = sbert_model.encode(target_sentence, convert_to_tensor=True).unsqueeze(0)
-    received_emb = sbert_model.encode(received_sentence, convert_to_tensor=True).unsqueeze(0)
-    scores = F.cosine_similarity(target_emb, received_emb)
-    return scores[0].item()
-
-
-def semantic_similarity_score(target_sentences, received_sentences):
-    completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 "
-                "and 1 denoting the semantic similarity score for given sentences A and B with precision "
-                "0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their "
-                "meanings are uncorrelated. Just provide a score without any words or symbols.",
-            },
-            {
-                "role": "user",
-                "content": f"A=({target_sentences})  B=({received_sentences})",
-            },
-        ],
-    )
-
-    if completion.choices[0].finish_reason == "stop":
-        pattern = re.compile(r"(?<![\d.-])-?(?:0(?:\.\d+)?|1(?:\.0+)?)(?![\d.])")
-        res = pattern.findall(completion.choices[0].message.content)
-        if len(res) == 1:
-            return float(res[0])
-        else:
-            print(res)
-            return float("nan")
-    else:
-        return float("nan")
-
+from semantic_communication.utils.eval_functions import *
+import os
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -89,6 +40,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = get_device()
     set_seed()
+
+    results_dir = "Results"
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
 
     client = OpenAI(api_key=args.API_KEY)
     sbert_eval_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -184,7 +139,7 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(original_sentences, predicted_sentences):
-                    sim_score = semantic_similarity_score(s1, s2)
+                    sim_score = semantic_similarity_score(s1, s2, client)
                     bleu_1_score = sentence_bleu(
                         [word_tokenize(s1)],
                         word_tokenize(s2),
@@ -229,15 +184,15 @@ if __name__ == "__main__":
         std_sbert_semantic_sim[distance_index, 0] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(
             n_test_samples)
 
-        np.save("ae_conventional_mean_semantic_sim.npy", mean_semantic_sim)
-        np.save("ae_conventional_mean_sbert_semantic_sim.npy", mean_sbert_semantic_sim)
-        np.save("ae_conventional_mean_bleu_1.npy", mean_bleu_1)
-        np.save("ae_conventional_mean_bleu.npy", mean_bleu)
+        np.save(os.path.join(results_dir, "ae_conventional_mean_semantic_sim.npy"), mean_semantic_sim)
+        np.save(os.path.join(results_dir, "ae_conventional_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
+        np.save(os.path.join(results_dir, "ae_conventional_mean_bleu_1.npy"), mean_bleu_1)
+        np.save(os.path.join(results_dir, "ae_conventional_mean_bleu.npy"), mean_bleu)
 
-        np.save("ae_conventional_std_semantic_sim.npy", std_semantic_sim)
-        np.save("ae_conventional_std_sbert_semantic_sim.npy", std_sbert_semantic_sim)
-        np.save("ae_conventional_std_bleu_1.npy", std_bleu_1)
-        np.save("ae_conventional_std_bleu.npy", std_bleu)
+        np.save(os.path.join(results_dir, "ae_conventional_std_semantic_sim.npy"), std_semantic_sim)
+        np.save(os.path.join(results_dir, "ae_conventional_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
+        np.save(os.path.join(results_dir, "ae_conventional_std_bleu_1.npy"), std_bleu_1)
+        np.save(os.path.join(results_dir, "ae_conventional_std_bleu.npy"), std_bleu)
 
         df = pd.DataFrame(
             records,
@@ -251,4 +206,4 @@ if __name__ == "__main__":
                 "SBERT Semantic Score"
             ],
         )
-        df.to_excel("baseline_output.xlsx", index=False)
+        df.to_excel(os.path.join(results_dir, "baseline_output.xlsx"), index=False)
