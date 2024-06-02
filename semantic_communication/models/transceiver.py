@@ -1,3 +1,4 @@
+import copy
 from typing import Optional, List
 
 import torch
@@ -212,7 +213,10 @@ class Transceiver(nn.Module):
 
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
-        x_relay = self._relay_forward(x_relay=x_relay)
+        x_relay = self._relay_forward(
+            x_relay=x_relay,
+            attention_mask=attention_mask,
+        )
 
         # destination
         x_dst1 = self.channel(x_relay, d_sd - d_sr)
@@ -244,11 +248,22 @@ class Transceiver(nn.Module):
         )
         return logits, loss
 
-    def _relay_forward(self, x_relay):
+    def _relay_forward(self, x_relay, attention_mask=None):
         x_relay = self.relay_channel_decoder(x_relay)
-        B, R, C = x_relay.shape
 
         # decode every sentence embedding using beam search
+        if self.src_semantic_encoder.mode == "sentence":
+            return self._relay_forward_sentence(x_relay=x_relay)
+
+        else:
+            return self._relay_forward_token(
+                x_relay=x_relay,
+                attention_mask=attention_mask,
+            )
+
+    def _relay_forward_sentence(self, x_relay):
+        B, R, C = x_relay.shape
+
         x_relay = torch.repeat_interleave(input=x_relay, repeats=R, dim=0)
         causal_padding_mask = torch.tril(
             torch.ones(R, R, device=self.device), -1
@@ -256,7 +271,7 @@ class Transceiver(nn.Module):
         causal_padding_mask = causal_padding_mask.repeat(B, 1)
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
-            is_causal=self.relay_semantic_encoder.mode != "sentence",
+            is_causal=False,
             max_length=self.max_length,  # TODO: fix +1 discrepancy
             enc_padding_mask=causal_padding_mask,
             n_generated_tokens=self.max_length + 1,
@@ -281,6 +296,59 @@ class Transceiver(nn.Module):
         x_relay = self.relay_channel_encoder(x_relay)
         return x_relay
 
+    def _relay_forward_token(self, x_relay, attention_mask):
+        x_padding_mask = attention_mask[:, 1:] == 0
+        is_causal = True
+
+        x_relay, _ = self.relay_semantic_decoder.generate(
+            encoder_output=x_relay,
+            is_causal=is_causal,
+            max_length=self.max_length,
+            enc_padding_mask=x_padding_mask,
+            n_generated_tokens=self.max_length + 1,
+        )
+
+        # create tril attention mask
+        B, T = x_relay.shape
+        repeat_amounts = (~x_padding_mask).sum(dim=1)
+
+        relay_attention_mask = torch.tril(torch.ones(T, T))
+        relay_attention_mask = torch.cat(
+            [relay_attention_mask[:i, :] for i in repeat_amounts]
+        )
+
+        # re-encode decoded sentences and forward
+        x_relay = torch.cat([x_relay[:i, :] for i in repeat_amounts])
+        x_relay = self.relay_semantic_encoder(
+            input_ids=x_relay,
+            attention_mask=relay_attention_mask,
+        )
+
+        t_idx = torch.cat([torch.arange(i) for i in repeat_amounts])
+        x_relay = x_relay[torch.arange(len(t_idx)), t_idx, :]
+
+        # pad the end of sentences
+        C = x_relay.shape[-1]
+        padded_embeddings = []
+        for i in range(B):
+            start_idx = repeat_amounts[:i].sum()
+            single_sentence = torch.cat(
+                [
+                    x_relay[start_idx : start_idx + repeat_amounts[i], :],
+                    torch.zeros(
+                        T - repeat_amounts[i] - 1,
+                        C,
+                        dtype=torch.float32,
+                        device=self.device,
+                    ),
+                ]
+            )
+            padded_embeddings.append(single_sentence[None, :, :])
+
+        x_relay = torch.cat(padded_embeddings, dim=0)
+        x_relay = self.relay_channel_encoder(x_relay)
+        return x_relay
+
     def _source_forward(self, input_ids, messages, attention_mask):
         x_src = self.src_semantic_encoder(
             messages=messages,
@@ -288,7 +356,10 @@ class Transceiver(nn.Module):
             attention_mask=attention_mask,
         )
         x_src = self.src_channel_encoder(x_src)
-        x_src_to_relay, x_src_to_dst = self._shift_src_output(x_src)
+        x_src_to_relay, x_src_to_dst = SemanticTransformer.shift_src_output(
+            src_out=x_src,
+            mode=self.src_semantic_encoder.mode,
+        )
         return x_src_to_dst, x_src_to_relay
 
     @torch.no_grad()
@@ -309,7 +380,10 @@ class Transceiver(nn.Module):
 
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
-        x_relay = self._relay_forward(x_relay=x_relay)
+        x_relay = self._relay_forward(
+            x_relay=x_relay,
+            attention_mask=attention_mask,
+        )
 
         # destination
         x_dst1 = self.channel(x_relay, d_sd - d_sr)
@@ -327,20 +401,31 @@ class Transceiver(nn.Module):
 
 
 def init_relay_semantic_encoder_state_dict(semantic_transformer):
-    state_dict = semantic_transformer.semantic_encoder.state_dict()
-    state_dict["pooling_head"] = state_dict["pooling_head"][:, [0]]
+    state_dict = copy.deepcopy(semantic_transformer.semantic_encoder.state_dict())
+    if "pooling_head" in state_dict:
+        state_dict["pooling_head"] = state_dict["pooling_head"][:, [0]]
     return state_dict
 
 
-def init_dst_channel_decoder_state_dict(semantic_transformer):
-    state_dict = semantic_transformer.channel_decoder.state_dict()
-    state_dict["layers.0.linear.weight"] = state_dict["layers.1.linear.weight"].repeat(
+def init_dst_channel_decoder_state_dict(semantic_transformer, mode):
+    state_dict = copy.deepcopy(semantic_transformer.channel_decoder.state_dict())
+
+    if mode != "sentence":
+        for i in range(3):
+            state_dict[f"layers.{i}.linear.weight"] = state_dict[
+                f"layers.{i+1}.linear.weight"
+            ]
+            state_dict[f"layers.{i}.linear.bias"] = state_dict[
+                f"layers.{i + 1}.linear.bias"
+            ]
+            state_dict[f"layers.{i}.ln.weight"] = state_dict[
+                f"layers.{i + 1}.ln.weight"
+            ]
+            state_dict[f"layers.{i}.ln.bias"] = state_dict[f"layers.{i + 1}.ln.bias"]
+
+    state_dict["layers.0.linear.weight"] = state_dict["layers.0.linear.weight"].repeat(
         1, 2
     )
-    state_dict["layers.0.linear.bias"] = state_dict["layers.1.linear.bias"]
-    state_dict["layers.0.ln.weight"] = state_dict["layers.1.ln.weight"]
-    state_dict["layers.0.ln.bias"] = state_dict["layers.1.ln.bias"]
-    state_dict["layers.0.prelu.weight"] = state_dict["layers.1.prelu.weight"]
     return state_dict
 
 

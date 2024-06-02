@@ -118,7 +118,9 @@ def main(args):
         nin=args.channel_block_latent_dim * 2,
         nout=args.channel_block_input_dim,
     ).to(device)
-    state_dict = init_dst_channel_decoder_state_dict(semantic_transformer)
+    state_dict = init_dst_channel_decoder_state_dict(
+        semantic_transformer, mode=args.mode
+    )
     dst_channel_decoder.load_state_dict(state_dict, strict=False)
 
     dst_semantic_decoder = SemanticDecoder(
