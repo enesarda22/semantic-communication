@@ -312,7 +312,7 @@ class Transceiver(nn.Module):
         B, T = x_relay.shape
         repeat_amounts = (~x_padding_mask).sum(dim=1)
 
-        relay_attention_mask = torch.tril(torch.ones(T, T))
+        relay_attention_mask = torch.tril(torch.ones(T, T, device=self.device))
         relay_attention_mask = torch.cat(
             [relay_attention_mask[:i, :] for i in repeat_amounts]
         )
