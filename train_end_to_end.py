@@ -103,25 +103,25 @@ def main(args):
         mode=args.mode if args.mode == "sentence" else "forward",
         rate=1 if args.mode == "sentence" else None,
     ).to(device)
-    state_dict = init_relay_semantic_encoder_state_dict(semantic_transformer)
-    relay_semantic_encoder.load_state_dict(state_dict)
+    # state_dict = init_relay_semantic_encoder_state_dict(semantic_transformer)
+    # relay_semantic_encoder.load_state_dict(state_dict)
 
     relay_channel_encoder = ChannelEncoder(
         nin=args.channel_block_input_dim,
         nout=args.channel_block_latent_dim,
     ).to(device)
-    relay_channel_encoder.load_state_dict(
-        semantic_transformer.channel_encoder.state_dict()
-    )
+    # relay_channel_encoder.load_state_dict(
+    #     semantic_transformer.channel_encoder.state_dict()
+    # )
 
     dst_channel_decoder = ChannelDecoder(
         nin=args.channel_block_latent_dim * 2,
         nout=args.channel_block_input_dim,
     ).to(device)
-    state_dict = init_dst_channel_decoder_state_dict(
-        semantic_transformer, mode=args.mode
-    )
-    dst_channel_decoder.load_state_dict(state_dict, strict=False)
+    # state_dict = init_dst_channel_decoder_state_dict(
+    #     semantic_transformer, mode=args.mode
+    # )
+    # dst_channel_decoder.load_state_dict(state_dict, strict=False)
 
     dst_semantic_decoder = SemanticDecoder(
         vocab_size=data_handler.vocab_size,
@@ -132,9 +132,9 @@ def main(args):
         bert=relay_semantic_encoder.bert,
         pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
-    dst_semantic_decoder.load_state_dict(
-        semantic_transformer.semantic_decoder.state_dict()
-    )
+    # dst_semantic_decoder.load_state_dict(
+    #     semantic_transformer.semantic_decoder.state_dict()
+    # )
 
     transceiver = Transceiver(
         src_relay_transformer=semantic_transformer,
