@@ -96,6 +96,20 @@ def main(args):
         channel=channel,
     ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
+    if args.semantic_transformer_forward_path is None:
+        forward_semantic_transformer = semantic_transformer
+    else:
+        checkpoint = torch.load(
+            args.semantic_transformer_forward_path, map_location=device
+        )
+        forward_semantic_transformer = SemanticTransformer(
+            semantic_encoder=semantic_encoder,
+            semantic_decoder=semantic_decoder,
+            channel_encoder=channel_encoder,
+            channel_decoder=channel_decoder,
+            channel=channel,
+        ).to(device)
+        forward_semantic_transformer.load_state_dict(checkpoint["model_state_dict"])
 
     relay_semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
@@ -103,7 +117,9 @@ def main(args):
         mode=args.mode if args.mode == "sentence" else "forward",
         rate=1 if args.mode == "sentence" else None,
     ).to(device)
-    state_dict = init_relay_semantic_encoder_state_dict(semantic_transformer)
+    state_dict = init_relay_semantic_encoder_state_dict(
+        forward_semantic_transformer=forward_semantic_transformer
+    )
     relay_semantic_encoder.load_state_dict(state_dict)
 
     relay_channel_encoder = ChannelEncoder(
@@ -111,7 +127,7 @@ def main(args):
         nout=args.channel_block_latent_dim,
     ).to(device)
     relay_channel_encoder.load_state_dict(
-        semantic_transformer.channel_encoder.state_dict()
+        forward_semantic_transformer.channel_encoder.state_dict()
     )
 
     dst_channel_decoder = ChannelDecoder(
@@ -119,7 +135,8 @@ def main(args):
         nout=args.channel_block_input_dim,
     ).to(device)
     state_dict = init_dst_channel_decoder_state_dict(
-        semantic_transformer, mode=args.mode
+        forward_semantic_transformer=forward_semantic_transformer,
+        mode=args.mode,
     )
     dst_channel_decoder.load_state_dict(state_dict, strict=False)
 
@@ -133,7 +150,7 @@ def main(args):
         pad_idx=data_handler.label_encoder.pad_id,
     ).to(device)
     dst_semantic_decoder.load_state_dict(
-        semantic_transformer.semantic_decoder.state_dict()
+        forward_semantic_transformer.semantic_decoder.state_dict()
     )
 
     transceiver = Transceiver(
@@ -259,6 +276,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--transceiver-path", type=str)
     parser.add_argument("--semantic-transformer-path", default=None, type=str)
+    parser.add_argument("--semantic-transformer-forward-path", default=None, type=str)
     add_semantic_decoder_args(parser)
     add_data_args(parser)
     add_train_args(parser)

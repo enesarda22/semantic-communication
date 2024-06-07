@@ -400,20 +400,24 @@ class Transceiver(nn.Module):
         )
 
 
-def init_relay_semantic_encoder_state_dict(semantic_transformer):
-    state_dict = copy.deepcopy(semantic_transformer.semantic_encoder.state_dict())
+def init_relay_semantic_encoder_state_dict(forward_semantic_transformer):
+    state_dict = copy.deepcopy(
+        forward_semantic_transformer.semantic_encoder.state_dict()
+    )
     if "pooling_head" in state_dict:
         state_dict["pooling_head"] = state_dict["pooling_head"][:, [0]]
     return state_dict
 
 
-def init_dst_channel_decoder_state_dict(semantic_transformer, mode):
-    state_dict = copy.deepcopy(semantic_transformer.channel_decoder.state_dict())
+def init_dst_channel_decoder_state_dict(forward_semantic_transformer, mode):
+    state_dict = copy.deepcopy(
+        forward_semantic_transformer.channel_decoder.state_dict()
+    )
 
     if mode != "sentence":
         for i in range(3):
             state_dict[f"layers.{i}.linear.weight"] = state_dict[
-                f"layers.{i+1}.linear.weight"
+                f"layers.{i + 1}.linear.weight"
             ]
             state_dict[f"layers.{i}.linear.bias"] = state_dict[
                 f"layers.{i + 1}.linear.bias"
