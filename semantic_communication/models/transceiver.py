@@ -318,7 +318,7 @@ class Transceiver(nn.Module):
         )
 
         # re-encode decoded sentences and forward
-        x_relay = torch.cat([x_relay[:i, :] for i in repeat_amounts])
+        x_relay = torch.repeat_interleave(x_relay, repeat_amounts, dim=0)
         x_relay = self.relay_semantic_encoder(
             input_ids=x_relay,
             attention_mask=relay_attention_mask,
