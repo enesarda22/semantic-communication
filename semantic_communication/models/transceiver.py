@@ -391,13 +391,24 @@ class Transceiver(nn.Module):
         x_dst = torch.cat((x_dst1, x_dst2), dim=-1)
 
         x_dst = self.dst_channel_decoder(x_dst)
-        return self.dst_semantic_decoder.generate(
-            encoder_output=x_dst,
-            is_causal=False,
-            max_length=self.max_length,
-            enc_padding_mask=None,
-            n_generated_tokens=self.max_length + 1,
-        )
+
+        if self.src_semantic_encoder.mode == "sentence":
+            return self.dst_semantic_decoder.generate(
+                encoder_output=x_dst,
+                is_causal=False,
+                max_length=self.max_length,
+                enc_padding_mask=None,
+                n_generated_tokens=self.max_length + 1,
+            )
+        else:
+            x_padding_mask = attention_mask[:, 1:] == 0
+            return self.dst_semantic_decoder.generate(
+                encoder_output=x_dst,
+                is_causal=True,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                n_generated_tokens=self.max_length + 1,
+            )
 
 
 def init_relay_semantic_encoder_state_dict(forward_semantic_transformer):
