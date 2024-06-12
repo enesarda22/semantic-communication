@@ -10,7 +10,6 @@ from semantic_communication.utils.general import (
     add_channel_model_args,
     add_data_args,
     load_model,
-    round_to_nearest_even
 )
 from semantic_communication.models.baseline_models import Tx_Relay, Tx_Relay_Rx
 from semantic_communication.data_processing.data_handler import DataHandler
@@ -64,21 +63,6 @@ if __name__ == "__main__":
         rate=args.rate,
     ).to(device)
 
-    sentence_lengths = []
-    for b in data_handler.train_dataloader:
-        encoder_idx = b[0].to(device)
-        encoder_attention_mask = b[1].to(device)
-
-        encoder_idx = data_handler.label_encoder.transform(encoder_idx)
-
-        sentence_lengths.append(len(torch.nonzero(encoder_idx)) / len(encoder_idx))
-
-    mean_sentence_len = np.mean(sentence_lengths)
-    print(f"Average token count: {mean_sentence_len}")
-    sentence_embedding_dim = 64*5
-    latent_dim = round_to_nearest_even(sentence_embedding_dim / mean_sentence_len)
-    print(f"Latent dim: {latent_dim}")
-
     channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
     num_classes = data_handler.vocab_size
 
@@ -86,7 +70,7 @@ if __name__ == "__main__":
     tx_relay_model = Tx_Relay(
         nin=num_classes,
         n_emb=args.channel_block_input_dim,
-        n_latent=latent_dim,
+        n_latent=args.channel_block_latent_dim,
         channel=channel,
         entire_network_train=1,
     ).to(device)
@@ -95,7 +79,7 @@ if __name__ == "__main__":
     tx_relay_rx_model = Tx_Relay_Rx(
         nin=num_classes,
         n_emb=args.channel_block_input_dim,
-        n_latent=latent_dim,
+        n_latent=args.channel_block_latent_dim,
         channel=channel,
         tx_relay_model=tx_relay_model,
     ).to(device)
@@ -140,7 +124,11 @@ if __name__ == "__main__":
                 B, T = encoder_idx.shape
                 with torch.no_grad():
                     logits, _ = tx_relay_rx_model(
-                        encoder_idx[:, 1:], encoder_attention_mask[:, 1:], d_sd, d_sr, d_rd
+                        encoder_idx[:, 1:],
+                        encoder_attention_mask[:, 1:],
+                        d_sd,
+                        d_sr,
+                        d_rd,
                     )
                     probs = F.softmax(logits, dim=-1)
                     predicted_ids = (torch.argmax(probs, dim=-1)).reshape(
@@ -174,19 +162,39 @@ if __name__ == "__main__":
 
                     for s1, s2 in zip(original_sentences, predicted_sentences):
                         sim_score = semantic_similarity_score(s1, s2, client)
-                        bleu_1_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0],
-                                                     smoothing_function=smoothing_function)
-                        bleu_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2),
-                                                   smoothing_function=smoothing_function)
+                        bleu_1_score = sentence_bleu(
+                            [word_tokenize(s1)],
+                            word_tokenize(s2),
+                            weights=[1, 0, 0, 0],
+                            smoothing_function=smoothing_function,
+                        )
+                        bleu_score = sentence_bleu(
+                            [word_tokenize(s1)],
+                            word_tokenize(s2),
+                            smoothing_function=smoothing_function,
+                        )
 
-                        sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
+                        sbert_sim_score = sbert_semantic_similarity_score(
+                            s1, s2, sbert_model=sbert_eval_model
+                        )
 
                         cosine_scores.append(sim_score)
                         bleu1_scores.append(bleu_1_score)
                         bleu_scores.append(bleu_score)
                         sbert_semantic_sim_scores.append(sbert_sim_score)
 
-                        records.append([d_sd, gamma, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
+                        records.append(
+                            [
+                                d_sd,
+                                gamma,
+                                s1,
+                                s2,
+                                sim_score,
+                                bleu_1_score,
+                                bleu_score,
+                                sbert_sim_score,
+                            ]
+                        )
 
                 if len(bleu1_scores) >= args.n_test:
                     break
@@ -195,24 +203,67 @@ if __name__ == "__main__":
             cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
             mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
-            mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(sbert_semantic_sim_scores)
+            mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(
+                sbert_semantic_sim_scores
+            )
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
 
-            std_semantic_sim[distance_index, gamma_index] = np.std(cosine_scores, ddof=1) / np.sqrt(n_test_samples)
-            std_sbert_semantic_sim[distance_index, gamma_index] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(n_test_samples)
-            std_bleu_1[distance_index, gamma_index] = np.std(bleu1_scores, ddof=1) / np.sqrt(n_test_samples)
-            std_bleu[distance_index, gamma_index] = np.std(bleu_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_semantic_sim[distance_index, gamma_index] = np.std(
+                cosine_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
+            std_sbert_semantic_sim[distance_index, gamma_index] = np.std(
+                sbert_semantic_sim_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
+            std_bleu_1[distance_index, gamma_index] = np.std(
+                bleu1_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
+            std_bleu[distance_index, gamma_index] = np.std(
+                bleu_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
 
-            np.save(os.path.join(results_dir, "ae_conventional_mean_semantic_sim.npy"), mean_semantic_sim)
-            np.save(os.path.join(results_dir, "ae_conventional_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
-            np.save(os.path.join(results_dir, "ae_conventional_mean_bleu_1.npy"), mean_bleu_1)
-            np.save(os.path.join(results_dir, "ae_conventional_mean_bleu.npy"), mean_bleu)
+            np.save(
+                os.path.join(results_dir, "ae_conventional_mean_semantic_sim.npy"),
+                mean_semantic_sim,
+            )
+            np.save(
+                os.path.join(
+                    results_dir, "ae_conventional_mean_sbert_semantic_sim.npy"
+                ),
+                mean_sbert_semantic_sim,
+            )
+            np.save(
+                os.path.join(results_dir, "ae_conventional_mean_bleu_1.npy"),
+                mean_bleu_1,
+            )
+            np.save(
+                os.path.join(results_dir, "ae_conventional_mean_bleu.npy"), mean_bleu
+            )
 
-            np.save(os.path.join(results_dir, "ae_conventional_std_semantic_sim.npy"), std_semantic_sim)
-            np.save(os.path.join(results_dir, "ae_conventional_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
-            np.save(os.path.join(results_dir, "ae_conventional_std_bleu_1.npy"), std_bleu_1)
+            np.save(
+                os.path.join(results_dir, "ae_conventional_std_semantic_sim.npy"),
+                std_semantic_sim,
+            )
+            np.save(
+                os.path.join(results_dir, "ae_conventional_std_sbert_semantic_sim.npy"),
+                std_sbert_semantic_sim,
+            )
+            np.save(
+                os.path.join(results_dir, "ae_conventional_std_bleu_1.npy"), std_bleu_1
+            )
             np.save(os.path.join(results_dir, "ae_conventional_std_bleu.npy"), std_bleu)
 
-            df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score', "SBERT Semantic Score"])
-            df.to_excel(os.path.join(results_dir, 'baseline_output.xlsx'), index=False)
+            df = pd.DataFrame(
+                records,
+                columns=[
+                    "d_sd",
+                    "Gamma",
+                    "Sentence 1",
+                    "Sentence 2",
+                    "Semantic Similarity Score",
+                    "BLEU 1 Gram Score",
+                    "BLEU Score",
+                    "SBERT Semantic Score",
+                ],
+            )
+            df.to_excel(os.path.join(results_dir, "baseline_output.xlsx"), index=False)
