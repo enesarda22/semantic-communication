@@ -179,9 +179,9 @@ def plotter(x_axis, xlabel, ylabel, title, separation_conventional=None, SPF=Non
     if not np.all(AE_baseline == 0):
         plt.plot(x_axis, AE_baseline, label="AE Baseline")
     if not np.all(sentence_decode == 0):
-        plt.plot(x_axis, sentence_decode, label="Sen. DF", color="c")
+        plt.plot(x_axis, sentence_decode, label="Sen. DF", color="c", linestyle=(0, (5, 1, 1, 1, 1, 1)))
     if not np.all(sentence_predict == 0):
-        plt.plot(x_axis, sentence_predict, label="Sen. PF", color="m")
+        plt.plot(x_axis, sentence_predict, label="Sen. PF", color="m", linestyle=(0, (3, 1, 1, 5, 1, 1)))
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -216,11 +216,11 @@ def plot(d_sd_list, y_label, gamma_list, separation_conventional=None, SPF=None,
         plotter(x_axis=np.array(gamma_list) * d_sd, separation_conventional=separation_conventional[index, :],
                 SPF=SPF[index, :], SLF=SLF[index, :], sentence_decode=sentence_decode[index, :],
                 sentence_predict=sentence_predict[index, :], AE_baseline=AE_baseline[index, :], save=save,
-                xlabel="d_sr", ylabel=y_label, title=f"$d_s$$_r$ v. {y_label} for $d_s$$_d$={d_sd}", show=show)
+                xlabel="$d_{sr}$", ylabel=y_label, title=f"$d_s$$_r$ v. {y_label} for $d_s$$_d$={d_sd}", show=show)
 
     mid_index = gamma_list.index(0.5)
 
     plotter(x_axis=d_sd_list, separation_conventional=separation_conventional[:, mid_index], SPF = SPF[:, mid_index], SLF=SLF[:, mid_index], sentence_decode=sentence_decode[:, mid_index], sentence_predict=sentence_predict[:, mid_index], AE_baseline=AE_baseline[:, mid_index], save=save,
-    xlabel="d_sd", ylabel=y_label, title=f" $d_s$$_d$ v. {y_label} for $d_s$$_r$=0.5 $d_s$$_d$", show=show)
+    xlabel="$d_{sd}$", ylabel=y_label, title=f" $d_s$$_d$ v. {y_label} for $d_s$$_r$=0.5 $d_s$$_d$", show=show)
 
 
