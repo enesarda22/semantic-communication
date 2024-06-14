@@ -6,6 +6,9 @@ from pathlib import Path
 import torch
 import numpy as np
 
+import matplotlib.pyplot as plt
+import scienceplots
+
 RANDOM_STATE = 42
 
 
@@ -160,3 +163,64 @@ def shift_inputs(xb, attention_mask, mode, rate=None):
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
 
     return idx, targets, enc_padding_mask, is_causal
+
+
+def plotter(x_axis, xlabel, ylabel, title, separation_conventional=None, SPF=None, SLF=None, sentence_decode=None,
+            sentence_predict=None, AE_baseline=None, save=True, show=False):
+    plt.style.use(['science', 'ieee', 'no-latex'])
+    plt.figure(figsize=(5, 3))
+
+    if not np.all(separation_conventional == 0):
+        plt.plot(x_axis, separation_conventional, label="Conv. Baseline")
+    if not np.all(SPF == 0):
+        plt.plot(x_axis, SPF, label="SPF")
+    if not np.all(SLF == 0):
+        plt.plot(x_axis, SLF, label="SLF")
+    if not np.all(AE_baseline == 0):
+        plt.plot(x_axis, AE_baseline, label="AE Baseline")
+    if not np.all(sentence_decode == 0):
+        plt.plot(x_axis, sentence_decode, label="Sen. DF", color="c")
+    if not np.all(sentence_predict == 0):
+        plt.plot(x_axis, sentence_predict, label="Sen. PF", color="m")
+
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.xlim([np.min(x_axis), np.max(x_axis)])
+    plt.grid(lw=0.2)
+    plt.legend()
+    plt.title(title)
+    if save:
+        plt.savefig(f'Plots/{title}.png', dpi=900)
+    if show:
+        plt.show()
+
+
+def plot(d_sd_list, y_label, gamma_list, separation_conventional=None, SPF=None, SLF=None, sentence_decode=None,
+         sentence_predict=None, AE_baseline=None, save=True, show=False):
+
+    if separation_conventional is None:
+        separation_conventional = np.zeros((len(d_sd_list), len(gamma_list)))
+    if SPF is None:
+        SPF = np.zeros((len(d_sd_list), len(gamma_list)))
+    if SLF is None:
+        SLF = np.zeros((len(d_sd_list), len(gamma_list)))
+    if sentence_decode is None:
+        sentence_decode = np.zeros((len(d_sd_list), len(gamma_list)))
+    if sentence_predict is None:
+        sentence_predict = np.zeros((len(d_sd_list), len(gamma_list)))
+    if AE_baseline is None:
+        AE_baseline = np.zeros((len(d_sd_list), len(gamma_list)))
+
+    # butun distance elr icin sr
+    for index, d_sd in enumerate(d_sd_list):
+        plotter(x_axis=np.array(gamma_list) * d_sd, separation_conventional=separation_conventional[index, :],
+                SPF=SPF[index, :], SLF=SLF[index, :], sentence_decode=sentence_decode[index, :],
+                sentence_predict=sentence_predict[index, :], AE_baseline=AE_baseline[index, :], save=save,
+                xlabel="d_sr", ylabel=y_label, title=f"$d_s$$_r$ v. {y_label} for $d_s$$_d$={d_sd}", show=show)
+
+    mid_index = gamma_list.index(0.5)
+
+    plotter(x_axis=d_sd_list, separation_conventional=separation_conventional[:, mid_index], SPF = SPF[:, mid_index], SLF=SLF[:, mid_index], sentence_decode=sentence_decode[:, mid_index], sentence_predict=sentence_predict[:, mid_index], AE_baseline=AE_baseline[:, mid_index], save=save,
+    xlabel="d_sd", ylabel=y_label, title=f" $d_s$$_d$ v. {y_label} for $d_s$$_r$=0.5 $d_s$$_d$", show=show)
+
+
