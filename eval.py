@@ -240,15 +240,15 @@ if __name__ == "__main__":
 
             std_sbert_semantic_sim[distance_index, gamma_index] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(n_test_samples)
 
-            np.save(os.path.join(results_dir, "proposed_mean_semantic_sim.npy"), mean_semantic_sim)
-            np.save(os.path.join(results_dir, "proposed_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
-            np.save(os.path.join(results_dir, "proposed_mean_bleu_1.npy"), mean_bleu_1)
-            np.save(os.path.join(results_dir, "proposed_mean_bleu.npy"), mean_bleu)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_semantic_sim.npy"), mean_semantic_sim)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_bleu_1.npy"), mean_bleu_1)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_bleu.npy"), mean_bleu)
 
-            np.save(os.path.join(results_dir, "proposed_std_semantic_sim.npy"), std_semantic_sim)
-            np.save(os.path.join(results_dir, "proposed_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
-            np.save(os.path.join(results_dir, "proposed_std_bleu_1.npy"), std_bleu_1)
-            np.save(os.path.join(results_dir, "proposed_std_bleu.npy"), std_bleu)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_semantic_sim.npy"), std_semantic_sim)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_bleu_1.npy"), std_bleu_1)
+            np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_bleu.npy"), std_bleu)
 
             df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score', "SBERT Semantic Score"])
-            df.to_excel(os.path.join(results_dir, 'proposed_output.xlsx'), index=False)
+            df.to_excel(os.path.join(results_dir, f'{args.mode}_proposed_output.xlsx'), index=False)
