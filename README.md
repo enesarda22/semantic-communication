@@ -55,20 +55,20 @@ python train_semantic_transformer.py \
 --mode sentence \
 --rate 1 \
 --batch-size 512 \
---n-epochs 20 \
+--n-epochs 30 \
 --lr 6e-4 \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \
---channel-block-latent-dim 64 \
+--channel-block-latent-dim 96 \
 --channel-type AWGN \
 --alpha 4 \
 --sig-pow 1 \
 --noise-pow 4e-15 \
 --d-min 1e3 \
---d-max 5e3 \
---gamma-min 0.2 \
---gamma-max 0.8
+--d-max 3e3 \
+--gamma-min 0.1 \
+--gamma-max 0.9
 ```
 
 ```
@@ -99,31 +99,51 @@ python train_src_relay_block.py \
 torchrun --standalone --nproc_per_node=4 train_end_to_end.py \
 --data-fp ~/data \
 --checkpoint-path ~/data/checkpoints/ \
---semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer-with-channel/semantic-transformer/semantic_transformer_39.pt \
+--semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer-with-channel/semantic-transformer/semantic_transformer_30.pt \
 --mode sentence \
---rate 5 \
---batch-size 512 \
---n-epochs 20 \
---eval-iter 100 \
+--rate 1 \
+--batch-size 1024 \
+--n-epochs 15 \
+--eval-iter 400 \
 --lr 1e-3 \
 --n-blocks 6 \
 --n-heads 6 \
 --channel-block-input-dim 384 \
---channel-block-latent-dim 64 \
+--channel-block-latent-dim 96 \
 --channel-type AWGN \
 --alpha 4 \
 --sig-pow 1 \
 --noise-pow 4e-15 \
---d-min 2e3 \
---d-max 7e3 \
---gamma-min 0.2 \
---gamma-max 0.8
+--d-min 1e3 \
+--d-max 3e3 \
+--gamma-min 0.1 \
+--gamma-max 0.9
 ```
 
 ```
 python baseline_train_source_relay.py \
 --data-fp ~/data \
 --checkpoint-path ~/data/checkpoints/ \
+--batch-size 512 \
+--n-epochs 30 \
+--lr 5e-4 \
+--channel-block-input-dim 384 \
+--channel-block-latent-dim 4 \
+--channel-type AWGN \
+--alpha 4 \
+--sig-pow 1 \
+--noise-pow 4e-15 \
+--d-min 1e3 \
+--d-max 3e3 \
+--gamma-min 0.1 \
+--gamma-max 0.9
+```
+
+```
+python baseline_train_entire_network.py \
+--data-fp ~/data \
+--checkpoint-path ~/data/checkpoints/ \
+--baseline-tx-relay-path ~/data/checkpoints/baseline-tx-relay/baseline_tx_relay_24.pt \
 --batch-size 512 \
 --n-epochs 15 \
 --lr 5e-4 \
@@ -134,9 +154,9 @@ python baseline_train_source_relay.py \
 --sig-pow 1 \
 --noise-pow 4e-15 \
 --d-min 1e3 \
---d-max 5e3 \
---gamma-min 0.2 \
---gamma-max 0.8
+--d-max 3e3 \
+--gamma-min 0.1 \
+--gamma-max 0.9
 ```
 
 
