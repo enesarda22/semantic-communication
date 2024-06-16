@@ -165,23 +165,50 @@ def shift_inputs(xb, attention_mask, mode, rate=None):
     return idx, targets, enc_padding_mask, is_causal
 
 
-def plotter(x_axis, xlabel, ylabel, title, separation_conventional=None, SPF=None, SLF=None, sentence_decode=None,
-            sentence_predict=None, AE_baseline=None, save=True, show=False):
-    plt.style.use(['science', 'ieee', 'no-latex'])
-    plt.figure(figsize=(5, 3))
+def plotter(
+    x_axis,
+    xlabel,
+    ylabel,
+    title,
+    separation_conventional=None,
+    SPF=None,
+    SLF=None,
+    sentence_decode=None,
+    sentence_predict=None,
+    AE_baseline=None,
+    save=True,
+    show=False,
+):
+    plt.style.use(["science", "ieee", "no-latex"])
+    plt.figure(figsize=(3.2, 2.6))
 
+    lw = 1.3
     if not np.all(separation_conventional == 0):
-        plt.plot(x_axis, separation_conventional, label="Conv. Baseline")
+        plt.plot(x_axis, separation_conventional, label="Conv. Baseline", linewidth=lw)
     if not np.all(SPF == 0):
-        plt.plot(x_axis, SPF, label="SPF")
+        plt.plot(x_axis, SPF, label="SPF", linewidth=lw)
     if not np.all(SLF == 0):
-        plt.plot(x_axis, SLF, label="SLF")
+        plt.plot(x_axis, SLF, label="SLF", linewidth=lw)
     if not np.all(AE_baseline == 0):
-        plt.plot(x_axis, AE_baseline, label="AE Baseline")
+        plt.plot(x_axis, AE_baseline, label="AE Baseline", linewidth=lw)
     if not np.all(sentence_decode == 0):
-        plt.plot(x_axis, sentence_decode, label="Sen. DF", color="c", linestyle=(0, (5, 1, 1, 1, 1, 1)))
+        plt.plot(
+            x_axis,
+            sentence_decode,
+            label="Sen. DF",
+            color="c",
+            linestyle=(0, (5, 1, 1, 1, 1, 1)),
+            linewidth=lw,
+        )
     if not np.all(sentence_predict == 0):
-        plt.plot(x_axis, sentence_predict, label="Sen. PF", color="m", linestyle=(0, (3, 1, 1, 5, 1, 1)))
+        plt.plot(
+            x_axis,
+            sentence_predict,
+            label="Sen. PF",
+            color="m",
+            linestyle=(0, (3, 1, 1, 5, 1, 1)),
+            linewidth=lw,
+        )
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -189,14 +216,27 @@ def plotter(x_axis, xlabel, ylabel, title, separation_conventional=None, SPF=Non
     plt.grid(lw=0.2)
     plt.legend()
     plt.title(title)
+    plt.tight_layout()
+
     if save:
-        plt.savefig(f'Plots/{title}.png', dpi=900)
+        plt.savefig(f"Plots/{title}.png", dpi=900)
     if show:
         plt.show()
 
 
-def plot(d_sd_list, y_label, gamma_list, separation_conventional=None, SPF=None, SLF=None, sentence_decode=None,
-         sentence_predict=None, AE_baseline=None, save=True, show=False):
+def plot(
+    d_sd_list,
+    y_label,
+    gamma_list,
+    separation_conventional=None,
+    SPF=None,
+    SLF=None,
+    sentence_decode=None,
+    sentence_predict=None,
+    AE_baseline=None,
+    save=True,
+    show=False,
+):
 
     if separation_conventional is None:
         separation_conventional = np.zeros((len(d_sd_list), len(gamma_list)))
@@ -211,16 +251,36 @@ def plot(d_sd_list, y_label, gamma_list, separation_conventional=None, SPF=None,
     if AE_baseline is None:
         AE_baseline = np.zeros((len(d_sd_list), len(gamma_list)))
 
-    # butun distance elr icin sr
+    # for all distances
     for index, d_sd in enumerate(d_sd_list):
-        plotter(x_axis=np.array(gamma_list) * d_sd, separation_conventional=separation_conventional[index, :],
-                SPF=SPF[index, :], SLF=SLF[index, :], sentence_decode=sentence_decode[index, :],
-                sentence_predict=sentence_predict[index, :], AE_baseline=AE_baseline[index, :], save=save,
-                xlabel="$d_{sr}$", ylabel=y_label, title=f"$d_s$$_r$ v. {y_label} for $d_s$$_d$={d_sd}", show=show)
+        plotter(
+            x_axis=np.array(gamma_list) * d_sd,
+            separation_conventional=separation_conventional[index, :],
+            SPF=SPF[index, :],
+            SLF=SLF[index, :],
+            sentence_decode=sentence_decode[index, :],
+            sentence_predict=sentence_predict[index, :],
+            AE_baseline=AE_baseline[index, :],
+            save=save,
+            xlabel="$d_{sr}$ (m)",
+            ylabel=y_label,
+            title=f"$d_{{sr}}$ v. {y_label} for $d_{{sd}}={d_sd}$m",
+            show=show,
+        )
 
     mid_index = gamma_list.index(0.5)
 
-    plotter(x_axis=d_sd_list, separation_conventional=separation_conventional[:, mid_index], SPF = SPF[:, mid_index], SLF=SLF[:, mid_index], sentence_decode=sentence_decode[:, mid_index], sentence_predict=sentence_predict[:, mid_index], AE_baseline=AE_baseline[:, mid_index], save=save,
-    xlabel="$d_{sd}$", ylabel=y_label, title=f" $d_s$$_d$ v. {y_label} for $d_s$$_r$=0.5 $d_s$$_d$", show=show)
-
-
+    plotter(
+        x_axis=d_sd_list,
+        separation_conventional=separation_conventional[:, mid_index],
+        SPF=SPF[:, mid_index],
+        SLF=SLF[:, mid_index],
+        sentence_decode=sentence_decode[:, mid_index],
+        sentence_predict=sentence_predict[:, mid_index],
+        AE_baseline=AE_baseline[:, mid_index],
+        save=save,
+        xlabel="$d_{sr}$ (m)",
+        ylabel=y_label,
+        title=f" $d_{{sd}}$ v. {y_label} for $d_{{sr}}=0.5d_{{sd}}$",
+        show=show,
+    )
