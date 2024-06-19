@@ -19,7 +19,13 @@ class Tx_Relay(nn.Module):
     def forward(self, x, attention_mask, d_sr):
         embeddings = self.embedding_layer(x)
         ch_input = self.tx_encoder(embeddings)
-        ch_output = self.channel(ch_input, d_sr)
+
+        if self.channel is not None:
+            ch_output = self.channel(ch_input, d_sr)
+        else:
+            gain = torch.sqrt(0.5 / torch.var(ch_input, dim=-1))
+            ch_output = ch_input * gain[:, :, None]
+
         x_hat = self.linear(self.relay_decoder(ch_output))
 
         if self.entire_network_train == 0:
@@ -28,9 +34,7 @@ class Tx_Relay(nn.Module):
             grnd_x = x.reshape(B * T)
             attention_mask = attention_mask.flatten() == 1
 
-            loss = F.cross_entropy(
-                logits[attention_mask, :], grnd_x[attention_mask]
-            )
+            loss = F.cross_entropy(logits[attention_mask, :], grnd_x[attention_mask])
 
             return x_hat, ch_input, loss
 
@@ -39,8 +43,9 @@ class Tx_Relay(nn.Module):
 
 
 class Tx_Relay_Rx(nn.Module):
-    def __init__(self, nin, n_emb, n_latent, channel: Channel,
-                 tx_relay_model: Tx_Relay):
+    def __init__(
+        self, nin, n_emb, n_latent, channel: Channel, tx_relay_model: Tx_Relay
+    ):
         super(Tx_Relay_Rx, self).__init__()
 
         self.tx_relay_model = tx_relay_model
@@ -74,7 +79,5 @@ class Tx_Relay_Rx(nn.Module):
         grnd_x = x.reshape(B * T)
         attention_mask = attention_mask.flatten() == 1
 
-        loss = F.cross_entropy(
-            logits[attention_mask, :], grnd_x[attention_mask]
-        )
+        loss = F.cross_entropy(logits[attention_mask, :], grnd_x[attention_mask])
         return x_hat, loss
