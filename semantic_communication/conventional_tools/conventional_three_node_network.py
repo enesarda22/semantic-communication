@@ -184,10 +184,10 @@ class conventional_three_node_network:
         return transition_log_proba
 
     @classmethod
-    def _fit_probabilities(cls, distances, p_transition):
-        params = np.empty((4, 4, 3))
-        for i in range(4):
-            for j in range(4):
+    def _fit_probabilities(cls, distances, p_transition, modulation_order):
+        params = np.empty((modulation_order, modulation_order, 3))
+        for i in range(modulation_order):
+            for j in range(modulation_order):
                 popt, _ = curve_fit(
                     f=cls.logistic,
                     xdata=distances,
