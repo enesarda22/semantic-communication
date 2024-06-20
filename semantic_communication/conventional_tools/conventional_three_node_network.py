@@ -1,22 +1,14 @@
 import numpy as np
 from semantic_communication.conventional_tools.bit_reed_solomon import BitReedSolomon
 from semantic_communication.utils.modulation import modulation
-from semantic_communication.utils.channel import init_channel
+from semantic_communication.conventional_tools.conv_channels import conv_AWGN, conv_Rayleigh
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.conventional_tools.fixed_length_coding import FixedLengthCoding, pad_encoded_sequence
 from scipy.optimize import curve_fit
 from scipy.stats import norm
-import torch
 import os
 from tqdm import tqdm
 from semantic_communication.utils.general import get_device
-
-
-def find_index_or_zero(lst):
-    try:
-        return lst.index(2)
-    except ValueError:
-        return 0
 
 
 class ConventionalTransmitter:
@@ -39,7 +31,7 @@ class ConventionalTransmitter:
             modulated = self.modulation.modulate(source_coded)
             source_extra_padding = 0
 
-        return np.concatenate([modulated[:, 0], modulated[:, 1]]), source_extra_padding, channel_extra_padding
+        return modulated[:, 0], modulated[:, 1], source_extra_padding, channel_extra_padding
 
 
 class ConventionalReceiver:
@@ -78,11 +70,19 @@ class conventional_three_node_network:
             self.modulation_order = 512
 
         else:
-            self.modulation_block = modulation(4)
+            self.modulation_block = modulation(256)
             self.channel_coding = None
-            self.modulation_order = 4
+            self.modulation_order = 256
 
-        self.channel = init_channel(channel_type, sig_pow, alpha, noise_pow)
+        print(f"Modulation order: {self.modulation_order} || Channel coding: {channel_coding}")
+
+        if channel_type == "AWGN":
+            self.channel = conv_AWGN(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow)
+        elif channel_type == "Rayleigh":
+            self.channel = conv_Rayleigh(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow)
+        else:
+            raise ValueError("Invalid channel type.")
+
         self.source_transmitter = ConventionalTransmitter(source_coding=self.source_coding, modulation_block=self.modulation_block, channel_coding=self.channel_coding)
         self.relay_receiver = ConventionalReceiver(source_coding=self.source_coding, modulation_block=self.modulation_block, channel_coding=self.channel_coding)
         self.relay_transmitter = ConventionalTransmitter(source_coding=self.source_coding, modulation_block=self.modulation_block, channel_coding=self.channel_coding)
@@ -103,27 +103,20 @@ class conventional_three_node_network:
         )
 
     def __call__(self, x, d_sd, d_sr, d_rd):
-        s_out, s_s_padding, s_ch_padding = self.source_transmitter(x)
-
-        r_in = self.channel(torch.tensor(s_out, device=self.device), d_sr).cpu().detach().numpy()
-        r_in_re, r_in_im = np.split(r_in, 2, axis=-1)
+        s_out_re, s_out_im, s_s_padding, s_ch_padding = self.source_transmitter(x)
+        r_in_re, r_in_im = self.channel(s_out_re, s_out_im, d_sr)
         r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
 
-        r_out, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
-        dr_in = self.channel(torch.tensor(r_out, device=self.device), d_rd).cpu().detach().numpy()
+        r_out_re, r_out_im, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
+        dr_in_re, dr_in_im = self.channel(r_out_re, r_out_im, d_rd)
+        ds_in_re, ds_in_im = self.channel(s_out_re, s_out_im, d_sd)
 
-        ds_in = self.channel(torch.tensor(s_out, device=self.device), d_sd).cpu().detach().numpy()
-
-        d_in = self.ml_decision(ds_in, dr_in, d_sd, d_sr, d_rd)
+        d_in = self.ml_decision(ds_in_re, ds_in_im, dr_in_re, dr_in_im, d_sd, d_sr, d_rd)
         d_in_re, d_in_im = np.split(d_in, 2, axis=-1)
         return self.destination_receiver(d_in_re, d_in_im, s_s_padding, s_ch_padding)
 
-    def ml_decision(self, ds_in, dr_in, d_sd, d_sr, d_rd):
+    def ml_decision(self, ds_in_real, ds_in_imag, dr_in_real, dr_in_imag, d_sd, d_sr, d_rd):
         relay_transition_log_prob = self.get_relay_transition_log_prob(d_sr)
-
-        ds_in_real, ds_in_imag = np.split(ds_in, 2, axis=-1)
-        dr_in_real, dr_in_imag = np.split(dr_in, 2, axis=-1)
-
         log_likelihoods = np.empty((ds_in_real.shape[0], self.modulation_order))
         modulation_codebook = self.modulation_block.get_codebook()
         for i, s_code in enumerate(modulation_codebook):
@@ -204,34 +197,33 @@ class conventional_three_node_network:
         p_transitions = []
         modulation_codebook = self.modulation_block.get_codebook()
         for d in d_grid:
+            print(f"Iteration for d: {d}")
             p_transition = np.zeros((self.modulation_order, self.modulation_order))
             i = 0
             for b in tqdm(self.data_handler.train_dataloader):
-                b_input_ids = b[0]
-                b_input_ids = self.data_handler.label_encoder.transform(b_input_ids)
+                mask = (b[0] != 0) & (b[0] != 101) & (b[0] != 102)
+                b_input_ids = b[0].masked_select(mask)
+                b_input_ids = self.data_handler.label_encoder.transform(b_input_ids).cpu().detach().numpy()
 
-                for b_input_id in b_input_ids:
-                    source_out, s_s_padding, s_ch_padding = self.source_transmitter(b_input_id)
-                    ch_out = self.channel(torch.tensor(source_out, device=self.device), d).cpu().detach().numpy()
-                    r_in_re, r_in_im = np.split(ch_out, 2, axis=-1)
-                    r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
+                source_out_re, source_out_im, s_s_padding, s_ch_padding = self.source_transmitter(b_input_ids)
 
-                    r_out, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
-                    real_s, imag_s = np.split(source_out, 2, axis=-1)
-                    modulated_s = real_s + 1j * imag_s
-                    real_r, imag_r = np.split(r_out, 2, axis=-1)
-                    modulated_r = real_r + 1j * imag_r
+                r_in_re, r_in_im = self.channel(source_out_re, source_out_im, d)
+                r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
 
-                    for k, code_s in enumerate(modulation_codebook):
-                        temp_modulated_r = modulated_r[modulated_s == code_s]
-                        for l, code_r in enumerate(modulation_codebook):
-                            p_transition[k, l] += np.sum(temp_modulated_r == code_r)
+                r_out_re, r_out_im, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
+                modulated_s = source_out_re + 1j * source_out_im
+                modulated_r = r_out_re + 1j * r_out_im
 
-                    i += 1
+                for k, code_s in enumerate(modulation_codebook):
+                    temp_modulated_r = modulated_r[modulated_s == code_s]
+                    for l, code_r in enumerate(modulation_codebook):
+                        p_transition[k, l] += np.sum(temp_modulated_r == code_r)
+
+                i += 1
                 if i >= n_train:
                     break
-            p_transition = p_transition / np.sum(p_transition, axis=1)
+            p_transition = p_transition / p_transition.sum(axis=1, keepdims=True)
             p_transitions.append(p_transition)
 
-        np.save(os.path.join(self.data_fp, "distances"), d_grid)
-        np.save(os.path.join(self.data_fp, "p_transition"), np.concatenate(p_transitions))
+        np.save(os.path.join(self.data_fp, "distances.npy"), d_grid)
+        np.save(os.path.join(self.data_fp, "p_transition.npy"), np.concatenate(p_transitions))

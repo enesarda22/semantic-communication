@@ -1,25 +1,36 @@
 import numpy as np
+from abc import ABC
 
 
-class AWGN:
-    def __init__(self, signal_power_constraint=1.0):
+class conv_channel(ABC):
+    def __init__(
+        self,
+        signal_power_constraint: float,
+        alpha: float,
+        noise_pow: float,
+    ):
         self.signal_power_constraint = signal_power_constraint
+        self.alpha = alpha
+        self.noise_pow = noise_pow
 
-    def __call__(self, x_re, x_im, SNR):
-        linear_SNR = np.power(10, SNR / 10)
-        noise_var = self.signal_power_constraint / linear_SNR
+
+class conv_AWGN(conv_channel):
+    def __init__(self, signal_power_constraint, alpha, noise_pow):
+        super().__init__(signal_power_constraint, alpha, noise_pow)
+
+    def __call__(self, x_re, x_im, d):
+        noise_var = self.noise_pow * (d**self.alpha)
         noise_re, noise_im = np.random.normal(loc=0.0, scale=np.sqrt(noise_var / 2), size=(2, len(x_re)))
 
         return x_re + noise_re, x_im + noise_im
 
 
-class Rayleigh:
-    def __init__(self, signal_power_constraint=1.0):
-        self.signal_power_constraint = signal_power_constraint
+class conv_Rayleigh(conv_channel):
+    def __init__(self, signal_power_constraint, alpha, noise_pow):
+        super().__init__(signal_power_constraint, alpha, noise_pow)
 
-    def __call__(self, x_re, x_im, SNR):
-        linear_SNR = np.power(10, SNR / 10)
-        noise_var = self.signal_power_constraint / linear_SNR
+    def __call__(self, x_re, x_im, d):
+        noise_var = self.noise_pow * (d**self.alpha)
         noise_re, noise_im = np.random.normal(loc=0.0, scale=np.sqrt(noise_var/2), size=(2, len(x_re)))
 
         h_re, h_im = np.random.normal(loc=0.0, scale=np.sqrt(1/2), size=2)
@@ -33,4 +44,8 @@ class Rayleigh:
 
         y = h * processed_complex + complex_noise
         return np.ascontiguousarray(y.real), np.ascontiguousarray(y.imag)
+
+
+
+
 
