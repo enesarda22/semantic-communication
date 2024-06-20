@@ -65,7 +65,7 @@ if __name__ == "__main__":
                                                                       , channel_type=args.channel_type, sig_pow=args.sig_pow,
                                                                       alpha=args.alpha, noise_pow=args.noise_pow,
                                                                       d_grid=args.d_grid, train_transition=True,
-                                                                      n_train=50, data_fp="Data")
+                                                                      n_train=5, data_fp="Data")
 
     n_d = len(args.d_list)
     n_gamma = len(args.gamma_list)

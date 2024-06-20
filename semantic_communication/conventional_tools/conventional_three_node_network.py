@@ -97,7 +97,7 @@ class conventional_three_node_network:
         p_transition = p_transition.reshape(-1, self.modulation_order, self.modulation_order)
 
         self.logistic_params = self._fit_probabilities(
-            distances=d_grid,
+            distances=np.array(d_grid) / 1000,
             p_transition=p_transition,
             modulation_order=self.modulation_order
         )
@@ -111,8 +111,7 @@ class conventional_three_node_network:
         dr_in_re, dr_in_im = self.channel(r_out_re, r_out_im, d_rd)
         ds_in_re, ds_in_im = self.channel(s_out_re, s_out_im, d_sd)
 
-        d_in = self.ml_decision(ds_in_re, ds_in_im, dr_in_re, dr_in_im, d_sd, d_sr, d_rd)
-        d_in_re, d_in_im = np.split(d_in, 2, axis=-1)
+        d_in_re, d_in_im = self.ml_decision(ds_in_re, ds_in_im, dr_in_re, dr_in_im, d_sd, d_sr, d_rd)
         return self.destination_receiver(d_in_re, d_in_im, s_s_padding, s_ch_padding)
 
     def ml_decision(self, ds_in_real, ds_in_imag, dr_in_real, dr_in_imag, d_sd, d_sr, d_rd):
@@ -143,7 +142,7 @@ class conventional_three_node_network:
 
         max_indices = np.argmax(log_likelihoods, axis=1)
         ml_codes = modulation_codebook[max_indices]
-        return np.concatenate([ml_codes.real, ml_codes.imag])
+        return np.ascontiguousarray(ml_codes.real), np.ascontiguousarray(ml_codes.imag)
 
     def log_likelihood(self, x, mean, d):
         return norm.logpdf(
@@ -157,10 +156,11 @@ class conventional_three_node_network:
         )
 
     def get_relay_transition_log_prob(self, d_sr):
+        d_sr = d_sr / 1000
         transition_log_proba = np.empty((self.modulation_order, self.modulation_order))
         for i in range(self.modulation_order):
             for j in range(self.modulation_order):
-                transition_log_proba[i, j] = self.log_logistic(
+                transition_log_proba[i, j] = self.logistic(
                     x=d_sr,
                     L=self.logistic_params[i, j, 0],
                     k=self.logistic_params[i, j, 1],
@@ -178,7 +178,7 @@ class conventional_three_node_network:
                     f=cls.logistic,
                     xdata=distances,
                     ydata=p_transition[:, i, j],
-                    p0=[0.25, 1, 3500],
+                    p0=[1.0, 1.0, .75],
                     method="trf",
                 )
                 params[i, j] = popt
@@ -188,10 +188,6 @@ class conventional_three_node_network:
     @staticmethod
     def logistic(x, L, k, x0):
         return L / (1 + np.exp(-k * (x - x0)))
-
-    @staticmethod
-    def log_logistic(x, L, k, x0):
-        return np.log(L) - np.log1p(np.exp(-k * (x - x0)))
 
     def train_probability(self, n_train, d_grid):
         p_transitions = []
@@ -222,6 +218,7 @@ class conventional_three_node_network:
                 i += 1
                 if i >= n_train:
                     break
+
             p_transition = p_transition / p_transition.sum(axis=1, keepdims=True)
             p_transitions.append(p_transition)
 
