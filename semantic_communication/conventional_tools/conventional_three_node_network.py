@@ -12,6 +12,13 @@ from tqdm import tqdm
 from semantic_communication.utils.general import get_device
 
 
+def find_index_or_zero(lst):
+    try:
+        return lst.index(2)
+    except ValueError:
+        return 0
+
+
 class ConventionalTransmitter:
     def __init__(self, source_coding, modulation_block: modulation, channel_coding=None):
         self.source_coding = source_coding
@@ -43,6 +50,7 @@ class ConventionalReceiver:
         self.m = 0
         if not channel_coding is None:
             self.m = channel_coding.m
+
     def __call__(self, ch_out_re, ch_out_im, src_padding, ch_padding):
         demodulated = self.modulation.demodulate(ch_out_re, ch_out_im)
         if not ch_padding == 0:
@@ -70,9 +78,9 @@ class conventional_three_node_network:
             self.modulation_order = 512
 
         else:
-            self.modulation_block = modulation(256)
+            self.modulation_block = modulation(4)
             self.channel_coding = None
-            self.modulation_order = 256
+            self.modulation_order = 4
 
         self.channel = init_channel(channel_type, sig_pow, alpha, noise_pow)
         self.source_transmitter = ConventionalTransmitter(source_coding=self.source_coding, modulation_block=self.modulation_block, channel_coding=self.channel_coding)
@@ -91,22 +99,20 @@ class conventional_three_node_network:
         self.logistic_params = self._fit_probabilities(
             distances=d_grid,
             p_transition=p_transition,
+            modulation_order=self.modulation_order
         )
 
     def __call__(self, x, d_sd, d_sr, d_rd):
         s_out, s_s_padding, s_ch_padding = self.source_transmitter(x)
 
-        r_in = self.channel(torch.tensor(s_out), d_sr).cpu().detach().numpy()
+        r_in = self.channel(torch.tensor(s_out, device=self.device), d_sr).cpu().detach().numpy()
         r_in_re, r_in_im = np.split(r_in, 2, axis=-1)
         r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
 
-        if len(r_decoded) != 0:
-            r_out, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
-            dr_in = self.channel(torch.tensor(r_out), d_rd).cpu().detach().numpy()
-        else:
-            dr_in = np.array([])
+        r_out, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
+        dr_in = self.channel(torch.tensor(r_out, device=self.device), d_rd).cpu().detach().numpy()
 
-        ds_in = self.channel(torch.tensor(s_out), d_sd).cpu().detach().numpy()
+        ds_in = self.channel(torch.tensor(s_out, device=self.device), d_sd).cpu().detach().numpy()
 
         d_in = self.ml_decision(ds_in, dr_in, d_sd, d_sr, d_rd)
         d_in_re, d_in_im = np.split(d_in, 2, axis=-1)
@@ -114,16 +120,9 @@ class conventional_three_node_network:
 
     def ml_decision(self, ds_in, dr_in, d_sd, d_sr, d_rd):
         relay_transition_log_prob = self.get_relay_transition_log_prob(d_sr)
-        dr_in = dr_in[: ds_in.shape[0]]
 
         ds_in_real, ds_in_imag = np.split(ds_in, 2, axis=-1)
         dr_in_real, dr_in_imag = np.split(dr_in, 2, axis=-1)
-
-        ds_in_real_rest = ds_in_real[dr_in_real.shape[0]:]
-        ds_in_imag_rest = ds_in_imag[dr_in_real.shape[0]:]
-
-        ds_in_real = ds_in_real[: dr_in_real.shape[0]]
-        ds_in_imag = ds_in_imag[: dr_in_real.shape[0]]
 
         log_likelihoods = np.empty((ds_in_real.shape[0], self.modulation_order))
         modulation_codebook = self.modulation_block.get_codebook()
@@ -151,13 +150,7 @@ class conventional_three_node_network:
 
         max_indices = np.argmax(log_likelihoods, axis=1)
         ml_codes = modulation_codebook[max_indices]
-
-        ds_in_rest_symbols = self.modulation_block.demodulate(ds_in_real_rest, ds_in_imag_rest)
-        ds_in_rest_codes = self.modulation_block.modulate(ds_in_rest_symbols)
-
-        return np.concatenate(
-            [ml_codes.real, ds_in_rest_codes[:, 0], ml_codes.imag, ds_in_rest_codes[:, 1]]
-        )
+        return np.concatenate([ml_codes.real, ml_codes.imag])
 
     def log_likelihood(self, x, mean, d):
         return norm.logpdf(
@@ -171,9 +164,9 @@ class conventional_three_node_network:
         )
 
     def get_relay_transition_log_prob(self, d_sr):
-        transition_log_proba = np.empty((4, 4))
-        for i in range(4):
-            for j in range(4):
+        transition_log_proba = np.empty((self.modulation_order, self.modulation_order))
+        for i in range(self.modulation_order):
+            for j in range(self.modulation_order):
                 transition_log_proba[i, j] = self.log_logistic(
                     x=d_sr,
                     L=self.logistic_params[i, j, 0],
@@ -219,12 +212,9 @@ class conventional_three_node_network:
 
                 for b_input_id in b_input_ids:
                     source_out, s_s_padding, s_ch_padding = self.source_transmitter(b_input_id)
-                    ch_out = self.channel(torch.tensor(source_out, device=self.device), d)
-                    r_in_re, r_in_im = np.split(ch_out.cpu().numpy(), 2, axis=-1)
+                    ch_out = self.channel(torch.tensor(source_out, device=self.device), d).cpu().detach().numpy()
+                    r_in_re, r_in_im = np.split(ch_out, 2, axis=-1)
                     r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
-
-                    if len(r_decoded) == 0:
-                        continue
 
                     r_out, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
                     real_s, imag_s = np.split(source_out, 2, axis=-1)
@@ -238,8 +228,8 @@ class conventional_three_node_network:
                             p_transition[k, l] += np.sum(temp_modulated_r == code_r)
 
                     i += 1
-                    if i >= n_train:
-                        break
+                if i >= n_train:
+                    break
             p_transition = p_transition / np.sum(p_transition, axis=1)
             p_transitions.append(p_transition)
 

@@ -12,7 +12,7 @@ from semantic_communication.utils.general import (
     add_data_args,
     load_model,
 )
-from semantic_communication.conventional_tools.conventional_three_node_network import conventional_three_node_network
+from semantic_communication.conventional_tools.conventional_three_node_network import conventional_three_node_network, find_index_or_zero
 from semantic_communication.data_processing.data_handler import DataHandler
 import torch
 import argparse
@@ -64,13 +64,13 @@ if __name__ == "__main__":
         rate=args.rate,
     ).to(device)
 
-    d_grid = np.concatenate([[2e3], np.linspace(3e3, 4e3, 34), [5e3]])
+    d_grid = np.array([1000, 1500, 2000, 2500])
 
     conventional_three_node_network = conventional_three_node_network(data_handler=data_handler, channel_coding=False
                                                                       , channel_type=args.channel_type, sig_pow=args.sig_pow,
                                                                       alpha=args.alpha, noise_pow=args.noise_pow,
-                                                                      d_grid=d_grid, train_transition=True,
-                                                                      n_train=50, data_fp="Data")
+                                                                      d_grid=d_grid, train_transition=False,
+                                                                      n_train=500, data_fp="Data")
 
     n_d = len(args.d_list)
     n_gamma = len(args.gamma_list)
@@ -105,26 +105,22 @@ if __name__ == "__main__":
                 encoder_idx = b[0]
                 encoder_idx = data_handler.label_encoder.transform(encoder_idx)
                 for cur_encoder_idx in encoder_idx:
-                    source_decoded = conventional_three_node_network(encoder_idx, d_sd, d_sr, d_rd)
+                    source_decoded = conventional_three_node_network(cur_encoder_idx, d_sd, d_sr, d_rd)
 
-                    sep_indices = torch.argmax((source_decoded == 2).long(), dim=1)
-                    k = sep_indices[0]
-                    if k == 0:  # no [SEP] predicted
-                        source_decoded = source_decoded
-                    else:
+                    k = find_index_or_zero(source_decoded)
+                    if not k == 0:
                         source_decoded = source_decoded[: k + 1]
-
                     token_ids = semantic_encoder.label_encoder.inverse_transform(source_decoded)
 
-                    predicted_sentence = semantic_encoder.get_tokens(
+                    predicted_sentence = ' '.join(semantic_encoder.get_tokens(
                         token_ids=token_ids,
                         skip_special_tokens=True,
-                    )
+                    ))
 
-                    original_sentence = semantic_encoder.get_tokens(
+                    original_sentence = ' '.join(semantic_encoder.get_tokens(
                         ids=cur_encoder_idx,
                         skip_special_tokens=True,
-                    )
+                    ))
 
                     sim_score = semantic_similarity_score(original_sentence, predicted_sentence, client)
                     bleu_1_score = sentence_bleu(
