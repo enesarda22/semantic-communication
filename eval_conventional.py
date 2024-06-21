@@ -64,7 +64,7 @@ if __name__ == "__main__":
     conventional_three_node_network = conventional_three_node_network(data_handler=data_handler, channel_coding=False
                                                                       , channel_type=args.channel_type, sig_pow=args.sig_pow,
                                                                       alpha=args.alpha, noise_pow=args.noise_pow,
-                                                                      d_grid=args.d_grid, train_transition=True,
+                                                                      d_grid=args.d_grid, train_transition=False,
                                                                       n_train=5, data_fp="Data")
 
     n_d = len(args.d_list)
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             print(f"Simulating for distance: {d_sd}  - Gamma: {gamma}")
 
             sbert_semantic_sim_scores = []
-            cosine_scores = []
+            gpt_scores = []
             bleu1_scores = []
             bleu_scores = []
 
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                         original_sentence, predicted_sentence, sbert_model=sbert_eval_model
                     )
 
-                    cosine_scores.append(sim_score)
+                    gpt_scores.append(sim_score)
                     bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
                     sbert_semantic_sim_scores.append(sbert_sim_score)
@@ -154,9 +154,9 @@ if __name__ == "__main__":
                     break
 
             n_test_samples = len(bleu1_scores)
-            cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
+            gpt_scores = [x for x in gpt_scores if not np.isnan(x)]
 
-            mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
+            mean_semantic_sim[distance_index, gamma_index] = np.mean(gpt_scores)
             mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(
                 sbert_semantic_sim_scores
             )
@@ -164,7 +164,7 @@ if __name__ == "__main__":
             mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
 
             std_semantic_sim[distance_index, gamma_index] = np.std(
-                cosine_scores, ddof=1
+                gpt_scores, ddof=1
             ) / np.sqrt(n_test_samples)
             std_sbert_semantic_sim[distance_index, gamma_index] = np.std(
                 sbert_semantic_sim_scores, ddof=1

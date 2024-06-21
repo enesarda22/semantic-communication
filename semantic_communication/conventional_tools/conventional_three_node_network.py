@@ -9,6 +9,7 @@ from scipy.stats import norm
 import os
 from tqdm import tqdm
 from semantic_communication.utils.general import get_device
+from lmfit import Model
 
 
 class ConventionalTransmitter:
@@ -93,14 +94,24 @@ class conventional_three_node_network:
         if train_transition:
             self.train_probability(n_train, d_grid)
 
-        p_transition = np.load(os.path.join(data_fp, "p_transition.npy"))
-        p_transition = p_transition.reshape(-1, self.modulation_order, self.modulation_order)
+            p_transition = np.load(os.path.join(data_fp, "p_transition.npy"))
+            p_transition = p_transition.reshape(-1, self.modulation_order, self.modulation_order)
 
-        self.logistic_params = self._fit_probabilities(
-            distances=np.array(d_grid) / 1000,
-            p_transition=p_transition,
-            modulation_order=self.modulation_order
-        )
+            self.logistic_params = self._fit_probabilities(
+                distances=np.array(d_grid) / 1000,
+                p_transition=p_transition,
+                modulation_order=self.modulation_order
+            )
+
+            np.save(os.path.join(self.data_fp, "conventional_fnc_fit_params.npy"), self.logistic_params)
+
+        else:
+            saved_d_grid = np.load(os.path.join(data_fp, "distances.npy"))
+
+            if not all(saved_d_grid == np.array(d_grid)):
+                raise ValueError("Saved params are not for given d grid.")
+
+            self.logistic_params = np.load(os.path.join(self.data_fp, "conventional_fnc_fit_params.npy"))
 
     def __call__(self, x, d_sd, d_sr, d_rd):
         s_out_re, s_out_im, s_s_padding, s_ch_padding = self.source_transmitter(x)
@@ -174,14 +185,12 @@ class conventional_three_node_network:
         params = np.empty((modulation_order, modulation_order, 3))
         for i in range(modulation_order):
             for j in range(modulation_order):
-                popt, _ = curve_fit(
-                    f=cls.logistic,
-                    xdata=distances,
-                    ydata=p_transition[:, i, j],
-                    p0=[1.0, 1.0, .75],
-                    method="trf",
-                )
-                params[i, j] = popt
+                ydata = p_transition[:, i, j]
+                logistic_model = Model(cls.logistic)
+                p0 = logistic_model.make_params(L=np.max(ydata), k=1,
+                                                    x0=distances[np.argmin(np.abs(ydata - np.max(ydata) / 2))])
+                result = logistic_model.fit(data=ydata, params=p0, x=distances)
+                params[i, j] = np.array([result.params['L'].value, result.params['k'].value, result.params['x0'].value])
 
         return params
 
