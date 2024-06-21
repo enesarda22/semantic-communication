@@ -249,6 +249,7 @@ class Transceiver(nn.Module):
         return logits, loss
 
     def _relay_forward(self, x_relay, attention_mask=None):
+        self.relay_channel_decoder.eval()
         x_relay = self.relay_channel_decoder(x_relay)
 
         # decode every sentence embedding using beam search
@@ -269,6 +270,8 @@ class Transceiver(nn.Module):
             torch.ones(R, R, device=self.device), -1
         ).T.bool()
         causal_padding_mask = causal_padding_mask.repeat(B, 1)
+
+        self.relay_semantic_decoder.eval()
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
             is_causal=False,
@@ -300,6 +303,7 @@ class Transceiver(nn.Module):
         x_padding_mask = attention_mask[:, 1:] == 0
         is_causal = True
 
+        self.relay_semantic_decoder.eval()
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
             is_causal=is_causal,
@@ -313,7 +317,7 @@ class Transceiver(nn.Module):
         repeat_amounts = (~x_padding_mask).sum(dim=1)
 
         relay_attention_mask = torch.tril(
-            torch.ones(T, T, device=self.device), diagonal=1
+            torch.ones(T, T, device=self.device, dtype=torch.int64), diagonal=1
         )
         relay_attention_mask = torch.cat(
             [relay_attention_mask[:i, :] for i in repeat_amounts]
@@ -352,11 +356,14 @@ class Transceiver(nn.Module):
         return x_relay
 
     def _source_forward(self, input_ids, messages, attention_mask):
+        self.src_semantic_encoder.eval()
         x_src = self.src_semantic_encoder(
             messages=messages,
             input_ids=input_ids,
             attention_mask=attention_mask,
         )
+
+        self.src_channel_encoder.eval()
         x_src = self.src_channel_encoder(x_src)
         x_src_to_relay, x_src_to_dst = SemanticTransformer.shift_src_output(
             src_out=x_src,

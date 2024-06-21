@@ -1,4 +1,5 @@
 import argparse
+import copy
 import os
 
 import numpy as np
@@ -59,6 +60,7 @@ def main(args):
         world_size=world_size,
     )
 
+    # source - relay transformer
     semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
@@ -96,19 +98,12 @@ def main(args):
         channel=channel,
     ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
-    if args.semantic_transformer_forward_path is None:
-        forward_semantic_transformer = semantic_transformer
-    else:
+
+    forward_semantic_transformer = copy.deepcopy(semantic_transformer)
+    if args.semantic_transformer_forward_path is not None:
         checkpoint = torch.load(
             args.semantic_transformer_forward_path, map_location=device
         )
-        forward_semantic_transformer = SemanticTransformer(
-            semantic_encoder=semantic_encoder,
-            semantic_decoder=semantic_decoder,
-            channel_encoder=channel_encoder,
-            channel_decoder=channel_decoder,
-            channel=channel,
-        ).to(device)
         forward_semantic_transformer.load_state_dict(checkpoint["model_state_dict"])
 
     relay_semantic_encoder = SemanticEncoder(
