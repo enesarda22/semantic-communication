@@ -152,12 +152,12 @@ def shift_inputs(xb, attention_mask, mode, rate=None):
     elif mode == "sentence":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
-
-        B = attention_mask.shape[0]
-        device = attention_mask.device
-        enc_padding_mask = torch.arange(rate, device=device).repeat(
-            B, 1
-        ) > torch.randint(high=rate, size=(B, 1), device=device)
+        enc_padding_mask = None
+        # B = attention_mask.shape[0]
+        # device = attention_mask.device
+        # enc_padding_mask = torch.arange(rate, device=device).repeat(
+        #     B, 1
+        # ) > torch.randint(high=rate, size=(B, 1), device=device)
         is_causal = False
     else:
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")

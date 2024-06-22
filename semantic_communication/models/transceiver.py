@@ -233,7 +233,7 @@ class Transceiver(nn.Module):
 
     def _destination_forward(self, x_dst, input_ids, attention_mask):
         x_dst = self.dst_channel_decoder(x_dst)
-        decoder_idx, targets, _, is_causal = shift_inputs(
+        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.relay_semantic_encoder.mode,
@@ -243,7 +243,7 @@ class Transceiver(nn.Module):
             idx=decoder_idx,
             encoder_output=x_dst,
             is_causal=is_causal,
-            enc_padding_mask=None,
+            enc_padding_mask=enc_padding_mask,
             targets=targets,
         )
         return logits, loss
