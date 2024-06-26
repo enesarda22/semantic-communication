@@ -165,6 +165,19 @@ def shift_inputs(xb, attention_mask, mode, rate=None):
     return idx, targets, enc_padding_mask, is_causal
 
 
+def split_string_by_lengths(input_string, lengths):
+    words = input_string.split()
+    sentences = []
+    current_index = 0
+
+    for length in lengths:
+        sentence = words[current_index:current_index + length]
+        sentences.append(' '.join(sentence))
+        current_index += length
+
+    return sentences
+
+
 def plotter(
     x_axis,
     xlabel,

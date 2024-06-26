@@ -1,10 +1,11 @@
 import numpy as np
 from semantic_communication.conventional_tools.bit_reed_solomon import BitReedSolomon
 from semantic_communication.utils.modulation import modulation
-from semantic_communication.conventional_tools.conv_channels import conv_AWGN
+from semantic_communication.conventional_tools.conv_channels import conv_AWGN, conv_Rayleigh
 from scipy.special import erfc
 import math
 import itertools
+
 
 class AWGN:
     def __init__(self, signal_power_constraint=1.0):
@@ -20,7 +21,7 @@ class AWGN:
 
 
 class source_relay_p2p_com:
-    def __init__(self, dic_size, modulation_order, channel_code=False, sig_pow=1.0):
+    def __init__(self, dic_size, modulation_order, alpha, noise_pow, channel_type, channel_code=False, sig_pow=1.0):
         self.len_codewords = 0
         self.codewords = self.init_codewords(dic_size)
         if channel_code:
@@ -29,7 +30,13 @@ class source_relay_p2p_com:
         self.channel_code = channel_code
 
         self.modulator = modulation(modulation_order)
-        self.channel = AWGN()
+        if channel_type == "AWGN":
+            self.channel = conv_AWGN(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow)
+        elif channel_type == "Rayleigh":
+            self.channel = conv_Rayleigh(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow)
+        else:
+            raise ValueError("Invalid channel type.")
+
         self.modulation_order = modulation_order
 
     def init_codewords(self, num_symbols):
@@ -65,7 +72,7 @@ class source_relay_p2p_com:
             print(f"Theoretical: {2 * err_term * (1 - (1 / np.sqrt(order))) / bits_per_symbol}")
             print("-" * 50)
 
-    def communicate(self, token_indices, SNR):
+    def communicate(self, token_indices, d):
         source_coded_bits = np.array(list("".join([self.codewords[i] for i in token_indices]))).astype(int)
 
         if self.channel_code:
@@ -82,7 +89,7 @@ class source_relay_p2p_com:
 
         modulated = self.modulator.modulate(channel_coded_bits)
         ch_in_re, ch_in_im = modulated[:, 0], modulated[:, 1]
-        ch_out_re, ch_out_im = self.channel(ch_in_re, ch_in_im, SNR)
+        ch_out_re, ch_out_im = self.channel(ch_in_re, ch_in_im, d)
         bit_seq_hat = self.modulator.demodulate(ch_out_re, ch_out_im)
         if not padding == 0:
             bit_seq_hat = bit_seq_hat[:-padding]

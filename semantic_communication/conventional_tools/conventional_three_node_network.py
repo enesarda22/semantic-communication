@@ -4,7 +4,6 @@ from semantic_communication.utils.modulation import modulation
 from semantic_communication.conventional_tools.conv_channels import conv_AWGN, conv_Rayleigh
 from semantic_communication.data_processing.data_handler import DataHandler
 from semantic_communication.conventional_tools.fixed_length_coding import FixedLengthCoding, pad_encoded_sequence
-from scipy.optimize import curve_fit
 from scipy.stats import norm
 import os
 from tqdm import tqdm
@@ -75,6 +74,8 @@ class conventional_three_node_network:
             self.channel_coding = None
             self.modulation_order = 256
 
+        self.channel_type = channel_type
+
         print(f"Modulation order: {self.modulation_order} || Channel coding: {channel_coding}")
 
         if channel_type == "AWGN":
@@ -94,7 +95,7 @@ class conventional_three_node_network:
         if train_transition:
             self.train_probability(n_train, d_grid)
 
-            p_transition = np.load(os.path.join(data_fp, "p_transition.npy"))
+            p_transition = np.load(os.path.join(data_fp, f"p_transition_{channel_type}.npy"))
             p_transition = p_transition.reshape(-1, self.modulation_order, self.modulation_order)
 
             self.logistic_params = self._fit_probabilities(
@@ -103,15 +104,15 @@ class conventional_three_node_network:
                 modulation_order=self.modulation_order
             )
 
-            np.save(os.path.join(self.data_fp, "conventional_fnc_fit_params.npy"), self.logistic_params)
+            np.save(os.path.join(self.data_fp, f"conventional_fnc_fit_params_{self.channel_type}.npy"), self.logistic_params)
 
         else:
-            saved_d_grid = np.load(os.path.join(data_fp, "distances.npy"))
+            saved_d_grid = np.load(os.path.join(data_fp, f"distances_{self.channel_type}.npy"))
 
             if not all(saved_d_grid == np.array(d_grid)):
                 raise ValueError("Saved params are not for given d grid.")
 
-            self.logistic_params = np.load(os.path.join(self.data_fp, "conventional_fnc_fit_params.npy"))
+            self.logistic_params = np.load(os.path.join(self.data_fp,  f"conventional_fnc_fit_params_{self.channel_type}.npy"))
 
     def __call__(self, x, d_sd, d_sr, d_rd):
         s_out_re, s_out_im, s_s_padding, s_ch_padding = self.source_transmitter(x)
@@ -171,7 +172,7 @@ class conventional_three_node_network:
         transition_log_proba = np.empty((self.modulation_order, self.modulation_order))
         for i in range(self.modulation_order):
             for j in range(self.modulation_order):
-                transition_log_proba[i, j] = self.logistic(
+                transition_log_proba[i, j] = self.log_logistic(
                     x=d_sr,
                     L=self.logistic_params[i, j, 0],
                     k=self.logistic_params[i, j, 1],
@@ -197,6 +198,10 @@ class conventional_three_node_network:
     @staticmethod
     def logistic(x, L, k, x0):
         return L / (1 + np.exp(-k * (x - x0)))
+
+    @staticmethod
+    def log_logistic(x, L, k, x0):
+        return np.log(L) - np.log1p(np.exp(-k * (x - x0)))
 
     def train_probability(self, n_train, d_grid):
         p_transitions = []
@@ -231,5 +236,5 @@ class conventional_three_node_network:
             p_transition = p_transition / p_transition.sum(axis=1, keepdims=True)
             p_transitions.append(p_transition)
 
-        np.save(os.path.join(self.data_fp, "distances.npy"), d_grid)
-        np.save(os.path.join(self.data_fp, "p_transition.npy"), np.concatenate(p_transitions))
+        np.save(os.path.join(self.data_fp, f"distances_{self.channel_type}.npy"), d_grid)
+        np.save(os.path.join(self.data_fp, f"p_transition_{self.channel_type}.npy"), np.concatenate(p_transitions))
