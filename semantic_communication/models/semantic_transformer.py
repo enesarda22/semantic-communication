@@ -2,6 +2,7 @@ from typing import Optional, List
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 import math
 
@@ -113,8 +114,8 @@ class SemanticTransformer(nn.Module):
 
         if self.channel is None:
             # signal power constraint
-            gain = torch.sqrt(0.5 / torch.var(x, dim=-1))
-            x = x * gain[:, :, None]
+            last_dim = x.shape[-1]
+            x = ((last_dim / 2) ** 0.5) * F.normalize(x, dim=-1, p=2)
 
             x = self._add_noise(x, snr_db)
         else:
