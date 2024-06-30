@@ -129,10 +129,11 @@ if __name__ == "__main__":
             encoder_attention_mask = b[1].to(device)
             encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-            predicted_ids, probs = semantic_transformer.generate(
+            predicted_ids = semantic_transformer.generate(
                 input_ids=encoder_idx,
                 attention_mask=encoder_attention_mask,
                 d=d_sr,
+                greedy=True,
             )
 
             # find the end of sentences
@@ -174,14 +175,18 @@ if __name__ == "__main__":
                     word_tokenize(s2),
                     smoothing_function=smoothing_function,
                 )
-                sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
+                sbert_sim_score = sbert_semantic_similarity_score(
+                    s1, s2, sbert_model=sbert_eval_model
+                )
 
                 cosine_scores.append(sim_score)
                 bleu1_scores.append(bleu_1_score)
                 bleu_scores.append(bleu_score)
                 sbert_semantic_sim_scores.append(sbert_sim_score)
 
-                records.append([d_sr, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
+                records.append(
+                    [d_sr, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score]
+                )
 
             if len(bleu1_scores) >= args.n_test:
                 break
@@ -203,16 +208,28 @@ if __name__ == "__main__":
         std_bleu[distance_index, 0] = np.std(bleu_scores, ddof=1) / np.sqrt(
             n_test_samples
         )
-        std_sbert_semantic_sim[distance_index, 0] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(
-            n_test_samples)
+        std_sbert_semantic_sim[distance_index, 0] = np.std(
+            sbert_semantic_sim_scores, ddof=1
+        ) / np.sqrt(n_test_samples)
 
-        np.save(os.path.join(results_dir, "proposed_mean_semantic_sim.npy"), mean_semantic_sim)
-        np.save(os.path.join(results_dir, "proposed_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
+        np.save(
+            os.path.join(results_dir, "proposed_mean_semantic_sim.npy"),
+            mean_semantic_sim,
+        )
+        np.save(
+            os.path.join(results_dir, "proposed_mean_sbert_semantic_sim.npy"),
+            mean_sbert_semantic_sim,
+        )
         np.save(os.path.join(results_dir, "proposed_mean_bleu_1.npy"), mean_bleu_1)
         np.save(os.path.join(results_dir, "proposed_mean_bleu.npy"), mean_bleu)
 
-        np.save(os.path.join(results_dir, "proposed_std_semantic_sim.npy"), std_semantic_sim)
-        np.save(os.path.join(results_dir, "proposed_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
+        np.save(
+            os.path.join(results_dir, "proposed_std_semantic_sim.npy"), std_semantic_sim
+        )
+        np.save(
+            os.path.join(results_dir, "proposed_std_sbert_semantic_sim.npy"),
+            std_sbert_semantic_sim,
+        )
         np.save(os.path.join(results_dir, "proposed_std_bleu_1.npy"), std_bleu_1)
         np.save(os.path.join(results_dir, "proposed_std_bleu.npy"), std_bleu)
 
@@ -225,7 +242,7 @@ if __name__ == "__main__":
                 "Semantic Similarity Score",
                 "BLEU 1 Gram Score",
                 "BLEU Score",
-                "SBERT Semantic Score"
+                "SBERT Semantic Score",
             ],
         )
         df.to_excel(os.path.join(results_dir, "proposed_output.xlsx"), index=False)

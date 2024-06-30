@@ -148,6 +148,7 @@ class SemanticTransformer(nn.Module):
         snr_db: Optional[float] = None,
         d: Optional[float] = None,
         beam_width=5,
+        greedy=False,
     ):
         x = self.semantic_encoder(
             messages=messages,
@@ -170,40 +171,58 @@ class SemanticTransformer(nn.Module):
         x = self.channel_decoder(x)
 
         if self.mode == "sentence":
-            return self.generate_sentence(x=x, beam_width=beam_width)
+            return self.generate_sentence(x=x, beam_width=beam_width, greedy=greedy)
         else:
             return self.generate_token(
-                x=x, beam_width=beam_width, attention_mask=attention_mask
+                x=x, beam_width=beam_width, attention_mask=attention_mask, greedy=greedy
             )
 
-    def generate_sentence(self, x, beam_width):
+    def generate_sentence(self, x, beam_width, greedy):
         B, R, _ = x.shape
         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
 
         x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
         x_padding_mask = x_padding_mask.repeat(B, 1)
 
-        return self.semantic_decoder.generate(
-            encoder_output=x,
-            is_causal=False,
-            max_length=self.max_length,
-            enc_padding_mask=x_padding_mask,
-            beam_width=beam_width,
-            n_generated_tokens=self.max_length + 1,
-        )
+        if greedy:
+            return self.semantic_decoder.generate_greedy(
+                encoder_output=x,
+                is_causal=False,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                n_generated_tokens=self.max_length + 1,
+            )
+        else:
+            return self.semantic_decoder.generate(
+                encoder_output=x,
+                is_causal=False,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                beam_width=beam_width,
+                n_generated_tokens=self.max_length + 1,
+            )
 
-    def generate_token(self, x, beam_width, attention_mask):
+    def generate_token(self, x, beam_width, attention_mask, greedy):
         x_padding_mask = attention_mask[:, 1:] == 0
         is_causal = True
 
-        return self.semantic_decoder.generate(
-            encoder_output=x,
-            is_causal=is_causal,
-            max_length=self.max_length,
-            enc_padding_mask=x_padding_mask,
-            beam_width=beam_width,
-            n_generated_tokens=self.max_length + 1,
-        )
+        if greedy:
+            return self.semantic_decoder.generate_greedy(
+                encoder_output=x,
+                is_causal=is_causal,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                n_generated_tokens=self.max_length + 1,
+            )
+        else:
+            return self.semantic_decoder.generate(
+                encoder_output=x,
+                is_causal=is_causal,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                beam_width=beam_width,
+                n_generated_tokens=self.max_length + 1,
+            )
 
     @staticmethod
     def _add_noise(signal, snr_db):
