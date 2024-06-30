@@ -9,6 +9,7 @@ from semantic_communication.models.semantic_transformer import SemanticTransform
 from semantic_communication.models.transceiver import (
     ChannelEncoder,
     ChannelDecoder,
+    init_src_relay_transformer_from_transceiver,
 )
 
 from semantic_communication.utils.general import (
@@ -33,6 +34,7 @@ if __name__ == "__main__":
 
     # model args
     parser.add_argument("--semantic-transformer-path", type=str)
+    parser.add_argument("--transceiver-path", type=str)
     parser.add_argument("--API-KEY", type=str)  # API KEY
 
     add_semantic_decoder_args(parser)
@@ -97,7 +99,13 @@ if __name__ == "__main__":
         channel_decoder=channel_decoder,
         channel=channel,
     ).to(device)
-    load_model(semantic_transformer, args.semantic_transformer_path)
+    if args.semantic_transformer_path is not None:
+        load_model(semantic_transformer, args.semantic_transformer_path)
+    elif args.transceiver_path is not None:
+        state_dict = init_src_relay_transformer_from_transceiver(args.transceiver_path)
+        semantic_transformer.load_state_dict(state_dict)
+    else:
+        raise ValueError("no model path is given!")
 
     semantic_transformer.eval()
 

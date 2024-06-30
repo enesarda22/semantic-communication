@@ -304,7 +304,7 @@ class Transceiver(nn.Module):
         is_causal = True
 
         self.relay_semantic_decoder.eval()
-        x_relay, _ = self.relay_semantic_decoder.generate(
+        x_relay, _ = self.relay_semantic_decoder.generate_greedy(
             encoder_output=x_relay,
             is_causal=is_causal,
             max_length=self.max_length,
@@ -379,6 +379,7 @@ class Transceiver(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         d_sd: Optional[float] = None,
         d_sr: Optional[float] = None,
+        greedy: bool = False,
     ):
         # source
         x_src_to_dst, x_src_to_relay = self._source_forward(
@@ -402,22 +403,61 @@ class Transceiver(nn.Module):
         x_dst = self.dst_channel_decoder(x_dst)
 
         if self.src_semantic_encoder.mode == "sentence":
-            return self.dst_semantic_decoder.generate(
-                encoder_output=x_dst,
-                is_causal=False,
-                max_length=self.max_length,
-                enc_padding_mask=None,
-                n_generated_tokens=self.max_length + 1,
-            )
+            if greedy:
+                return self.dst_semantic_decoder.generate_greedy(
+                    encoder_output=x_dst,
+                    is_causal=False,
+                    max_length=self.max_length,
+                    enc_padding_mask=None,
+                    n_generated_tokens=self.max_length + 1,
+                )
+            else:
+                return self.dst_semantic_decoder.generate(
+                    encoder_output=x_dst,
+                    is_causal=False,
+                    max_length=self.max_length,
+                    enc_padding_mask=None,
+                    n_generated_tokens=self.max_length + 1,
+                )
         else:
             x_padding_mask = attention_mask[:, 1:] == 0
-            return self.dst_semantic_decoder.generate(
-                encoder_output=x_dst,
-                is_causal=True,
-                max_length=self.max_length,
-                enc_padding_mask=x_padding_mask,
-                n_generated_tokens=self.max_length + 1,
-            )
+            if greedy:
+                return self.dst_semantic_decoder.generate_greedy(
+                    encoder_output=x_dst,
+                    is_causal=True,
+                    max_length=self.max_length,
+                    enc_padding_mask=x_padding_mask,
+                    n_generated_tokens=self.max_length + 1,
+                )
+            else:
+                return self.dst_semantic_decoder.generate(
+                    encoder_output=x_dst,
+                    is_causal=True,
+                    max_length=self.max_length,
+                    enc_padding_mask=x_padding_mask,
+                    n_generated_tokens=self.max_length + 1,
+                )
+
+
+def init_src_relay_transformer_from_transceiver(state_dict_path):
+    cp = torch.load(state_dict_path, map_location=get_device())
+    replace_keys = {
+        "src_semantic_encoder": "semantic_encoder",
+        "relay_semantic_decoder": "semantic_decoder",
+        "src_channel_encoder": "channel_encoder",
+        "relay_channel_decoder": "channel_decoder",
+    }
+
+    state_dict = {}
+    for replace_key, replace_value in replace_keys.items():
+        wanted_keys = [k for k in cp["model_state_dict"].keys() if replace_key in k]
+        updated_state_dict = {
+            k.replace(replace_key, replace_value): cp["model_state_dict"][k]
+            for k in wanted_keys
+        }
+        state_dict.update(updated_state_dict)
+
+    return state_dict
 
 
 def init_relay_semantic_encoder_state_dict(forward_semantic_transformer):
