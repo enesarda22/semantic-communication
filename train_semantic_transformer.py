@@ -122,7 +122,7 @@ if __name__ == "__main__":
                 input_ids=encoder_idx,
                 attention_mask=encoder_attention_mask,
                 snr_db=args.snr_db,
-                d=d_sr,
+                d=d_sd,
             )
 
             optimizer.zero_grad(set_to_none=True)
