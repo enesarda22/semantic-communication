@@ -96,16 +96,19 @@ class SemanticTransformer(nn.Module):
 
     def forward(
         self,
-        messages: Optional[List[str]] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        first_messages: Optional[List[str]] = None,
+        first_input_ids: Optional[torch.Tensor] = None,
+        first_attention_mask: Optional[torch.Tensor] = None,
+        second_messages: Optional[List[str]] = None,
+        second_input_ids: Optional[torch.Tensor] = None,
+        second_attention_mask: Optional[torch.Tensor] = None,
         snr_db: Optional[float] = None,
         d: Optional[float] = None,
     ):
         x = self.semantic_encoder(
-            messages=messages,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            messages=first_messages,
+            input_ids=first_input_ids,
+            attention_mask=first_attention_mask,
         )
         x, _ = self.shift_src_output(x, mode=self.mode)
 
@@ -122,18 +125,14 @@ class SemanticTransformer(nn.Module):
 
         x = self.channel_decoder(x)
 
-        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
-            xb=input_ids,
-            attention_mask=attention_mask,
-            mode=self.mode,
-            rate=self.semantic_encoder.rate,
-        )
+        decoder_idx = second_input_ids[:, :-1]  # TODO: SECOND OR FIRST?
+        targets = second_input_ids[:, 1:]
 
         logits, loss = self.semantic_decoder(
             idx=decoder_idx,
             encoder_output=x,
-            is_causal=is_causal,
-            enc_padding_mask=enc_padding_mask,
+            is_causal=False,
+            enc_padding_mask=None,
             targets=targets,
         )
 

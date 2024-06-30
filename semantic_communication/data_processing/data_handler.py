@@ -20,21 +20,31 @@ class DataHandler:
         batch_size: int,
         rank=None,
         world_size=None,
+        next_sentence_pred=False
     ):
         self.device = get_device()
         self.data_fp = data_fp
         self.batch_size = batch_size
         self.rank = rank
         self.world_size = world_size
+        if not next_sentence_pred:
+            label_encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
+            self.label_encoder = torch.load(label_encoder_fp, map_location=self.device)
 
-        label_encoder_fp = os.path.join(data_fp, Preprocessor.encoder_fn)
-        self.label_encoder = torch.load(label_encoder_fp, map_location=self.device)
+            self.vocab_size = len(self.label_encoder.classes)
 
-        self.vocab_size = len(self.label_encoder.classes)
+            self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
+            self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
+            self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn, random=False)
+        else:
+            label_encoder_fp = os.path.join(data_fp, Preprocessor.next_sentence_pred_encoder_fn)
+            self.label_encoder = torch.load(label_encoder_fp, map_location=self.device)
 
-        self.train_dataloader = self.init_dl(fn=Preprocessor.train_data_fn)
-        self.val_dataloader = self.init_dl(fn=Preprocessor.val_data_fn)
-        self.test_dataloader = self.init_dl(fn=Preprocessor.test_data_fn, random=False)
+            self.vocab_size = len(self.label_encoder.classes)
+
+            self.train_dataloader = self.init_dl(fn=Preprocessor.next_sentence_pred_train_data_fn)
+            self.val_dataloader = self.init_dl(fn=Preprocessor.next_sentence_pred_val_data_fn)
+            self.test_dataloader = self.init_dl(fn=Preprocessor.next_sentence_pred_test_data_fn, random=False)
 
     def init_dl(self, fn: str, random=True):
         fp = os.path.join(self.data_fp, fn)

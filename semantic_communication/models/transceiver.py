@@ -198,24 +198,33 @@ class Transceiver(nn.Module):
 
     def forward(
         self,
-        messages: Optional[List[str]] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        first_messages: Optional[List[str]] = None,
+        first_input_ids: Optional[torch.Tensor] = None,
+        first_attention_mask: Optional[torch.Tensor] = None,
+        second_messages: Optional[List[str]] = None,
+        second_input_ids: Optional[torch.Tensor] = None,
+        second_attention_mask: Optional[torch.Tensor] = None,
         d_sd: Optional[float] = None,
         d_sr: Optional[float] = None,
     ):
         # source
-        x_src_to_dst, x_src_to_relay = self._source_forward(
-            attention_mask=attention_mask,
-            input_ids=input_ids,
-            messages=messages,
+        _, x_src_to_relay = self._source_forward(
+            attention_mask=first_attention_mask,
+            input_ids=first_input_ids,
+            messages=first_messages,
+        )
+
+        x_src_to_dst, _ = self._source_forward(
+            attention_mask=second_attention_mask,
+            input_ids=second_input_ids,
+            messages=second_messages,
         )
 
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
         x_relay = self._relay_forward(
             x_relay=x_relay,
-            attention_mask=attention_mask,
+            attention_mask=second_attention_mask,  # Since it is going to sentence forward, this mask will not affect
         )
 
         # destination
@@ -225,8 +234,8 @@ class Transceiver(nn.Module):
 
         logits, loss = self._destination_forward(
             x_dst=x_dst,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            input_ids=second_input_ids,
+            attention_mask=second_attention_mask,
         )
 
         return logits, loss
@@ -367,24 +376,33 @@ class Transceiver(nn.Module):
     @torch.no_grad()
     def generate(
         self,
-        messages: Optional[List[str]] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        first_messages: Optional[List[str]] = None,
+        first_input_ids: Optional[torch.Tensor] = None,
+        first_attention_mask: Optional[torch.Tensor] = None,
+        second_messages: Optional[List[str]] = None,
+        second_input_ids: Optional[torch.Tensor] = None,
+        second_attention_mask: Optional[torch.Tensor] = None,
         d_sd: Optional[float] = None,
         d_sr: Optional[float] = None,
     ):
         # source
-        x_src_to_dst, x_src_to_relay = self._source_forward(
-            attention_mask=attention_mask,
-            input_ids=input_ids,
-            messages=messages,
+        _, x_src_to_relay = self._source_forward(
+            attention_mask=first_attention_mask,
+            input_ids=first_input_ids,
+            messages=first_messages,
+        )
+
+        x_src_to_dst, _ = self._source_forward(
+            attention_mask=second_attention_mask,
+            input_ids=second_input_ids,
+            messages=second_messages,
         )
 
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
         x_relay = self._relay_forward(
             x_relay=x_relay,
-            attention_mask=attention_mask,
+            attention_mask=second_attention_mask,  # Since it is going to sentence forward, this mask will not affect
         )
 
         # destination
@@ -403,7 +421,7 @@ class Transceiver(nn.Module):
                 n_generated_tokens=self.max_length + 1,
             )
         else:
-            x_padding_mask = attention_mask[:, 1:] == 0
+            x_padding_mask = second_attention_mask[:, 1:] == 0
             return self.dst_semantic_decoder.generate(
                 encoder_output=x_dst,
                 is_causal=True,

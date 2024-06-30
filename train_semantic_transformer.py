@@ -48,6 +48,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
+        next_sentence_pred=True
     )
 
     semantic_encoder = SemanticEncoder(
@@ -110,17 +111,22 @@ if __name__ == "__main__":
         train_losses = []
         semantic_transformer.train()
         for b in tqdm(data_handler.train_dataloader):
-            encoder_idx = b[0].to(device)
-            encoder_attention_mask = b[1].to(device)
+            first_encoder_idx = b[0].to(device)
+            first_encoder_attention_mask = b[1].to(device)
+            first_encoder_idx = data_handler.label_encoder.transform(first_encoder_idx)
 
-            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
+            second_encoder_idx = b[2].to(device)
+            second_encoder_attention_mask = b[3].to(device)
+            second_encoder_idx = data_handler.label_encoder.transform(second_encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
             _, loss = semantic_transformer(
-                input_ids=encoder_idx,
-                attention_mask=encoder_attention_mask,
+                first_input_ids=first_encoder_idx,
+                first_attention_mask=first_encoder_attention_mask,
+                second_input_ids=second_encoder_idx,
+                second_attention_mask=second_encoder_attention_mask,
                 snr_db=args.snr_db,
                 d=d_sr,
             )
@@ -135,18 +141,23 @@ if __name__ == "__main__":
         val_losses = []
         semantic_transformer.eval()
         for b in data_handler.val_dataloader:
-            encoder_idx = b[0].to(device)
-            encoder_attention_mask = b[1].to(device)
+            first_encoder_idx = b[0].to(device)
+            first_encoder_attention_mask = b[1].to(device)
+            first_encoder_idx = data_handler.label_encoder.transform(first_encoder_idx)
 
-            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
+            second_encoder_idx = b[2].to(device)
+            second_encoder_attention_mask = b[3].to(device)
+            second_encoder_idx = data_handler.label_encoder.transform(second_encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
             with torch.no_grad():
                 _, loss = semantic_transformer(
-                    input_ids=encoder_idx,
-                    attention_mask=encoder_attention_mask,
+                    first_input_ids=first_encoder_idx,
+                    first_attention_mask=first_encoder_attention_mask,
+                    second_input_ids=second_encoder_idx,
+                    second_attention_mask=second_encoder_attention_mask,
                     snr_db=args.snr_db,
                     d=d_sr,
                 )

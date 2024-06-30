@@ -1,6 +1,7 @@
 import argparse
 import glob
 import os
+from transformers import AutoTokenizer, AutoModel
 
 from tqdm import tqdm
 
@@ -13,37 +14,75 @@ from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--europarl-folder-path", type=str)
+    parser.add_argument("--europarl-folder-path", default="europarl/txt", type=str)
     parser.add_argument("--output-data-fp", default="", type=str)
     parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--train-size", default=0.7, type=float)
     parser.add_argument("--test-size", default=0.5, type=float)
-    parser.add_argument("--n-samples", default=None, type=int)
+    parser.add_argument("--n-samples", default=5000000, type=int)
     args = parser.parse_args()
 
     en_fp = os.path.join(args.europarl_folder_path, "en/*.txt")
     txt_filepaths = sorted(glob.glob(en_fp))
 
-    preprocessed_messages = []
+    preprocessed_messages_firsts = []
+    preprocessed_messages_seconds = []
+
     for txt_fp in tqdm(txt_filepaths, "Txt files"):
         with open(txt_fp, "r", encoding="utf-8") as f:
             m = f.read()
 
-        preprocessed_messages.extend(Preprocessor.preprocess(m))
-        if args.n_samples and (args.n_samples < len(preprocessed_messages)):
-            preprocessed_messages = preprocessed_messages[: args.n_samples]
+        first_messages, second_messages = Preprocessor.preprocess(m)
+
+        preprocessed_messages_firsts.extend(first_messages)
+        preprocessed_messages_seconds.extend(second_messages)
+
+        if args.n_samples and (args.n_samples < len(preprocessed_messages_firsts)):
+            preprocessed_messages_firsts = preprocessed_messages_firsts[: args.n_samples]
+            preprocessed_messages_seconds = preprocessed_messages_seconds[: args.n_samples]
+
             break
 
-    print(f"Number of sentences: {len(preprocessed_messages)}")
+    print(f"Number of sentences: {len(preprocessed_messages_seconds)}")
 
     # tokenize
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
-    tokens = semantic_encoder.tokenize(messages=preprocessed_messages)
+    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    # drop sentences shorter than 2 tokens
-    long_sentence_query = tokens["attention_mask"].sum(dim=1) > 4
-    attention_mask = tokens["attention_mask"][long_sentence_query, :]
-    input_ids = tokens["input_ids"][long_sentence_query, :]
+    tokens_firsts = tokenizer(
+        preprocessed_messages_firsts,
+        padding="max_length",
+        max_length=args.max_length + 1,
+        truncation=True,
+        return_tensors="pt",
+    )
+
+    tokens_seconds = tokenizer(
+        preprocessed_messages_seconds,
+        padding="max_length",
+        max_length=args.max_length + 1,
+        truncation=True,
+        return_tensors="pt",
+    )
+
+    # drop sentences shorter than 2 tokens for firsts
+    long_sentence_query_firsts = tokens_firsts["attention_mask"].sum(dim=1) > 4
+    attention_mask_firsts = tokens_firsts["attention_mask"][long_sentence_query_firsts, :]
+    input_ids_firsts = tokens_firsts["input_ids"][long_sentence_query_firsts, :]
+
+    attention_mask_seconds = tokens_seconds["attention_mask"][long_sentence_query_firsts, :]
+    input_ids_seconds = tokens_seconds["input_ids"][long_sentence_query_firsts, :]
+
+    # drop sentences shorter than 2 tokens for seconds
+    long_sentence_query_seconds = attention_mask_seconds.sum(dim=1) > 4
+    attention_mask_firsts = attention_mask_firsts[long_sentence_query_seconds, :]
+    input_ids_firsts = input_ids_firsts[long_sentence_query_seconds, :]
+
+    attention_mask_seconds = attention_mask_seconds[long_sentence_query_seconds, :]
+    input_ids_seconds = input_ids_seconds[long_sentence_query_seconds, :]
+
+    combined_input_ids = torch.cat((input_ids_firsts, input_ids_seconds), axis=1)
+    combined_attention_masks = torch.cat((attention_mask_firsts, attention_mask_seconds), axis=1)
 
     (
         train_input_ids,
@@ -53,8 +92,8 @@ if __name__ == "__main__":
         test_input_ids,
         test_attention_mask,
     ) = Preprocessor.split_data(
-        input_ids=input_ids,
-        attention_mask=attention_mask,
+        input_ids=combined_input_ids,
+        attention_mask=combined_attention_masks,
         train_size=args.train_size,
         test_size=args.test_size,
     )
@@ -71,19 +110,19 @@ if __name__ == "__main__":
     test_attention_mask = test_attention_mask[test_query, :]
 
     # train label encoder
-    encoder_fp = os.path.join(args.output_data_fp, Preprocessor.encoder_fn)
+    encoder_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_encoder_fn)
     encoder = TensorLabelEncoder().fit(train_input_ids)
     torch.save(encoder, encoder_fp)
 
-    train_dataset = TensorDataset(train_input_ids, train_attention_mask)
-    val_dataset = TensorDataset(val_input_ids, val_attention_mask)
-    test_dataset = TensorDataset(test_input_ids, test_attention_mask)
+    train_dataset = TensorDataset(train_input_ids[:, :args.max_length + 1], train_attention_mask[:, :args.max_length + 1], train_input_ids[:, args.max_length + 1:], train_attention_mask[:, args.max_length + 1:])
+    val_dataset = TensorDataset(val_input_ids[:, :args.max_length + 1], val_attention_mask[:, :args.max_length + 1], val_input_ids[:, args.max_length + 1:], val_attention_mask[:, args.max_length + 1:])
+    test_dataset = TensorDataset(test_input_ids[:, :args.max_length + 1], test_attention_mask[:, :args.max_length + 1], test_input_ids[:, args.max_length + 1:], test_attention_mask[:, args.max_length + 1:])
 
-    train_fp = os.path.join(args.output_data_fp, Preprocessor.train_data_fn)
+    train_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_train_data_fn)
     torch.save(train_dataset, train_fp)
 
-    val_fp = os.path.join(args.output_data_fp, Preprocessor.val_data_fn)
+    val_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_val_data_fn)
     torch.save(val_dataset, val_fp)
 
-    test_fp = os.path.join(args.output_data_fp, Preprocessor.test_data_fn)
+    test_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_test_data_fn)
     torch.save(test_dataset, test_fp)
