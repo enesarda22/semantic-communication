@@ -58,6 +58,7 @@ def main(args):
         data_fp=args.data_fp,
         rank=local_rank,
         world_size=world_size,
+        mode=args.mode,
     )
 
     # source - relay transformer
@@ -109,8 +110,12 @@ def main(args):
     relay_semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
-        mode=args.mode if args.mode == "sentence" else "forward",
-        rate=1 if args.mode == "sentence" else None,
+        mode=(
+            "sentence"
+            if args.mode == "sentence" or args.mode == "next_sentence"
+            else "forward"
+        ),
+        rate=1 if args.mode == "sentence" or args.mode == "next_sentence" else None,
     ).to(device)
     state_dict = init_relay_semantic_encoder_state_dict(
         forward_semantic_transformer=forward_semantic_transformer

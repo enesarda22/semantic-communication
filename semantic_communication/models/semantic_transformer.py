@@ -9,7 +9,7 @@ import math
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.channel import Channel
-from semantic_communication.utils.general import shift_inputs, get_device
+from semantic_communication.utils.general import shift_inputs, get_device, pad_cls
 
 
 class ChannelEncComp(nn.Module):
@@ -123,11 +123,13 @@ class SemanticTransformer(nn.Module):
 
         x = self.channel_decoder(x)
 
+        if self.semantic_encoder.mode == "next_sentence":
+            input_ids = pad_cls(input_ids[:, -self.max_length :])
+
         decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.mode,
-            rate=self.semantic_encoder.rate,
         )
 
         logits, loss = self.semantic_decoder(

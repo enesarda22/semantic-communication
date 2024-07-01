@@ -14,9 +14,13 @@ class Preprocessor:
     train_data_fn = "train_data.pt"
     val_data_fn = "val_data.pt"
     test_data_fn = "test_data.pt"
+    next_sentence_pred_encoder_fn = "next_sentence_pred_encoder.pt"
+    next_sentence_pred_train_data_fn = "next_sentence_pred_train_data.pt"
+    next_sentence_pred_val_data_fn = "next_sentence_pred_val_data.pt"
+    next_sentence_pred_test_data_fn = "next_sentence_pred_test_data.pt"
 
     @staticmethod
-    def preprocess(m: str) -> List[str]:
+    def preprocess(m: str) -> (List[str], List[str]):
         # partition to sentences
         sentences = nltk.sent_tokenize(replace_tags(m, " "))
 
@@ -26,9 +30,18 @@ class Preprocessor:
             is_english = s.isascii()
             return (not code_exists) and (not break_exists) and is_english
 
-        # filter sentences
-        sentences = [s.lower() for s in sentences if good_sentence(s)]
-        return sentences
+        if len(sentences) % 2 != 0:
+            sentences = sentences[:-1]
+
+        first_sentences = []
+        second_sentences = []
+
+        for i in range(0, len(sentences) - 1):
+            if good_sentence(sentences[i]) and good_sentence(sentences[i + 1]):
+                first_sentences.append(sentences[i])
+                second_sentences.append(sentences[i + 1])
+
+        return first_sentences, second_sentences
 
     @staticmethod
     def split_data(

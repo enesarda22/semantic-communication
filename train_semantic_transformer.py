@@ -48,6 +48,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
+        mode=args.mode,
     )
 
     semantic_encoder = SemanticEncoder(

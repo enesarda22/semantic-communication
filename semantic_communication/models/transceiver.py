@@ -12,7 +12,7 @@ from semantic_communication.models.semantic_transformer import (
     ChannelDecoder,
 )
 from semantic_communication.utils.channel import Channel
-from semantic_communication.utils.general import get_device, shift_inputs
+from semantic_communication.utils.general import get_device, shift_inputs, pad_cls
 
 
 class Transceiver(nn.Module):
@@ -96,11 +96,14 @@ class Transceiver(nn.Module):
 
     def _destination_forward(self, x_dst, input_ids, attention_mask):
         x_dst = self.dst_channel_decoder(x_dst)
+
+        if self.src_semantic_encoder.mode == "next_sentence":
+            input_ids = pad_cls(input_ids[:, -self.max_length :])
+
         decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
             xb=input_ids,
             attention_mask=attention_mask,
             mode=self.relay_semantic_encoder.mode,
-            rate=x_dst.shape[1],
         )
         logits, loss = self.dst_semantic_decoder(
             idx=decoder_idx,
@@ -116,7 +119,10 @@ class Transceiver(nn.Module):
         x_relay = self.relay_channel_decoder(x_relay)
 
         # decode every sentence embedding using beam search
-        if self.src_semantic_encoder.mode == "sentence":
+        if (
+            self.src_semantic_encoder.mode == "sentence"
+            or self.src_semantic_encoder.mode == "next_sentence"
+        ):
             return self._relay_forward_sentence(x_relay=x_relay)
 
         else:
@@ -128,18 +134,12 @@ class Transceiver(nn.Module):
     def _relay_forward_sentence(self, x_relay):
         B, R, C = x_relay.shape
 
-        x_relay = torch.repeat_interleave(input=x_relay, repeats=R, dim=0)
-        causal_padding_mask = torch.tril(
-            torch.ones(R, R, device=self.device), -1
-        ).T.bool()
-        causal_padding_mask = causal_padding_mask.repeat(B, 1)
-
         self.relay_semantic_decoder.eval()
         x_relay, _ = self.relay_semantic_decoder.generate(
             encoder_output=x_relay,
             is_causal=False,
             max_length=self.max_length,  # TODO: fix +1 discrepancy
-            enc_padding_mask=causal_padding_mask,
+            enc_padding_mask=None,
             n_generated_tokens=self.max_length + 1,
         )
 
@@ -265,7 +265,10 @@ class Transceiver(nn.Module):
 
         x_dst = self.dst_channel_decoder(x_dst)
 
-        if self.src_semantic_encoder.mode == "sentence":
+        if (
+            self.src_semantic_encoder.mode == "sentence"
+            or self.src_semantic_encoder.mode == "next_sentence"
+        ):
             if greedy:
                 return self.dst_semantic_decoder.generate_greedy(
                     encoder_output=x_dst,
@@ -337,7 +340,7 @@ def init_dst_channel_decoder_state_dict(forward_semantic_transformer, mode):
         forward_semantic_transformer.channel_decoder.state_dict()
     )
 
-    if mode != "sentence":
+    if mode != "sentence" and mode != "next_sentence":
         for i in range(3):
             state_dict[f"layers.{i}.linear.weight"] = state_dict[
                 f"layers.{i + 1}.linear.weight"

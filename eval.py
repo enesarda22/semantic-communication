@@ -59,6 +59,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
+        next_sentence_pred=True
     )
 
     # initialize models
@@ -168,13 +169,19 @@ if __name__ == "__main__":
             d_sr = d_sd * gamma
 
             for b in data_handler.test_dataloader:
-                encoder_idx = b[0].to(device)
-                encoder_attention_mask = b[1].to(device)
-                encoder_idx = data_handler.label_encoder.transform(encoder_idx)
+                first_encoder_idx = b[0].to(device)
+                first_encoder_attention_mask = b[1].to(device)
+                first_encoder_idx = data_handler.label_encoder.transform(first_encoder_idx)
+
+                second_encoder_idx = b[2].to(device)
+                second_encoder_attention_mask = b[3].to(device)
+                second_encoder_idx = data_handler.label_encoder.transform(second_encoder_idx)
 
                 predicted_ids, probs = transceiver.generate(
-                    input_ids=encoder_idx,
-                    attention_mask=encoder_attention_mask,
+                    first_input_ids=first_encoder_idx,
+                    first_attention_mask=first_encoder_attention_mask,
+                    second_input_ids=second_encoder_idx,
+                    second_attention_mask=second_encoder_attention_mask,
                     d_sd=d_sd,
                     d_sr=d_sr,
                 )
@@ -200,22 +207,22 @@ if __name__ == "__main__":
                 )
 
                 input_tokens = semantic_encoder.get_tokens(
-                    ids=encoder_idx,
+                    ids=second_encoder_idx,
                     skip_special_tokens=True,
                 )
 
                 for s1, s2 in zip(input_tokens, predicted_tokens):
                     # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
-                    sim_score = semantic_similarity_score(s1, s2, client)
+                    # sim_score = semantic_similarity_score(s1, s2, client)
                     bleu_1_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0], smoothing_function=smoothing_function)
                     bleu_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), smoothing_function=smoothing_function)
                     sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
 
-                    cosine_scores.append(sim_score)
+                    # cosine_scores.append(sim_score)
                     bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
                     sbert_semantic_sim_scores.append(sbert_sim_score)
-                    records.append([d_sd, gamma, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
+                    # records.append([d_sd, gamma, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
 
                 if len(bleu1_scores) >= args.n_test:
                     break
@@ -223,14 +230,14 @@ if __name__ == "__main__":
             n_test_samples = len(bleu1_scores)
             cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
-            mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
+            # mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(sbert_semantic_sim_scores)
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
-
-            std_semantic_sim[distance_index, gamma_index] = np.std(
-                cosine_scores, ddof=1
-            ) / np.sqrt(n_test_samples)
+            #
+            # std_semantic_sim[distance_index, gamma_index] = np.std(
+            #     cosine_scores, ddof=1
+            # ) / np.sqrt(n_test_samples)
             std_bleu_1[distance_index, gamma_index] = np.std(
                 bleu1_scores, ddof=1
             ) / np.sqrt(n_test_samples)
@@ -240,15 +247,15 @@ if __name__ == "__main__":
 
             std_sbert_semantic_sim[distance_index, gamma_index] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(n_test_samples)
 
-            np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_semantic_sim.npy"), mean_semantic_sim)
+            # np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_semantic_sim.npy"), mean_semantic_sim)
             np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
             np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_bleu_1.npy"), mean_bleu_1)
             np.save(os.path.join(results_dir, f"{args.mode}_proposed_mean_bleu.npy"), mean_bleu)
 
-            np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_semantic_sim.npy"), std_semantic_sim)
+            # np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_semantic_sim.npy"), std_semantic_sim)
             np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
             np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_bleu_1.npy"), std_bleu_1)
             np.save(os.path.join(results_dir, f"{args.mode}_proposed_std_bleu.npy"), std_bleu)
 
-            df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score', "SBERT Semantic Score"])
-            df.to_excel(os.path.join(results_dir, f'{args.mode}_proposed_output.xlsx'), index=False)
+            # df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score', "SBERT Semantic Score"])
+            # df.to_excel(os.path.join(results_dir, f'{args.mode}_proposed_output.xlsx'), index=False)
