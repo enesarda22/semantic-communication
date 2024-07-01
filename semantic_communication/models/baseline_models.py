@@ -21,10 +21,9 @@ class Tx_Relay(nn.Module):
         ch_input = self.tx_encoder(embeddings)
 
         if self.channel is not None:
-            ch_output = self.channel(ch_input, d_sr)
+            ch_output = self.channel(ch_input, d_sr, attention_mask)
         else:
-            gain = torch.sqrt(0.5 / torch.var(ch_input, dim=-1))
-            ch_output = ch_input * gain[:, :, None]
+            ch_output = Channel.normalize(ch_input, 1.0, attention_mask)
 
         x_hat = self.linear(self.relay_decoder(ch_output))
 

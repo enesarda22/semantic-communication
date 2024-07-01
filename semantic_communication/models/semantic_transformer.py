@@ -113,10 +113,7 @@ class SemanticTransformer(nn.Module):
         x = self.channel_encoder(x)
 
         if self.channel is None:
-            # signal power constraint
-            last_dim = x.shape[-1]
-            x = ((last_dim / 2) ** 0.5) * F.normalize(x, dim=-1, p=2)
-
+            x = self.normalize(x, 1.0, attention_mask)
             x = self._add_noise(x, snr_db)
         else:
             x = self.channel(x=x, d=d)

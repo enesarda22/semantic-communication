@@ -20,20 +20,43 @@ class Channel(ABC):
         self.noise_pow = noise_pow
         self.device = get_device()
 
-    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
+    def __call__(
+        self,
+        x: torch.Tensor,
+        d: Optional[float] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         pass
 
-    def signal_process(self, x: torch.Tensor) -> torch.Tensor:
-        last_dim = x.shape[-1]
-        assert last_dim % 2 == 0
+    def signal_process(
+        self,
+        x: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        B, T, C = x.shape
+        assert C % 2 == 0
 
         # normalize
-        x = ((self.signal_power_constraint * last_dim / 2) ** 0.5) * F.normalize(
-            x, dim=-1, p=2
-        )
+        x = self.normalize(x, self.signal_power_constraint, attention_mask)
 
         # convert to complex
-        x = torch.complex(*torch.split(x, int(last_dim / 2), dim=-1))
+        x = torch.complex(*torch.split(x, int(C / 2), dim=-1))
+        return x
+
+    @staticmethod
+    def normalize(x, pow, attention_mask: Optional[torch.Tensor] = None):
+        B, T, C = x.shape
+
+        if attention_mask is None:
+            x = ((pow * T * C / 2) ** 0.5) * F.normalize(
+                x.reshape(B, T * C), dim=-1, p=2
+            ).reshape(B, T, C)
+        else:
+            for i in range(B):
+                n_tokens = int(torch.sum(attention_mask[i, :]).item())
+                x[i, :n_tokens, :] = ((pow * n_tokens * C / 2) ** 0.5) * F.normalize(
+                    x[i, :n_tokens, :].flatten(), dim=-1, p=2
+                ).reshape(n_tokens, C)
         return x
 
 
@@ -41,11 +64,16 @@ class AWGN(Channel):
     def __init__(self, signal_power_constraint, alpha, noise_pow):
         super().__init__(signal_power_constraint, alpha, noise_pow)
 
-    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
+    def __call__(
+        self,
+        x: torch.Tensor,
+        d: Optional[float] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if d is None:
             return x
 
-        x = self.signal_process(x)
+        x = self.signal_process(x, attention_mask=attention_mask)
 
         noise = torch.normal(
             mean=0.0,
@@ -62,7 +90,12 @@ class Rayleigh(Channel):
     def __init__(self, signal_power_constraint, alpha, noise_pow):
         super().__init__(signal_power_constraint, alpha, noise_pow)
 
-    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
+    def __call__(
+        self,
+        x: torch.Tensor,
+        d: Optional[float] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if d is None:
             return x
 
@@ -73,7 +106,7 @@ class Rayleigh(Channel):
             dtype=torch.cfloat,
         ).to(self.device)
 
-        x = self.signal_process(x)
+        x = self.signal_process(x, attention_mask)
         x = x * torch.conj(h) / torch.abs(h)
 
         noise = torch.normal(
