@@ -232,6 +232,44 @@ class SemanticDecoder(nn.Module):
 
         return Y, probabilities[torch.arange(B), best_indices]
 
+    @torch.no_grad()
+    def generate_greedy(
+        self,
+        encoder_output,
+        is_causal,
+        max_length,
+        enc_padding_mask=None,
+        n_generated_tokens=20,
+    ):
+        B = encoder_output.shape[0]
+        T = n_generated_tokens
+
+        Y = self.pad_idx * torch.ones(B, T).to(self.device).long()
+        Y[:, 0] = 1
+        next_logits, _ = self(
+            Y[:, :max_length], encoder_output, is_causal, enc_padding_mask
+        )
+        next_logits = next_logits[:, 0, :]
+
+        next_tokens = torch.argmax(next_logits, dim=-1)
+        Y[:, 1] = next_tokens.flatten()
+
+        for i in range(1, T - 1):
+            start_idx = max(i - max_length, 0)
+            end_idx = start_idx + max_length
+            next_logits, _ = self(
+                Y[:, -start_idx:end_idx], encoder_output, is_causal, enc_padding_mask
+            )
+            next_logits = next_logits[:, i, :]
+
+            next_tokens = torch.argmax(next_logits, dim=-1)
+            Y[:, i + 1] = next_tokens.flatten()
+
+            if torch.all(torch.any(Y == 2, dim=1)):
+                break
+
+        return Y
+
     def generate_next(
         self,
         idx,
