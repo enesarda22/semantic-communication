@@ -1,7 +1,7 @@
 import argparse
 import glob
 import os
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer
 
 from tqdm import tqdm
 
@@ -9,7 +9,6 @@ import torch
 from torch.utils.data import TensorDataset
 
 from semantic_communication.data_processing.preprocessor import Preprocessor
-from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
 
 if __name__ == "__main__":
@@ -38,8 +37,12 @@ if __name__ == "__main__":
         preprocessed_messages_seconds.extend(second_messages)
 
         if args.n_samples and (args.n_samples < len(preprocessed_messages_firsts)):
-            preprocessed_messages_firsts = preprocessed_messages_firsts[: args.n_samples]
-            preprocessed_messages_seconds = preprocessed_messages_seconds[: args.n_samples]
+            preprocessed_messages_firsts = preprocessed_messages_firsts[
+                : args.n_samples
+            ]
+            preprocessed_messages_seconds = preprocessed_messages_seconds[
+                : args.n_samples
+            ]
 
             break
 
@@ -49,7 +52,7 @@ if __name__ == "__main__":
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    tokens_firsts = tokenizer(
+    first_tokens = tokenizer(
         preprocessed_messages_firsts,
         padding="max_length",
         max_length=args.max_length + 1,
@@ -57,7 +60,7 @@ if __name__ == "__main__":
         return_tensors="pt",
     )
 
-    tokens_seconds = tokenizer(
+    second_tokens = tokenizer(
         preprocessed_messages_seconds,
         padding="max_length",
         max_length=args.max_length + 1,
@@ -66,23 +69,20 @@ if __name__ == "__main__":
     )
 
     # drop sentences shorter than 2 tokens for firsts
-    long_sentence_query_firsts = tokens_firsts["attention_mask"].sum(dim=1) > 4
-    attention_mask_firsts = tokens_firsts["attention_mask"][long_sentence_query_firsts, :]
-    input_ids_firsts = tokens_firsts["input_ids"][long_sentence_query_firsts, :]
+    long_sentence_query_firsts = first_tokens["attention_mask"].sum(dim=1) > 4
+    long_sentence_query_seconds = second_tokens["attention_mask"].sum(dim=1) > 4
+    long_sentence_query = long_sentence_query_firsts & long_sentence_query_seconds
 
-    attention_mask_seconds = tokens_seconds["attention_mask"][long_sentence_query_firsts, :]
-    input_ids_seconds = tokens_seconds["input_ids"][long_sentence_query_firsts, :]
+    first_input_ids = first_tokens["input_ids"][long_sentence_query, :]
+    first_attention_mask = first_tokens["attention_mask"][long_sentence_query, :]
 
-    # drop sentences shorter than 2 tokens for seconds
-    long_sentence_query_seconds = attention_mask_seconds.sum(dim=1) > 4
-    attention_mask_firsts = attention_mask_firsts[long_sentence_query_seconds, :]
-    input_ids_firsts = input_ids_firsts[long_sentence_query_seconds, :]
+    second_input_ids = second_tokens["input_ids"][long_sentence_query, :]
+    second_attention_mask = second_tokens["attention_mask"][long_sentence_query, :]
 
-    attention_mask_seconds = attention_mask_seconds[long_sentence_query_seconds, :]
-    input_ids_seconds = input_ids_seconds[long_sentence_query_seconds, :]
-
-    combined_input_ids = torch.cat((input_ids_firsts, input_ids_seconds), axis=1)
-    combined_attention_masks = torch.cat((attention_mask_firsts, attention_mask_seconds), axis=1)
+    combined_input_ids = torch.cat((first_input_ids, second_input_ids[:, 1:]), dim=1)
+    combined_attention_masks = torch.cat(
+        (first_attention_mask, second_attention_mask[:, 1:]), dim=1
+    )
 
     (
         train_input_ids,
@@ -110,19 +110,27 @@ if __name__ == "__main__":
     test_attention_mask = test_attention_mask[test_query, :]
 
     # train label encoder
-    encoder_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_encoder_fn)
+    encoder_fp = os.path.join(
+        args.output_data_fp, Preprocessor.next_sentence_pred_encoder_fn
+    )
     encoder = TensorLabelEncoder().fit(train_input_ids)
     torch.save(encoder, encoder_fp)
 
-    train_dataset = TensorDataset(train_input_ids[:, :args.max_length + 1], train_attention_mask[:, :args.max_length + 1], train_input_ids[:, args.max_length + 1:], train_attention_mask[:, args.max_length + 1:])
-    val_dataset = TensorDataset(val_input_ids[:, :args.max_length + 1], val_attention_mask[:, :args.max_length + 1], val_input_ids[:, args.max_length + 1:], val_attention_mask[:, args.max_length + 1:])
-    test_dataset = TensorDataset(test_input_ids[:, :args.max_length + 1], test_attention_mask[:, :args.max_length + 1], test_input_ids[:, args.max_length + 1:], test_attention_mask[:, args.max_length + 1:])
+    train_dataset = TensorDataset(train_input_ids, train_attention_mask)
+    val_dataset = TensorDataset(val_input_ids, val_attention_mask)
+    test_dataset = TensorDataset(test_input_ids, test_attention_mask)
 
-    train_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_train_data_fn)
+    train_fp = os.path.join(
+        args.output_data_fp, Preprocessor.next_sentence_pred_train_data_fn
+    )
     torch.save(train_dataset, train_fp)
 
-    val_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_val_data_fn)
+    val_fp = os.path.join(
+        args.output_data_fp, Preprocessor.next_sentence_pred_val_data_fn
+    )
     torch.save(val_dataset, val_fp)
 
-    test_fp = os.path.join(args.output_data_fp, Preprocessor.next_sentence_pred_test_data_fn)
+    test_fp = os.path.join(
+        args.output_data_fp, Preprocessor.next_sentence_pred_test_data_fn
+    )
     torch.save(test_dataset, test_fp)

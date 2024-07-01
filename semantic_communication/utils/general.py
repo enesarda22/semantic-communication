@@ -12,6 +12,10 @@ import scienceplots
 RANDOM_STATE = 42
 
 
+def valid_mode(mode):
+    return mode in ["sentence", "forward", "predict", "next_sentence"]
+
+
 def set_seed(offset=0):
     random.seed(RANDOM_STATE + offset)
     torch.manual_seed(RANDOM_STATE + offset)
@@ -138,7 +142,19 @@ def add_channel_model_args(parser):
     parser.add_argument("--gamma-max", default=0.8, type=float)
 
 
-def shift_inputs(xb, attention_mask, mode, rate=None):
+def pad_cls(ids):
+    return torch.cat(
+        [
+            torch.ones(ids.shape[0], 1, dtype=torch.int64, device=get_device()),
+            ids,
+        ],
+        dim=1,
+    )
+
+
+def shift_inputs(xb, attention_mask, mode):
+    assert valid_mode(mode)
+
     if mode == "predict":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
@@ -149,15 +165,10 @@ def shift_inputs(xb, attention_mask, mode, rate=None):
         targets = xb[:, 1:]
         enc_padding_mask = attention_mask[:, 1:] == 0  # CLS is not received
         is_causal = True
-    elif mode == "sentence":
+    elif mode == "sentence" or mode == "next_sentence":
         idx = xb[:, :-1]
         targets = xb[:, 1:]
-
-        B = attention_mask.shape[0]
-        device = attention_mask.device
-        enc_padding_mask = torch.arange(rate, device=device).repeat(
-            B, 1
-        ) > torch.randint(high=rate, size=(B, 1), device=device)
+        enc_padding_mask = None
         is_causal = False
     else:
         raise ValueError("Mode needs to be 'predict', 'forward' or 'sentence'.")
@@ -171,8 +182,8 @@ def split_string_by_lengths(input_string, lengths):
     current_index = 0
 
     for length in lengths:
-        sentence = words[current_index:current_index + length]
-        sentences.append(' '.join(sentence))
+        sentence = words[current_index : current_index + length]
+        sentences.append(" ".join(sentence))
         current_index += length
 
     return sentences

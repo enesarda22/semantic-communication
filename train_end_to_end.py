@@ -1,4 +1,5 @@
 import argparse
+import copy
 import os
 
 import numpy as np
@@ -57,9 +58,10 @@ def main(args):
         data_fp=args.data_fp,
         rank=local_rank,
         world_size=world_size,
-        next_sentence_pred=True,
+        mode=args.mode,
     )
 
+    # source - relay transformer
     semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
@@ -97,26 +99,23 @@ def main(args):
         channel=channel,
     ).to(device)
     load_model(semantic_transformer, args.semantic_transformer_path)
-    if args.semantic_transformer_forward_path is None:
-        forward_semantic_transformer = semantic_transformer
-    else:
+
+    forward_semantic_transformer = copy.deepcopy(semantic_transformer)
+    if args.semantic_transformer_forward_path is not None:
         checkpoint = torch.load(
             args.semantic_transformer_forward_path, map_location=device
         )
-        forward_semantic_transformer = SemanticTransformer(
-            semantic_encoder=semantic_encoder,
-            semantic_decoder=semantic_decoder,
-            channel_encoder=channel_encoder,
-            channel_decoder=channel_decoder,
-            channel=channel,
-        ).to(device)
         forward_semantic_transformer.load_state_dict(checkpoint["model_state_dict"])
 
     relay_semantic_encoder = SemanticEncoder(
         label_encoder=data_handler.label_encoder,
         max_length=args.max_length,
-        mode=args.mode if args.mode == "sentence" else "forward",
-        rate=1 if args.mode == "sentence" else None,
+        mode=(
+            "sentence"
+            if args.mode == "sentence" or args.mode == "next_sentence"
+            else "forward"
+        ),
+        rate=1 if args.mode == "sentence" or args.mode == "next_sentence" else None,
     ).to(device)
     state_dict = init_relay_semantic_encoder_state_dict(
         forward_semantic_transformer=forward_semantic_transformer
@@ -189,22 +188,17 @@ def main(args):
         transceiver.train()
 
         for b in tqdm(data_handler.train_dataloader):
-            first_encoder_idx = b[0].to(device)
-            first_encoder_attention_mask = b[1].to(device)
-            first_encoder_idx = data_handler.label_encoder.transform(first_encoder_idx)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
 
-            second_encoder_idx = b[2].to(device)
-            second_encoder_attention_mask = b[3].to(device)
-            second_encoder_idx = data_handler.label_encoder.transform(second_encoder_idx)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
             _, loss = transceiver(
-                first_input_ids=first_encoder_idx,
-                first_attention_mask=first_encoder_attention_mask,
-                second_input_ids=second_encoder_idx,
-                second_attention_mask=second_encoder_attention_mask,
+                input_ids=encoder_idx,
+                attention_mask=encoder_attention_mask,
                 d_sd=d_sd,
                 d_sr=d_sr,
             )
@@ -220,23 +214,18 @@ def main(args):
         val_losses = []
         transceiver.eval()
         for i, b in tqdm(enumerate(data_handler.val_dataloader)):
-            first_encoder_idx = b[0].to(device)
-            first_encoder_attention_mask = b[1].to(device)
-            first_encoder_idx = data_handler.label_encoder.transform(first_encoder_idx)
+            encoder_idx = b[0].to(device)
+            encoder_attention_mask = b[1].to(device)
 
-            second_encoder_idx = b[2].to(device)
-            second_encoder_attention_mask = b[3].to(device)
-            second_encoder_idx = data_handler.label_encoder.transform(second_encoder_idx)
+            encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
             d_sd = get_distance(args.d_min, args.d_max)
             d_sr = get_distance(d_sd * args.gamma_min, d_sd * args.gamma_max)
 
             with torch.no_grad():
                 _, loss = transceiver(
-                    first_input_ids=first_encoder_idx,
-                    first_attention_mask=first_encoder_attention_mask,
-                    second_input_ids=second_encoder_idx,
-                    second_attention_mask=second_encoder_attention_mask,
+                    input_ids=encoder_idx,
+                    attention_mask=encoder_attention_mask,
                     d_sd=d_sd,
                     d_sr=d_sr,
                 )
@@ -257,7 +246,7 @@ def main(args):
 
             checkpoint_path = os.path.join(
                 args.checkpoint_path,
-                f"transceiver/transceiver_{epoch}.pt",
+                f"transceiver/transceiver_{args.mode}_{epoch}.pt",
             )
 
             if mean_loss < best_loss:

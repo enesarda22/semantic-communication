@@ -36,7 +36,7 @@ class Preprocessor:
         first_sentences = []
         second_sentences = []
 
-        for i in range(0, len(sentences) - 1, 2):
+        for i in range(0, len(sentences) - 1):
             if good_sentence(sentences[i]) and good_sentence(sentences[i + 1]):
                 first_sentences.append(sentences[i])
                 second_sentences.append(sentences[i + 1])

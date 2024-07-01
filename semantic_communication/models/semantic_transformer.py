@@ -2,13 +2,14 @@ from typing import Optional, List
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 import math
 
 from semantic_communication.models.semantic_decoder import SemanticDecoder
 from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.channel import Channel
-from semantic_communication.utils.general import shift_inputs, get_device
+from semantic_communication.utils.general import shift_inputs, get_device, pad_cls
 
 
 class ChannelEncComp(nn.Module):
@@ -96,19 +97,16 @@ class SemanticTransformer(nn.Module):
 
     def forward(
         self,
-        first_messages: Optional[List[str]] = None,
-        first_input_ids: Optional[torch.Tensor] = None,
-        first_attention_mask: Optional[torch.Tensor] = None,
-        second_messages: Optional[List[str]] = None,
-        second_input_ids: Optional[torch.Tensor] = None,
-        second_attention_mask: Optional[torch.Tensor] = None,
+        messages: Optional[List[str]] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         snr_db: Optional[float] = None,
         d: Optional[float] = None,
     ):
         x = self.semantic_encoder(
-            messages=first_messages,
-            input_ids=first_input_ids,
-            attention_mask=first_attention_mask,
+            messages=messages,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
         )
         x, _ = self.shift_src_output(x, mode=self.mode)
 
@@ -116,8 +114,8 @@ class SemanticTransformer(nn.Module):
 
         if self.channel is None:
             # signal power constraint
-            gain = torch.sqrt(0.5 / torch.var(x, dim=-1))
-            x = x * gain[:, :, None]
+            last_dim = x.shape[-1]
+            x = ((last_dim / 2) ** 0.5) * F.normalize(x, dim=-1, p=2)
 
             x = self._add_noise(x, snr_db)
         else:
@@ -125,14 +123,20 @@ class SemanticTransformer(nn.Module):
 
         x = self.channel_decoder(x)
 
-        decoder_idx = second_input_ids[:, :-1]  # TODO: SECOND OR FIRST?
-        targets = second_input_ids[:, 1:]
+        if self.semantic_encoder.mode == "next_sentence":
+            input_ids = pad_cls(input_ids[:, -self.max_length :])
+
+        decoder_idx, targets, enc_padding_mask, is_causal = shift_inputs(
+            xb=input_ids,
+            attention_mask=attention_mask,
+            mode=self.mode,
+        )
 
         logits, loss = self.semantic_decoder(
             idx=decoder_idx,
             encoder_output=x,
-            is_causal=False,
-            enc_padding_mask=None,
+            is_causal=is_causal,
+            enc_padding_mask=enc_padding_mask,
             targets=targets,
         )
 
@@ -147,6 +151,7 @@ class SemanticTransformer(nn.Module):
         snr_db: Optional[float] = None,
         d: Optional[float] = None,
         beam_width=5,
+        greedy=False,
     ):
         x = self.semantic_encoder(
             messages=messages,
@@ -169,40 +174,58 @@ class SemanticTransformer(nn.Module):
         x = self.channel_decoder(x)
 
         if self.mode == "sentence":
-            return self.generate_sentence(x=x, beam_width=beam_width)
+            return self.generate_sentence(x=x, beam_width=beam_width, greedy=greedy)
         else:
             return self.generate_token(
-                x=x, beam_width=beam_width, attention_mask=attention_mask
+                x=x, beam_width=beam_width, attention_mask=attention_mask, greedy=greedy
             )
 
-    def generate_sentence(self, x, beam_width):
+    def generate_sentence(self, x, beam_width, greedy):
         B, R, _ = x.shape
         x = torch.repeat_interleave(input=x, repeats=R, dim=0)
 
         x_padding_mask = torch.tril(torch.ones(R, R, device=self.device), -1).T.bool()
         x_padding_mask = x_padding_mask.repeat(B, 1)
 
-        return self.semantic_decoder.generate(
-            encoder_output=x,
-            is_causal=False,
-            max_length=self.max_length,
-            enc_padding_mask=x_padding_mask,
-            beam_width=beam_width,
-            n_generated_tokens=self.max_length + 1,
-        )
+        if greedy:
+            return self.semantic_decoder.generate_greedy(
+                encoder_output=x,
+                is_causal=False,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                n_generated_tokens=self.max_length + 1,
+            )
+        else:
+            return self.semantic_decoder.generate(
+                encoder_output=x,
+                is_causal=False,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                beam_width=beam_width,
+                n_generated_tokens=self.max_length + 1,
+            )
 
-    def generate_token(self, x, beam_width, attention_mask):
+    def generate_token(self, x, beam_width, attention_mask, greedy):
         x_padding_mask = attention_mask[:, 1:] == 0
         is_causal = True
 
-        return self.semantic_decoder.generate(
-            encoder_output=x,
-            is_causal=is_causal,
-            max_length=self.max_length,
-            enc_padding_mask=x_padding_mask,
-            beam_width=beam_width,
-            n_generated_tokens=self.max_length + 1,
-        )
+        if greedy:
+            return self.semantic_decoder.generate_greedy(
+                encoder_output=x,
+                is_causal=is_causal,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                n_generated_tokens=self.max_length + 1,
+            )
+        else:
+            return self.semantic_decoder.generate(
+                encoder_output=x,
+                is_causal=is_causal,
+                max_length=self.max_length,
+                enc_padding_mask=x_padding_mask,
+                beam_width=beam_width,
+                n_generated_tokens=self.max_length + 1,
+            )
 
     @staticmethod
     def _add_noise(signal, snr_db):
