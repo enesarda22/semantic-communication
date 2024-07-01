@@ -6,9 +6,9 @@ from tqdm import tqdm
 
 import torch
 from torch.utils.data import TensorDataset
+from transformers import AutoTokenizer
 
 from semantic_communication.data_processing.preprocessor import Preprocessor
-from semantic_communication.models.semantic_encoder import SemanticEncoder
 from semantic_communication.utils.tensor_label_encoder import TensorLabelEncoder
 
 if __name__ == "__main__":
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-length", default=30, type=int)
     parser.add_argument("--train-size", default=0.7, type=float)
     parser.add_argument("--test-size", default=0.5, type=float)
-    parser.add_argument("--n-samples", default=None, type=int)
+    parser.add_argument("--n-samples", default=10000, type=int)
     args = parser.parse_args()
 
     en_fp = os.path.join(args.europarl_folder_path, "en/*.txt")
@@ -37,8 +37,15 @@ if __name__ == "__main__":
     print(f"Number of sentences: {len(preprocessed_messages)}")
 
     # tokenize
-    semantic_encoder = SemanticEncoder(max_length=args.max_length)
-    tokens = semantic_encoder.tokenize(messages=preprocessed_messages)
+    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokens = tokenizer(
+        preprocessed_messages,
+        padding="max_length",
+        max_length=args.max_length + 1,
+        truncation=True,
+        return_tensors="pt",
+    )
 
     # drop sentences shorter than 2 tokens
     long_sentence_query = tokens["attention_mask"].sum(dim=1) > 4
