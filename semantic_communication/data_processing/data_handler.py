@@ -18,12 +18,10 @@ class DataHandler:
         self,
         data_fp: str,
         batch_size: int,
-        mode: str,
+        mode=None,
         rank=None,
         world_size=None,
     ):
-        assert valid_mode(mode)
-
         self.device = get_device()
         self.data_fp = data_fp
         self.batch_size = batch_size

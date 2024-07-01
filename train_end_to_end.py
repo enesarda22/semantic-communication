@@ -246,7 +246,7 @@ def main(args):
 
             checkpoint_path = os.path.join(
                 args.checkpoint_path,
-                f"transceiver/transceiver_{args.mode}_{epoch}.pt",
+                f"transceiver/transceiver_{args.mode}_{args.channel_type}_{epoch}.pt",
             )
 
             if mean_loss < best_loss:

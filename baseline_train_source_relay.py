@@ -105,7 +105,8 @@ if __name__ == "__main__":
 
         mean_loss = np.mean(val_losses)
         checkpoint_path = os.path.join(
-            args.checkpoint_path, f"baseline-tx-relay/baseline_tx_relay_{epoch}.pt"
+            args.checkpoint_path,
+            f"baseline-tx-relay/baseline_tx_relay_{args.channel_type}_{epoch}.pt",
         )
 
         if mean_loss < best_loss:

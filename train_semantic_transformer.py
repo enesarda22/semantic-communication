@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
         checkpoint_path = os.path.join(
             args.checkpoint_path,
-            f"semantic-transformer/semantic_transformer_{args.mode}_{epoch}.pt",
+            f"semantic-transformer/semantic_transformer_{args.mode}_{args.channel_type}_{epoch}.pt",
         )
 
         if mean_loss < best_loss:
