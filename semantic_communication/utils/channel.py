@@ -52,11 +52,12 @@ class Channel(ABC):
                 x.reshape(B, T * C), dim=-1, p=2
             ).reshape(B, T, C)
         else:
-            for i in range(B):
-                n_tokens = int(torch.sum(attention_mask[i, :]).item())
-                x[i, :n_tokens, :] = ((pow * n_tokens * C / 2) ** 0.5) * F.normalize(
-                    x[i, :n_tokens, :].flatten(), dim=-1, p=2
-                ).reshape(n_tokens, C)
+            n_tokens = torch.sum(attention_mask, dim=-1)
+            norms = torch.sum(
+                (attention_mask[:, :, None] * (x**2)).reshape(B, T * C), dim=-1
+            )
+            x = (pow * C * n_tokens / norms / 2)[:, None, None] ** 0.5 * x
+
         return x
 
 
