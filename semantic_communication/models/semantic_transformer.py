@@ -151,7 +151,6 @@ class SemanticTransformer(nn.Module):
         snr_db: Optional[float] = None,
         d: Optional[float] = None,
         beam_width=5,
-        greedy=False,
     ):
         x = self.semantic_encoder(
             messages=messages,
@@ -173,11 +172,11 @@ class SemanticTransformer(nn.Module):
 
         x = self.channel_decoder(x)
 
-        if self.mode == "sentence":
-            return self.generate_sentence(x=x, beam_width=beam_width, greedy=greedy)
+        if self.mode == "sentence" or self.mode == "next_sentence":
+            return self.generate_sentence(x=x, beam_width=beam_width, greedy=False)[0]
         else:
             return self.generate_token(
-                x=x, beam_width=beam_width, attention_mask=attention_mask, greedy=greedy
+                x=x, beam_width=beam_width, attention_mask=attention_mask, greedy=True
             )
 
     def generate_sentence(self, x, beam_width, greedy):

@@ -56,10 +56,11 @@ if __name__ == "__main__":
 
     client = OpenAI(api_key=args.API_KEY)
     sbert_eval_model = SentenceTransformer("all-MiniLM-L6-v2")
-
+    print(args.mode)
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
+        mode=args.mode
     )
 
     # initialize models
@@ -141,7 +142,6 @@ if __name__ == "__main__":
                 input_ids=encoder_idx,
                 attention_mask=encoder_attention_mask,
                 d=d_sr,
-                greedy=True,
             )
 
             # find the end of sentences
@@ -164,10 +164,16 @@ if __name__ == "__main__":
                 skip_special_tokens=True,
             )
 
-            input_tokens = semantic_encoder.get_tokens(
-                ids=encoder_idx,
-                skip_special_tokens=True,
-            )
+            if args.mode == "next_sentence":
+                input_tokens = semantic_encoder.get_tokens(
+                    ids=encoder_idx[:, -args.max_length:],
+                    skip_special_tokens=True,
+                )
+            else:
+                input_tokens = semantic_encoder.get_tokens(
+                    ids=encoder_idx,
+                    skip_special_tokens=True,
+                )
 
             for s1, s2 in zip(input_tokens, predicted_tokens):
                 # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
@@ -221,25 +227,25 @@ if __name__ == "__main__":
         ) / np.sqrt(n_test_samples)
 
         np.save(
-            os.path.join(results_dir, "proposed_mean_semantic_sim.npy"),
+            os.path.join(results_dir, f"proposed_{args.mode}_mean_semantic_sim.npy"),
             mean_semantic_sim,
         )
         np.save(
-            os.path.join(results_dir, "proposed_mean_sbert_semantic_sim.npy"),
+            os.path.join(results_dir, f"proposed_{args.mode}_mean_sbert_semantic_sim.npy"),
             mean_sbert_semantic_sim,
         )
-        np.save(os.path.join(results_dir, "proposed_mean_bleu_1.npy"), mean_bleu_1)
-        np.save(os.path.join(results_dir, "proposed_mean_bleu.npy"), mean_bleu)
+        np.save(os.path.join(results_dir, f"proposed_{args.mode}_mean_bleu_1.npy"), mean_bleu_1)
+        np.save(os.path.join(results_dir, f"proposed_{args.mode}_mean_bleu.npy"), mean_bleu)
 
         np.save(
-            os.path.join(results_dir, "proposed_std_semantic_sim.npy"), std_semantic_sim
+            os.path.join(results_dir, f"proposed_{args.mode}_std_semantic_sim.npy"), std_semantic_sim
         )
         np.save(
-            os.path.join(results_dir, "proposed_std_sbert_semantic_sim.npy"),
+            os.path.join(results_dir, f"proposed_{args.mode}_std_sbert_semantic_sim.npy"),
             std_sbert_semantic_sim,
         )
-        np.save(os.path.join(results_dir, "proposed_std_bleu_1.npy"), std_bleu_1)
-        np.save(os.path.join(results_dir, "proposed_std_bleu.npy"), std_bleu)
+        np.save(os.path.join(results_dir, f"proposed_{args.mode}_std_bleu_1.npy"), std_bleu_1)
+        np.save(os.path.join(results_dir, f"proposed_{args.mode}_std_bleu.npy"), std_bleu)
 
         df = pd.DataFrame(
             records,
@@ -253,4 +259,4 @@ if __name__ == "__main__":
                 "SBERT Semantic Score",
             ],
         )
-        df.to_excel(os.path.join(results_dir, "proposed_output.xlsx"), index=False)
+        df.to_excel(os.path.join(results_dir, f"proposed_{args.mode}_output.xlsx"), index=False)
