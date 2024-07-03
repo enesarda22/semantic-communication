@@ -37,10 +37,16 @@ class SemanticEncoder(nn.Module):
             input_ids = tokens["input_ids"]
             attention_mask = tokens["attention_mask"]
 
-        encoder_lhs = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )["last_hidden_state"]
+        if self.mode == "next_sentence":
+            encoder_lhs = self.bert(
+                input_ids=input_ids[:, : self.max_length],
+                attention_mask=attention_mask[:, : self.max_length],
+            )["last_hidden_state"]
+        else:
+            encoder_lhs = self.bert(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )["last_hidden_state"]
 
         if self.mode == "predict":
             encoder_output = self.mean_pooling(
@@ -53,16 +59,10 @@ class SemanticEncoder(nn.Module):
             )
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
-        elif self.mode == "sentence":
+        elif self.mode == "sentence" or self.mode == "next_sentence":
             encoder_output = self.mean_pooling(
                 bert_lhs=encoder_lhs,
                 attention_mask=attention_mask,
-            )
-            encoder_output = encoder_output[:, None, :]
-        elif self.mode == "next_sentence":
-            encoder_output = self.mean_pooling(
-                bert_lhs=encoder_lhs[:, : self.max_length, :],
-                attention_mask=attention_mask[:, : self.max_length],
             )
             encoder_output = encoder_output[:, None, :]
         else:
