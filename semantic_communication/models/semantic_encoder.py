@@ -59,10 +59,16 @@ class SemanticEncoder(nn.Module):
             )
         elif self.mode == "forward":
             encoder_output = encoder_lhs[:, 1:, :]
-        elif self.mode == "sentence" or self.mode == "next_sentence":
+        elif self.mode == "sentence":
             encoder_output = self.mean_pooling(
                 bert_lhs=encoder_lhs,
                 attention_mask=attention_mask,
+            )
+            encoder_output = encoder_output[:, None, :]
+        elif self.mode == "next_sentence":
+            encoder_output = self.mean_pooling(
+                bert_lhs=encoder_lhs,
+                attention_mask=attention_mask[:, : self.max_length],
             )
             encoder_output = encoder_output[:, None, :]
         else:
