@@ -23,8 +23,10 @@ class Tx_Relay(nn.Module):
         if self.channel is not None:
             ch_output = self.channel(ch_input, d_sr)
         else:
-            gain = torch.sqrt(0.5 / torch.var(ch_input, dim=-1))
-            ch_output = ch_input * gain[:, :, None]
+            last_dim = ch_input.shape[-1]
+            ch_output = (
+                (self.signal_power_constraint * last_dim / 2) ** 0.5
+            ) * F.normalize(ch_input, dim=-1, p=2)
 
         x_hat = self.linear(self.relay_decoder(ch_output))
 
