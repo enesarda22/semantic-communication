@@ -49,9 +49,7 @@ if __name__ == "__main__":
     sbert_eval_model = SentenceTransformer("all-MiniLM-L6-v2")
 
     data_handler = DataHandler(
-        batch_size=args.batch_size,
-        data_fp=args.data_fp,
-        mode="forward"
+        batch_size=args.batch_size, data_fp=args.data_fp, mode="forward"
     )
 
     semantic_encoder = SemanticEncoder(
@@ -140,28 +138,28 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(original_sentences, predicted_sentences):
-                    sim_score = semantic_similarity_score(s1, s2, client)
-                    bleu_1_score = sentence_bleu(
-                        [word_tokenize(s1)],
-                        word_tokenize(s2),
-                        weights=[1, 0, 0, 0],
-                        smoothing_function=smoothing_function,
-                    )
+                    # sim_score = semantic_similarity_score(s1, s2, client)
+                    # bleu_1_score = sentence_bleu(
+                    #     [word_tokenize(s1)],
+                    #     word_tokenize(s2),
+                    #     weights=[1, 0, 0, 0],
+                    #     smoothing_function=smoothing_function,
+                    # )
                     bleu_score = sentence_bleu(
                         [word_tokenize(s1)],
                         word_tokenize(s2),
                         smoothing_function=smoothing_function,
                     )
-                    sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
+                    # sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
 
-                    cosine_scores.append(sim_score)
-                    bleu1_scores.append(bleu_1_score)
+                    # cosine_scores.append(sim_score)
+                    # bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
-                    sbert_semantic_sim_scores.append(sbert_sim_score)
+                    # sbert_semantic_sim_scores.append(sbert_sim_score)
 
-                    records.append([d_sr, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
+                    # records.append([d_sr, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
 
-            if len(bleu1_scores) >= args.n_test:
+            if len(bleu_scores) >= args.n_test:
                 break
 
         n_test_samples = len(bleu1_scores)
@@ -172,9 +170,9 @@ if __name__ == "__main__":
         mean_bleu_1[distance_index, 0] = np.mean(bleu1_scores)
         mean_bleu[distance_index, 0] = np.mean(bleu_scores)
 
-        std_semantic_sim[distance_index, 0] = np.std(
-            cosine_scores, ddof=1
-        ) / np.sqrt(n_test_samples)
+        std_semantic_sim[distance_index, 0] = np.std(cosine_scores, ddof=1) / np.sqrt(
+            n_test_samples
+        )
         std_bleu_1[distance_index, 0] = np.std(bleu1_scores, ddof=1) / np.sqrt(
             n_test_samples
         )
@@ -182,29 +180,31 @@ if __name__ == "__main__":
             n_test_samples
         )
 
-        std_sbert_semantic_sim[distance_index, 0] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(
-            n_test_samples)
+        std_sbert_semantic_sim[distance_index, 0] = np.std(
+            sbert_semantic_sim_scores, ddof=1
+        ) / np.sqrt(n_test_samples)
 
-        np.save(os.path.join(results_dir, "ae_conventional_mean_semantic_sim.npy"), mean_semantic_sim)
-        np.save(os.path.join(results_dir, "ae_conventional_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
-        np.save(os.path.join(results_dir, "ae_conventional_mean_bleu_1.npy"), mean_bleu_1)
-        np.save(os.path.join(results_dir, "ae_conventional_mean_bleu.npy"), mean_bleu)
-
-        np.save(os.path.join(results_dir, "ae_conventional_std_semantic_sim.npy"), std_semantic_sim)
-        np.save(os.path.join(results_dir, "ae_conventional_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
-        np.save(os.path.join(results_dir, "ae_conventional_std_bleu_1.npy"), std_bleu_1)
-        np.save(os.path.join(results_dir, "ae_conventional_std_bleu.npy"), std_bleu)
-
-        df = pd.DataFrame(
-            records,
-            columns=[
-                "d_sr",
-                "Sentence 1",
-                "Sentence 2",
-                "Semantic Similarity Score",
-                "BLEU 1 Gram Score",
-                "BLEU Score",
-                "SBERT Semantic Score"
-            ],
-        )
-        df.to_excel(os.path.join(results_dir, "baseline_output.xlsx"), index=False)
+        # np.save(os.path.join(results_dir, "ae_conventional_mean_semantic_sim.npy"), mean_semantic_sim)
+        # np.save(os.path.join(results_dir, "ae_conventional_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
+        # np.save(os.path.join(results_dir, "ae_conventional_mean_bleu_1.npy"), mean_bleu_1)
+        # np.save(os.path.join(results_dir, "ae_conventional_mean_bleu.npy"), mean_bleu)
+        #
+        # np.save(os.path.join(results_dir, "ae_conventional_std_semantic_sim.npy"), std_semantic_sim)
+        # np.save(os.path.join(results_dir, "ae_conventional_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
+        # np.save(os.path.join(results_dir, "ae_conventional_std_bleu_1.npy"), std_bleu_1)
+        # np.save(os.path.join(results_dir, "ae_conventional_std_bleu.npy"), std_bleu)
+        #
+        # df = pd.DataFrame(
+        #     records,
+        #     columns=[
+        #         "d_sr",
+        #         "Sentence 1",
+        #         "Sentence 2",
+        #         "Semantic Similarity Score",
+        #         "BLEU 1 Gram Score",
+        #         "BLEU Score",
+        #         "SBERT Semantic Score"
+        #     ],
+        # )
+        # df.to_excel(os.path.join(results_dir, "baseline_output.xlsx"), index=False)
+    print("HELLO")
