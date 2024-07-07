@@ -59,7 +59,7 @@ if __name__ == "__main__":
     data_handler = DataHandler(
         batch_size=args.batch_size,
         data_fp=args.data_fp,
-        next_sentence_pred=True
+        mode=args.mode,
     )
 
     # initialize models
@@ -171,11 +171,15 @@ if __name__ == "__main__":
             for b in data_handler.test_dataloader:
                 first_encoder_idx = b[0].to(device)
                 first_encoder_attention_mask = b[1].to(device)
-                first_encoder_idx = data_handler.label_encoder.transform(first_encoder_idx)
+                first_encoder_idx = data_handler.label_encoder.transform(
+                    first_encoder_idx
+                )
 
                 second_encoder_idx = b[2].to(device)
                 second_encoder_attention_mask = b[3].to(device)
-                second_encoder_idx = data_handler.label_encoder.transform(second_encoder_idx)
+                second_encoder_idx = data_handler.label_encoder.transform(
+                    second_encoder_idx
+                )
 
                 predicted_ids, probs = transceiver.generate(
                     first_input_ids=first_encoder_idx,
@@ -214,9 +218,20 @@ if __name__ == "__main__":
                 for s1, s2 in zip(input_tokens, predicted_tokens):
                     # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
                     # sim_score = semantic_similarity_score(s1, s2, client)
-                    bleu_1_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), weights=[1, 0, 0, 0], smoothing_function=smoothing_function)
-                    bleu_score = sentence_bleu([word_tokenize(s1)], word_tokenize(s2), smoothing_function=smoothing_function)
-                    sbert_sim_score = sbert_semantic_similarity_score(s1, s2, sbert_model=sbert_eval_model)
+                    bleu_1_score = sentence_bleu(
+                        [word_tokenize(s1)],
+                        word_tokenize(s2),
+                        weights=[1, 0, 0, 0],
+                        smoothing_function=smoothing_function,
+                    )
+                    bleu_score = sentence_bleu(
+                        [word_tokenize(s1)],
+                        word_tokenize(s2),
+                        smoothing_function=smoothing_function,
+                    )
+                    sbert_sim_score = sbert_semantic_similarity_score(
+                        s1, s2, sbert_model=sbert_eval_model
+                    )
 
                     # cosine_scores.append(sim_score)
                     bleu1_scores.append(bleu_1_score)
@@ -231,7 +246,9 @@ if __name__ == "__main__":
             cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
             # mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
-            mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(sbert_semantic_sim_scores)
+            mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(
+                sbert_semantic_sim_scores
+            )
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
             #
@@ -245,17 +262,55 @@ if __name__ == "__main__":
                 bleu_scores, ddof=1
             ) / np.sqrt(n_test_samples)
 
-            std_sbert_semantic_sim[distance_index, gamma_index] = np.std(sbert_semantic_sim_scores, ddof=1) / np.sqrt(n_test_samples)
+            std_sbert_semantic_sim[distance_index, gamma_index] = np.std(
+                sbert_semantic_sim_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
 
             # np.save(os.path.join(results_dir, f"{args.mode}__{args.channel_type}proposed_mean_semantic_sim.npy"), mean_semantic_sim)
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_mean_sbert_semantic_sim.npy"), mean_sbert_semantic_sim)
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_mean_bleu_1.npy"), mean_bleu_1)
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_mean_bleu.npy"), mean_bleu)
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_mean_sbert_semantic_sim.npy",
+                ),
+                mean_sbert_semantic_sim,
+            )
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_mean_bleu_1.npy",
+                ),
+                mean_bleu_1,
+            )
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_mean_bleu.npy",
+                ),
+                mean_bleu,
+            )
 
             # np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_std_semantic_sim.npy"), std_semantic_sim)
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_std_sbert_semantic_sim.npy"), std_sbert_semantic_sim)
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_std_bleu_1.npy"), std_bleu_1)
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_std_bleu.npy"), std_bleu)
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_std_sbert_semantic_sim.npy",
+                ),
+                std_sbert_semantic_sim,
+            )
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_std_bleu_1.npy",
+                ),
+                std_bleu_1,
+            )
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_std_bleu.npy",
+                ),
+                std_bleu,
+            )
 
             # df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score', "SBERT Semantic Score"])
             # df.to_excel(os.path.join(results_dir, f'{args.mode}_proposed_output.xlsx'), index=False)
