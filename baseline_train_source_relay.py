@@ -18,10 +18,13 @@ from semantic_communication.utils.general import (
     add_channel_model_args,
     add_train_args,
     add_data_args,
+    load_model,
 )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--tx-relay-path", default=None, type=str)
+
     add_channel_model_args(parser)
     add_data_args(parser)
     add_train_args(parser)
@@ -43,6 +46,7 @@ if __name__ == "__main__":
         n_latent=args.channel_block_latent_dim,
         channel=channel,
     ).to(device)
+    load_model(tx_relay_model, args.tx_relay_path)
 
     optimizer = torch.optim.AdamW(
         params=tx_relay_model.parameters(),
