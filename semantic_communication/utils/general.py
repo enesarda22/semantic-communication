@@ -243,7 +243,13 @@ def plotter(
     plt.tight_layout()
 
     if save:
-        plt.savefig(f"Plots/{title}.png", dpi=900)
+        plots_dir = "Plots"
+        if not os.path.exists(plots_dir):
+            os.makedirs(plots_dir)
+
+        file_path = os.path.join("Plots", f"{title}.png")
+        plt.savefig(file_path, dpi=900)
+
     if show:
         plt.show()
 

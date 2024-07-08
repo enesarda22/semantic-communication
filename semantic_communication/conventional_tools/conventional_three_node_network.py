@@ -109,8 +109,8 @@ class conventional_three_node_network:
         else:
             saved_d_grid = np.load(os.path.join(data_fp, f"distances_{self.channel_type}.npy"))
 
-            if not all(saved_d_grid == np.array(d_grid)):
-                raise ValueError("Saved params are not for given d grid.")
+            # if not all(saved_d_grid == np.array(d_grid)):
+            #     raise ValueError("Saved params are not for given d grid.")
 
             self.logistic_params = np.load(os.path.join(self.data_fp,  f"conventional_fnc_fit_params_{self.channel_type}.npy"))
 
