@@ -223,35 +223,35 @@ if __name__ == "__main__":
             ) / np.sqrt(n_test_samples)
 
             np.save(
-                os.path.join(results_dir, "ae_conventional_mean_semantic_sim.npy"),
+                os.path.join(results_dir, f"ae_conventional_mean_semantic_sim_{args.channel_type}.npy"),
                 mean_semantic_sim,
             )
             np.save(
                 os.path.join(
-                    results_dir, "ae_conventional_mean_sbert_semantic_sim.npy"
+                    results_dir, f"ae_conventional_mean_sbert_semantic_sim_{args.channel_type}.npy"
                 ),
                 mean_sbert_semantic_sim,
             )
             np.save(
-                os.path.join(results_dir, "ae_conventional_mean_bleu_1.npy"),
+                os.path.join(results_dir, f"ae_conventional_mean_bleu_1_{args.channel_type}.npy"),
                 mean_bleu_1,
             )
             np.save(
-                os.path.join(results_dir, "ae_conventional_mean_bleu.npy"), mean_bleu
+                os.path.join(results_dir, f"ae_conventional_mean_bleu_{args.channel_type}.npy"), mean_bleu
             )
 
             np.save(
-                os.path.join(results_dir, "ae_conventional_std_semantic_sim.npy"),
+                os.path.join(results_dir, f"ae_conventional_std_semantic_sim_{args.channel_type}.npy"),
                 std_semantic_sim,
             )
             np.save(
-                os.path.join(results_dir, "ae_conventional_std_sbert_semantic_sim.npy"),
+                os.path.join(results_dir, f"ae_conventional_std_sbert_semantic_sim_{args.channel_type}.npy"),
                 std_sbert_semantic_sim,
             )
             np.save(
-                os.path.join(results_dir, "ae_conventional_std_bleu_1.npy"), std_bleu_1
+                os.path.join(results_dir, f"ae_conventional_std_bleu_1_{args.channel_type}.npy"), std_bleu_1
             )
-            np.save(os.path.join(results_dir, "ae_conventional_std_bleu.npy"), std_bleu)
+            np.save(os.path.join(results_dir, f"ae_conventional_std_bleu_{args.channel_type}.npy"), std_bleu)
 
             df = pd.DataFrame(
                 records,
@@ -266,4 +266,4 @@ if __name__ == "__main__":
                     "SBERT Semantic Score",
                 ],
             )
-            df.to_excel(os.path.join(results_dir, "baseline_output.xlsx"), index=False)
+            df.to_excel(os.path.join(results_dir, f"baseline_output_{args.channel_type}.xlsx"), index=False)

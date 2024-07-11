@@ -102,7 +102,9 @@ if __name__ == "__main__":
                 mask = (encoder_idx != 0) & (encoder_idx != 101) & (encoder_idx != 102)
                 encoder_idx = encoder_idx.masked_select(mask)
                 encoder_idx = data_handler.label_encoder.transform(encoder_idx).cpu().detach().numpy()
-                source_decoded = conventional_three_node_network(encoder_idx, d_sd, d_sr, d_rd)
+                valid_counts = mask.sum(dim=1).tolist()
+
+                source_decoded = conventional_three_node_network(encoder_idx, d_sd, d_sr, d_rd, valid_counts)
 
                 token_ids = semantic_encoder.label_encoder.inverse_transform(source_decoded)
                 predicted_sentence = ' '.join(semantic_encoder.get_tokens(
@@ -114,7 +116,6 @@ if __name__ == "__main__":
                     ids=encoder_idx,
                     skip_special_tokens=True,
                 ))
-                valid_counts = mask.sum(dim=1).tolist()
 
                 predicted_sentence = split_string_by_lengths(predicted_sentence, valid_counts)
                 original_sentence = split_string_by_lengths(original_sentence, valid_counts)

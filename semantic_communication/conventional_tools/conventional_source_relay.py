@@ -31,9 +31,9 @@ class source_relay_p2p_com:
 
         self.modulator = modulation(modulation_order)
         if channel_type == "AWGN":
-            self.channel = conv_AWGN(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow)
+            self.channel = conv_AWGN(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow, p2p=True)
         elif channel_type == "Rayleigh":
-            self.channel = conv_Rayleigh(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow)
+            self.channel = conv_Rayleigh(signal_power_constraint=sig_pow, alpha=alpha, noise_pow=noise_pow, p2p=True)
         else:
             raise ValueError("Invalid channel type.")
 

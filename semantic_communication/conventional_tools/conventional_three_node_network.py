@@ -114,14 +114,14 @@ class conventional_three_node_network:
 
             self.logistic_params = np.load(os.path.join(self.data_fp,  f"conventional_fnc_fit_params_{self.channel_type}.npy"))
 
-    def __call__(self, x, d_sd, d_sr, d_rd):
+    def __call__(self, x, d_sd, d_sr, d_rd, valid_counts):
         s_out_re, s_out_im, s_s_padding, s_ch_padding = self.source_transmitter(x)
-        r_in_re, r_in_im = self.channel(s_out_re, s_out_im, d_sr)
+        r_in_re, r_in_im = self.channel(s_out_re, s_out_im, d_sr, valid_counts)
         r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
 
         r_out_re, r_out_im, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
-        dr_in_re, dr_in_im = self.channel(r_out_re, r_out_im, d_rd)
-        ds_in_re, ds_in_im = self.channel(s_out_re, s_out_im, d_sd)
+        dr_in_re, dr_in_im = self.channel(r_out_re, r_out_im, d_rd, valid_counts)
+        ds_in_re, ds_in_im = self.channel(s_out_re, s_out_im, d_sd, valid_counts)
 
         d_in_re, d_in_im = self.ml_decision(ds_in_re, ds_in_im, dr_in_re, dr_in_im, d_sd, d_sr, d_rd)
         return self.destination_receiver(d_in_re, d_in_im, s_s_padding, s_ch_padding)
@@ -212,12 +212,14 @@ class conventional_three_node_network:
             i = 0
             for b in tqdm(self.data_handler.train_dataloader):
                 mask = (b[0] != 0) & (b[0] != 101) & (b[0] != 102)
+                valid_counts = mask.sum(dim=1).tolist()
+
                 b_input_ids = b[0].masked_select(mask)
                 b_input_ids = self.data_handler.label_encoder.transform(b_input_ids).cpu().detach().numpy()
 
                 source_out_re, source_out_im, s_s_padding, s_ch_padding = self.source_transmitter(b_input_ids)
 
-                r_in_re, r_in_im = self.channel(source_out_re, source_out_im, d)
+                r_in_re, r_in_im = self.channel(source_out_re, source_out_im, d, valid_counts)
                 r_decoded = self.relay_receiver(r_in_re, r_in_im, s_s_padding, s_ch_padding)
 
                 r_out_re, r_out_im, r_s_padding, r_ch_padding = self.relay_transmitter(r_decoded)
