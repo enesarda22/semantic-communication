@@ -227,7 +227,18 @@ if __name__ == "__main__":
                     bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
                     sbert_semantic_sim_scores.append(sbert_sim_score)
-                    records.append([d_sd, gamma, s1, s2, sim_score, bleu_1_score, bleu_score, sbert_sim_score])
+                    records.append(
+                        [
+                            d_sd,
+                            gamma,
+                            s1,
+                            s2,
+                            sim_score,
+                            bleu_1_score,
+                            bleu_score,
+                            sbert_sim_score,
+                        ]
+                    )
 
                 if len(bleu1_scores) >= args.n_test:
                     break
@@ -256,7 +267,13 @@ if __name__ == "__main__":
                 sbert_semantic_sim_scores, ddof=1
             ) / np.sqrt(n_test_samples)
 
-            np.save(os.path.join(results_dir, f"{args.mode}__{args.channel_type}proposed_mean_semantic_sim.npy"), mean_semantic_sim)
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_mean_semantic_sim.npy",
+                ),
+                mean_semantic_sim,
+            )
             np.save(
                 os.path.join(
                     results_dir,
@@ -279,7 +296,13 @@ if __name__ == "__main__":
                 mean_bleu,
             )
 
-            np.save(os.path.join(results_dir, f"{args.mode}_{args.channel_type}_proposed_std_semantic_sim.npy"), std_semantic_sim)
+            np.save(
+                os.path.join(
+                    results_dir,
+                    f"{args.mode}_{args.channel_type}_proposed_std_semantic_sim.npy",
+                ),
+                std_semantic_sim,
+            )
             np.save(
                 os.path.join(
                     results_dir,
@@ -302,5 +325,22 @@ if __name__ == "__main__":
                 std_bleu,
             )
 
-            df = pd.DataFrame(records, columns=['d_sd', "Gamma", 'Sentence 1', 'Sentence 2', 'Semantic Similarity Score', 'BLEU 1 Gram Score', 'BLEU Score', "SBERT Semantic Score"])
-            df.to_excel(os.path.join(results_dir, f'{args.mode}_proposed_output.xlsx'), index=False)
+            df = pd.DataFrame(
+                records,
+                columns=[
+                    "d_sd",
+                    "Gamma",
+                    "Sentence 1",
+                    "Sentence 2",
+                    "Semantic Similarity Score",
+                    "BLEU 1 Gram Score",
+                    "BLEU Score",
+                    "SBERT Semantic Score",
+                ],
+            )
+            df.to_excel(
+                os.path.join(
+                    results_dir, f"{args.mode}_{args.channel_type}_proposed_output.xlsx"
+                ),
+                index=False,
+            )
