@@ -121,7 +121,7 @@ if __name__ == "__main__":
                 original_sentence = split_string_by_lengths(original_sentence, valid_counts)
 
                 for s1, s2 in zip(original_sentence, predicted_sentence):
-                    # sim_score = semantic_similarity_score(s1, s2, client)
+                    sim_score = semantic_similarity_score(s1, s2, client)
                     bleu_1_score = sentence_bleu(
                         [word_tokenize(s1)],
                         word_tokenize(s2),
@@ -138,31 +138,31 @@ if __name__ == "__main__":
                         s1, s2, sbert_model=sbert_eval_model
                     )
 
-                    # gpt_scores.append(sim_score)
+                    gpt_scores.append(sim_score)
                     bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
                     sbert_semantic_sim_scores.append(sbert_sim_score)
 
-                    # records.append(
-                    #     [
-                    #         d_sd,
-                    #         gamma,
-                    #         s1,
-                    #         s2,
-                    #         sim_score,
-                    #         bleu_1_score,
-                    #         bleu_score,
-                    #         sbert_sim_score,
-                    #     ]
-                    # )
+                    records.append(
+                        [
+                            d_sd,
+                            gamma,
+                            s1,
+                            s2,
+                            sim_score,
+                            bleu_1_score,
+                            bleu_score,
+                            sbert_sim_score,
+                        ]
+                    )
 
                 if len(bleu1_scores) >= args.n_test:
                     break
 
             n_test_samples = len(bleu1_scores)
-            # gpt_scores = [x for x in gpt_scores if not np.isnan(x)]
+            gpt_scores = [x for x in gpt_scores if not np.isnan(x)]
 
-            # mean_semantic_sim[distance_index, gamma_index] = np.mean(gpt_scores)
+            mean_semantic_sim[distance_index, gamma_index] = np.mean(gpt_scores)
             mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(
                 sbert_semantic_sim_scores
             )
@@ -175,9 +175,9 @@ if __name__ == "__main__":
             std_bleu_1[distance_index, gamma_index] = np.std(
                 bleu1_scores, ddof=1
             ) / np.sqrt(n_test_samples)
-            # std_semantic_sim[distance_index, gamma_index] = np.std(
-            #     gpt_scores, ddof=1
-            # ) / np.sqrt(n_test_samples)
+            std_semantic_sim[distance_index, gamma_index] = np.std(
+                gpt_scores, ddof=1
+            ) / np.sqrt(n_test_samples)
             std_bleu[distance_index, gamma_index] = np.std(
                 bleu_scores, ddof=1
             ) / np.sqrt(n_test_samples)
@@ -213,17 +213,17 @@ if __name__ == "__main__":
             )
             np.save(os.path.join(results_dir, f"conventional_std_bleu_{args.channel_type}.npy"), std_bleu)
 
-            # df = pd.DataFrame(
-            #     records,
-            #     columns=[
-            #         "d_sd",
-            #         "Gamma",
-            #         "Sentence 1",
-            #         "Sentence 2",
-            #         "Semantic Similarity Score",
-            #         "BLEU 1 Gram Score",
-            #         "BLEU Score",
-            #         "SBERT Semantic Score",
-            #     ],
-            # )
-            # df.to_excel(os.path.join(results_dir, f"conventional_output_{args.channel_type}.xlsx"), index=False)
+            df = pd.DataFrame(
+                records,
+                columns=[
+                    "d_sd",
+                    "Gamma",
+                    "Sentence 1",
+                    "Sentence 2",
+                    "Semantic Similarity Score",
+                    "BLEU 1 Gram Score",
+                    "BLEU Score",
+                    "SBERT Semantic Score",
+                ],
+            )
+            df.to_excel(os.path.join(results_dir, f"conventional_output_{args.channel_type}.xlsx"), index=False)
