@@ -19,7 +19,6 @@ Please cite this paper if you use or refer to this code:
 	note = {ISSN: 2837-178X},
 	keywords = {6G, Cooperative communication, Data mining, Machine learning, Predictive models, relay network, Relay networks, Semantic communications, semantic lossy forwarding, semantic predict-and-forward, Semantics, Simulation},
 	pages = {1--6},
-	file = {Full Text PDF:/Users/enesarda/Zotero/storage/W2G4K8C3/Arda et al. - 2024 - Semantic Forwarding for Next Generation Relay Netw.pdf:application/pdf;IEEE Xplore Abstract Record:/Users/enesarda/Zotero/storage/PAHFHFZB/10480169.html:text/html},
 }
 ```
 
