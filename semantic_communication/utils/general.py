@@ -204,7 +204,7 @@ def plotter(
     show=False,
 ):
     plt.style.use(["science", "ieee", "no-latex"])
-    plt.figure(figsize=(3.2, 2.6))
+    plt.figure(figsize=(3, 2.6))
 
     lw = 1.3
     if not np.all(separation_conventional == 0):
@@ -219,7 +219,7 @@ def plotter(
         plt.plot(
             x_axis,
             sentence_decode,
-            label="Sen. DF",
+            label="SSF",
             color="c",
             linestyle=(0, (5, 1, 1, 1, 1, 1)),
             linewidth=lw,
@@ -238,7 +238,7 @@ def plotter(
     plt.ylabel(ylabel)
     plt.xlim([np.min(x_axis), np.max(x_axis)])
     plt.grid(lw=0.2)
-    plt.legend()
+    plt.legend(ncols=5, bbox_to_anchor=(1, 0.5), frameon=True, fancybox=True)
     plt.title(title)
     plt.tight_layout()
 
@@ -292,9 +292,9 @@ def plot(
             sentence_predict=sentence_predict[index, :],
             AE_baseline=AE_baseline[index, :],
             save=save,
-            xlabel="$d_{sr}$ (m)",
+            xlabel="$d_{SR}$ (m)",
             ylabel=y_label,
-            title=f"$d_{{sr}}$ v. {y_label} for $d_{{sd}}={d_sd}$m",
+            title=f"$d_{{SR}}$ v. {y_label} for $d_{{SD}}={d_sd}$m",
             show=show,
         )
 
@@ -309,8 +309,8 @@ def plot(
         sentence_predict=sentence_predict[:, mid_index],
         AE_baseline=AE_baseline[:, mid_index],
         save=save,
-        xlabel="$d_{sr}$ (m)",
+        xlabel="$d_{SD}$ (m)",
         ylabel=y_label,
-        title=f" $d_{{sd}}$ v. {y_label} for $d_{{sr}}=0.5d_{{sd}}$",
+        title=f" $d_{{SD}}$ v. {y_label} for $d_{{SR}}=0.5d_{{SD}}$",
         show=show,
     )
