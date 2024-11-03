@@ -1,53 +1,29 @@
-# semantic-communication
+# Semantic Forwarding for Next Generation Relay Networks
 
-## semantic decoder
+This repository contains the code for simulations in the paper:
 
-multi head = 64 * 64 * 3 * 6 = 73_728
-feed forward = 2 * 384 * 4 * 384 = 104_448
-x6 = 1_069_056
+Enes Arda, Emrecan Kutay and Aylin Yener, Semantic Forwarding for Next Generation Relay Networks, in 2024 58th Annual Conference on Information Sciences and Systems, CISS’24, Princeton, NJ, USA, Mar. 2024.
 
-linear = 30522 * 384 = 11_720_448
-
-n_heads = 6
-n_decoder_block = 6
-
-### training
-n_samples = 50_000
-lr =  4e-5
-epoch = 20
-batch_size = 64
-
-
-```
-python train_semantic_transformer.py \
---data-fp ~/data \
---checkpoint-path ~/data/checkpoints/improved-semantic-transformer \
---mode sentence \
---rate 5 \
---batch-size 1024 \
---n-epochs 30 \
---lr 6e-4 \
---n-blocks 6 \
---n-heads 6 \
---channel-block-input-dim 384 \
---channel-block-latent-dim 64
+Please cite this paper if you use or refer to this code:
+```bibtex
+@inproceedings{arda_semantic_2024,
+	title = {Semantic {Forwarding} for {Next} {Generation} {Relay} {Networks}},
+	url = {https://ieeexplore.ieee.org/document/10480169/?arnumber=10480169},
+	doi = {10.1109/CISS59072.2024.10480169},
+	abstract = {We consider cooperative semantic text communications facilitated by a relay node. We propose two types of semantic forwarding: semantic lossy forwarding (SLF) and semantic predict-and-forward (SPF). Both are machine learning aided approaches, and, in particular, utilize attention mechanisms at the relay to establish a dynamic semantic state, updated upon receiving a new source signal. In the SLF model, the semantic state is used to decode the received source signal; whereas in the SPF model, it is used to predict the next source signal, enabling proactive forwarding. Our proposed forwarding schemes do not need any channel state information and exhibit consistent performance regardless of the relay’s position. Our results demonstrate that the proposed semantic forwarding techniques outperform conventional semantic-agnostic baselines.},
+	urldate = {2024-11-02},
+	booktitle = {2024 58th {Annual} {Conference} on {Information} {Sciences} and {Systems} ({CISS})},
+	author = {Arda, Enes and Kutay, Emrecan and Yener, Aylin},
+	month = mar,
+	year = {2024},
+	note = {ISSN: 2837-178X},
+	keywords = {6G, Cooperative communication, Data mining, Machine learning, Predictive models, relay network, Relay networks, Semantic communications, semantic lossy forwarding, semantic predict-and-forward, Semantics, Simulation},
+	pages = {1--6},
+	file = {Full Text PDF:/Users/enesarda/Zotero/storage/W2G4K8C3/Arda et al. - 2024 - Semantic Forwarding for Next Generation Relay Netw.pdf:application/pdf;IEEE Xplore Abstract Record:/Users/enesarda/Zotero/storage/PAHFHFZB/10480169.html:text/html},
+}
 ```
 
-```
-python train_semantic_transformer.py \
---data-fp ~/data \
---checkpoint-path ~/data/checkpoints/improved-semantic-transformer \
---mode sentence \
---rate 3 \
---batch-size 512 \
---n-epochs 20 \
---lr 6e-4 \
---n-blocks 6 \
---n-heads 6 \
---channel-block-input-dim 384 \
---channel-block-latent-dim 64
-```
-
+### Training Commands
 ```
 python train_semantic_transformer.py \
 --data-fp ~/data \
@@ -69,30 +45,6 @@ python train_semantic_transformer.py \
 --d-max 3e3 \
 --gamma-min 0.1 \
 --gamma-max 0.9
-```
-
-```
-python train_src_relay_block.py \
---data-fp ~/data \
---checkpoint-path ~/data/checkpoints/ \
---semantic-transformer-path ~/data/checkpoints/improved-semantic-transformer/semantic-transformer/semantic_transformer_30.pt \
---mode sentence \
---rate 5 \
---batch-size 512 \
---n-epochs 30 \
---lr 5e-4 \
---n-blocks 6 \
---n-heads 6 \
---channel-block-input-dim 384 \
---channel-block-latent-dim 64 \
---channel-type AWGN \
---alpha 4 \
---sig-pow 1 \
---noise-pow 4e-15 \
---d-min 2e3 \
---d-max 7e3 \
---gamma-min 0.2 \
---gamma-max 0.8
 ```
 
 ```
@@ -157,158 +109,4 @@ python baseline_train_entire_network.py \
 --d-max 3e3 \
 --gamma-min 0.1 \
 --gamma-max 0.9
-```
-
-
-### old
-```
-python train_relay_decoder.py \
---batch-size 512 \
---n-epochs 20 \
---lr 5e-4 \
---n-blocks 6 \
---n-heads 6 \
---data-fp /data \
---checkpoint-path /data/checkpoints
-```
-
-
-```
-python train_receiver_decoder.py \
---relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---batch-size 512 \
---n-epochs 20 \
---lr 5e-4 \
---n-blocks 6 \
---n-heads 6 \
---data-fp /data \
---checkpoint-path /data/checkpoints
-```
-
-
-## channel
-n_latent = 128, 256
-min_SNR = 3
-max_SNR = 21
-SNR_step = 3
-SNR_window = 3
-channel_type = AWGN
-
-### training
-n_samples = 50_000
-lr = 4e-6
-epoch = 25
-batch_size = 64
-
-```
-python train_tx_relay_channel_block.py \
---batch-size 512 \
---n-epochs 25 \
---lr 5e-5 \
---channel-block-latent-dim 128 \
---SNR-min -6 \
---SNR-max 21 \
---channel-type AWGN \
---data-fp /data \
---checkpoint-path /data/checkpoints
-```
-
-
-## channel2
-SNR_diff = 3
-
-```
-python train_tx_relay_rx_channel_block.py \
---relay-decoder-path /data/checkpoints/relay-decoder/relay_decoder_19.pt \
---n-blocks 6 \
---n-heads 6 \
---batch-size 512 \
---n-epochs 25 \
---lr 5e-5 \
---channel-block-latent-dim 128 \
---SNR-min -6 \
---SNR-max 21 \
---SNR-diff 3 \
---channel-type AWGN \
---data-fp /data \
---checkpoint-path /data/checkpoints
-```
-
-## end to end
-lr = 1e-6
-epoch = 15
-
-```
-python train_end_to_end.py \
---relay-channel-block-path /data/checkpoints/relay-channel-block/relay_channel_block_8.pt \
---receiver-decoder-path /data/checkpoints/receiver-decoder-prediction-newdata/receiver_decoder_3.pt \
---n-blocks 6 \
---n-heads 6 \
---batch-size 500 \
---n-epochs 10 \
---lr 5e-4 \
---channel-block-latent-dim 256 \
---alpha 4 \
---sig-pow 1 \
---noise-pow 4e-15 \
---d-min 2e3 \
---d-max 7e3 \
---gamma-min 0.2 \
---gamma-max 0.8 \
---channel-type Rayleigh \
---data-fp /data \
---checkpoint-path /data/checkpoints
-```
-
-## Relay Channel Block
-```
-python train_relay_channel_block.py \
---relay-decoder-path /data/checkpoints/relay-decoder-prediction-newdata/relay_decoder_19.pt \
---n-blocks 6 \
---n-heads 6 \
---batch-size 512 \
---n-epochs 10 \
---lr 5e-4 \
---channel-block-latent-dim 256 \
---alpha 4 \
---sig-pow 1 \
---noise-pow 4e-15 \
---d-min 2e3 \
---d-max 7e3 \
---gamma-min 0.2 \
---gamma-max 0.8 \
---channel-type Rayleigh \
---data-fp /data \
---checkpoint-path /data/checkpoints
-```
-
-## Baseline source-relay
-```
-python train_source_relay.py \
---batch-size 512 \
---n-epochs 25 \
---lr 5e-5 \
---channel-block-latent-dim 128 \
---SNR-min 3 \
---SNR-max 21 \
---SNR-step 3 \
---SNR-window 3 \
---channel-type AWGN  \
---checkpoint-path /data/checkpoints
- ```
-
-## Baseline entire network
-```
-python train_entire_network.py \
---batch-size 512 \
---n-epochs 25 \
---lr 5e-5 \
---channel-block-latent-dim 128 \
---SNR-min 3 \
---SNR-max 21 \
---SNR-step 3 \
---SNR-window 3 \
---channel-type AWGN  \
---checkpoint-path /data/checkpoints  \
---tx-relay-path /data/checkpoints/baseline-tx-relay/baseline_tx_relay_24.pt
 ```
