@@ -17,9 +17,10 @@ class MultiInputSequential(nn.Sequential):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, n_heads, n_embeddings, block_size):
+    def __init__(self, n_heads, n_embeddings, block_size, state_memory_len=-1):
         super().__init__()
         self.device = get_device()
+        self.state_memory_len = state_memory_len
         self.sa_heads = nn.MultiheadAttention(
             embed_dim=n_embeddings,
             num_heads=n_heads,
@@ -65,7 +66,11 @@ class DecoderBlock(nn.Module):
         x_normed = self.ln2(x)
 
         if is_causal:
-            attention_mask = self.tril
+            attention_mask = self._cross_attn_mask(
+                Tq=x_normed.size(1),
+                Tk=encoder_output.size(1),
+                device=x_normed.device,
+            )
         else:
             attention_mask = None
 
@@ -94,6 +99,7 @@ class SemanticDecoder(nn.Module):
         block_size,
         bert,
         pad_idx,
+        state_memory_len=-1,
     ):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
@@ -107,6 +113,7 @@ class SemanticDecoder(nn.Module):
                     n_heads=n_heads,
                     n_embeddings=n_embeddings,
                     block_size=block_size,
+                    state_memory_len=state_memory_len,
                 )
                 for _ in range(n_blocks)
             ]
@@ -294,3 +301,18 @@ class SemanticDecoder(nn.Module):
             idx_next = torch.argmax(probs, dim=-1)
 
         return idx_next  # (B, T)
+
+    def _cross_attn_mask(self, Tq: int, Tk: int, device):
+        # bool mask: True means "masked out"
+        if self.state_memory_len is None or self.state_memory_len < 0:
+            return self.tril[:Tq, :Tk]
+
+        window = max(1, int(self.state_memory_len))
+        window = min(window, Tk)
+
+        q = torch.arange(Tq, device=device)[:, None]  # (Tq,1)
+        k = torch.arange(Tk, device=device)[None, :]  # (1,Tk)
+
+        mask_future = k > q
+        mask_too_old = k < (q - (window - 1))
+        return mask_future | mask_too_old
