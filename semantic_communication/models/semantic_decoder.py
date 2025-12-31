@@ -81,7 +81,7 @@ class DecoderBlock(nn.Module):
             key_padding_mask=enc_padding_mask,
             need_weights=False,
             attn_mask=attention_mask,
-            is_causal=is_causal,
+            is_causal=False,
         )[0]
         x = x + attention_out
 
