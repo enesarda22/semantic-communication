@@ -22,7 +22,7 @@ Please cite this paper if you use or refer to this code:
 }
 ```
 
-### Training Commands
+### Training
 ```
 python train_semantic_transformer.py \
 --data-fp ~/data \
