@@ -88,6 +88,21 @@ class DecoderBlock(nn.Module):
         x = x + self.ff_net(self.ln3(x))
         return x, encoder_output, source_padding_mask, enc_padding_mask, is_causal
 
+    def _cross_attn_mask(self, Tq: int, Tk: int, device):
+        # bool mask: True means "masked out"
+        if self.state_memory_len is None or self.state_memory_len < 0:
+            return self.tril[:Tq, :Tk]
+
+        window = max(1, int(self.state_memory_len))
+        window = min(window, Tk)
+
+        q = torch.arange(Tq, device=device)[:, None]  # (Tq,1)
+        k = torch.arange(Tk, device=device)[None, :]  # (1,Tk)
+
+        mask_future = k > q
+        mask_too_old = k < (q - (window - 1))
+        return mask_future | mask_too_old
+
 
 class SemanticDecoder(nn.Module):
     def __init__(
@@ -301,18 +316,3 @@ class SemanticDecoder(nn.Module):
             idx_next = torch.argmax(probs, dim=-1)
 
         return idx_next  # (B, T)
-
-    def _cross_attn_mask(self, Tq: int, Tk: int, device):
-        # bool mask: True means "masked out"
-        if self.state_memory_len is None or self.state_memory_len < 0:
-            return self.tril[:Tq, :Tk]
-
-        window = max(1, int(self.state_memory_len))
-        window = min(window, Tk)
-
-        q = torch.arange(Tq, device=device)[:, None]  # (Tq,1)
-        k = torch.arange(Tk, device=device)[None, :]  # (1,Tk)
-
-        mask_future = k > q
-        mask_too_old = k < (q - (window - 1))
-        return mask_future | mask_too_old
