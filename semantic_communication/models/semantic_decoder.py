@@ -17,10 +17,9 @@ class MultiInputSequential(nn.Sequential):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, n_heads, n_embeddings, block_size, state_memory_len=-1):
+    def __init__(self, n_heads, n_embeddings, block_size):
         super().__init__()
         self.device = get_device()
-        self.state_memory_len = state_memory_len
         self.sa_heads = nn.MultiheadAttention(
             embed_dim=n_embeddings,
             num_heads=n_heads,
@@ -66,51 +65,7 @@ class DecoderBlock(nn.Module):
         x_normed = self.ln2(x)
 
         if is_causal:
-            base = self.tril
-
-            # If we're doing a finite memory window, we need per-sample safety w.r.t. enc_padding_mask
-            if (
-                self.state_memory_len is not None
-                and self.state_memory_len >= 0
-                and enc_padding_mask is not None
-            ):
-                B, Tq, Tk = (
-                    encoder_output.size(0),
-                    x_normed.size(1),
-                    encoder_output.size(1),
-                )
-                H = self.ca_heads.num_heads
-
-                # (B, Tq, Tk)
-                attn_mask = base.unsqueeze(0).expand(B, Tq, Tk).clone()
-
-                # For padded *queries*, don't mask anything (loss ignores them anyway)
-                if source_padding_mask is not None:
-                    attn_mask[source_padding_mask] = (
-                        False  # unmask all keys for those query rows
-                    )
-
-                valid_k = ~enc_padding_mask  # (B, Tk)
-
-                # Rows that would have zero valid keys after combining with key padding
-                allowed = (~attn_mask) & valid_k.unsqueeze(1)  # (B, Tq, Tk)
-                row_bad = ~allowed.any(dim=-1)  # (B, Tq)
-
-                if row_bad.any():
-                    # last valid key index per sample (padding is at the end, so this works)
-                    last_valid = valid_k.long().sum(dim=1) - 1  # (B,)
-                    b_idx, q_idx = row_bad.nonzero(as_tuple=True)
-                    k_idx = last_valid[b_idx].clamp(min=0)
-                    attn_mask[b_idx, q_idx, k_idx] = (
-                        False  # ensure at least 1 key is unmasked
-                    )
-
-                # MultiheadAttention wants (B*H, Tq, Tk) for per-sample masks
-                attention_mask = attn_mask.repeat_interleave(H, dim=0)
-
-            else:
-                # either full memory (-1) or no enc_padding_mask => 2D mask is fine
-                attention_mask = base
+            attention_mask = self.tril
         else:
             attention_mask = None
 
@@ -121,27 +76,12 @@ class DecoderBlock(nn.Module):
             key_padding_mask=enc_padding_mask,
             need_weights=False,
             attn_mask=attention_mask,
-            is_causal=False,
+            is_causal=is_causal,
         )[0]
         x = x + attention_out
 
         x = x + self.ff_net(self.ln3(x))
         return x, encoder_output, source_padding_mask, enc_padding_mask, is_causal
-
-    def _cross_attn_mask(self, Tq: int, Tk: int, device):
-        # bool mask: True means "masked out"
-        if self.state_memory_len is None or self.state_memory_len < 0:
-            return self.tril[:Tq, :Tk]
-
-        window = max(1, int(self.state_memory_len))
-        window = min(window, Tk)
-
-        q = torch.arange(Tq, device=device)[:, None]  # (Tq,1)
-        k = torch.arange(Tk, device=device)[None, :]  # (1,Tk)
-
-        mask_future = k > q
-        mask_too_old = k < (q - (window - 1))
-        return mask_future | mask_too_old
 
 
 class SemanticDecoder(nn.Module):
@@ -154,7 +94,6 @@ class SemanticDecoder(nn.Module):
         block_size,
         bert,
         pad_idx,
-        state_memory_len=-1,
     ):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embeddings)
@@ -168,7 +107,6 @@ class SemanticDecoder(nn.Module):
                     n_heads=n_heads,
                     n_embeddings=n_embeddings,
                     block_size=block_size,
-                    state_memory_len=state_memory_len,
                 )
                 for _ in range(n_blocks)
             ]

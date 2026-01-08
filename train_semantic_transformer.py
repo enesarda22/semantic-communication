@@ -66,7 +66,6 @@ if __name__ == "__main__":
         block_size=args.max_length,
         bert=semantic_encoder.bert,
         pad_idx=data_handler.label_encoder.pad_id,
-        state_memory_len=args.state_memory_len,
     ).to(device)
     load_model(semantic_decoder, args.semantic_decoder_path)
 
