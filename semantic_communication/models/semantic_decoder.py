@@ -66,11 +66,7 @@ class DecoderBlock(nn.Module):
         x_normed = self.ln2(x)
 
         if is_causal:
-            base = self._cross_attn_mask(
-                Tq=x_normed.size(1),
-                Tk=encoder_output.size(1),
-                device=x_normed.device,
-            )  # (Tq, Tk) bool; True = masked
+            base = self.tril
 
             # If we're doing a finite memory window, we need per-sample safety w.r.t. enc_padding_mask
             if (
