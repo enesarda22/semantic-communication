@@ -680,12 +680,22 @@ def main():
                     example_rows.append(ex)
 
             # Persist after each condition (cluster-safe)
-            pd.DataFrame(summary_rows).to_csv(
-                os.path.join(args.results_dir, "task_summary.csv"), index=False
+            summary_path = os.path.join(args.results_dir, "task_summary.csv")
+            summary_df = pd.DataFrame(summary_rows)
+            summary_df.to_csv(
+                summary_path,
+                mode="a",
+                header=not os.path.exists(summary_path),
+                index=False,
             )
             if args.save_examples:
-                pd.DataFrame(example_rows).to_csv(
-                    os.path.join(args.results_dir, "task_examples.csv"), index=False
+                examples_path = os.path.join(args.results_dir, "task_examples.csv")
+                examples_df = pd.DataFrame(example_rows)
+                examples_df.to_csv(
+                    examples_path,
+                    mode="a",
+                    header=not os.path.exists(examples_path),
+                    index=False,
                 )
 
             # Save metric matrices
