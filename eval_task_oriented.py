@@ -679,25 +679,6 @@ def main():
                         ex["sentiment_agree"] = int(per_ex["sentiment_original"][i] == per_ex["sentiment_decoded"][i])
                     example_rows.append(ex)
 
-            # Persist after each condition (cluster-safe)
-            summary_path = os.path.join(args.results_dir, "task_summary.csv")
-            summary_df = pd.DataFrame(summary_rows)
-            summary_df.to_csv(
-                summary_path,
-                mode="a",
-                header=not os.path.exists(summary_path),
-                index=False,
-            )
-            if args.save_examples:
-                examples_path = os.path.join(args.results_dir, "task_examples.csv")
-                examples_df = pd.DataFrame(example_rows)
-                examples_df.to_csv(
-                    examples_path,
-                    mode="a",
-                    header=not os.path.exists(examples_path),
-                    index=False,
-                )
-
             # Save metric matrices
             for name, M in mats.items():
                 np.save(os.path.join(args.results_dir, f"{name}.npy"), M)
@@ -713,6 +694,25 @@ def main():
             if "sentiment" in metrics_set:
                 msg += f"SentAgree={row.get('sentiment_agreement', np.nan):.3f}"
             print(msg)
+
+    # Persist after each condition (cluster-safe)
+    summary_path = os.path.join(args.results_dir, "task_summary.csv")
+    summary_df = pd.DataFrame(summary_rows)
+    summary_df.to_csv(
+        summary_path,
+        mode="a",
+        header=not os.path.exists(summary_path),
+        index=False,
+    )
+    if args.save_examples:
+        examples_path = os.path.join(args.results_dir, "task_examples.csv")
+        examples_df = pd.DataFrame(example_rows)
+        examples_df.to_csv(
+            examples_path,
+            mode="a",
+            header=not os.path.exists(examples_path),
+            index=False,
+        )
 
     print("\nAll done. Outputs written to:", args.results_dir)
 
