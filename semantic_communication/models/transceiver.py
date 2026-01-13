@@ -142,6 +142,7 @@ class Transceiver(nn.Module):
             enc_padding_mask=None,
             n_generated_tokens=self.max_length + 1,
         )
+        relay_decoded = x_relay.clone()
 
         # create attention mask based on [SEP] token
         relay_attention_mask = torch.ones(
@@ -160,7 +161,7 @@ class Transceiver(nn.Module):
         )
         x_relay = x_relay.reshape(B, R, C)
         x_relay = self.relay_channel_encoder(x_relay)
-        return x_relay
+        return x_relay, relay_decoded
 
     def _relay_forward_token(self, x_relay, attention_mask):
         x_padding_mask = attention_mask[:, 1:] == 0
@@ -174,6 +175,7 @@ class Transceiver(nn.Module):
             enc_padding_mask=x_padding_mask,
             n_generated_tokens=self.max_length + 1,
         )
+        relay_decoded = x_relay.clone()
 
         # create tril attention mask
         B, T = x_relay.shape
@@ -216,7 +218,7 @@ class Transceiver(nn.Module):
 
         x_relay = torch.cat(padded_embeddings, dim=0)
         x_relay = self.relay_channel_encoder(x_relay)
-        return x_relay
+        return x_relay, relay_decoded
 
     def _source_forward(self, input_ids, messages, attention_mask):
         self.src_semantic_encoder.eval()
@@ -253,7 +255,7 @@ class Transceiver(nn.Module):
 
         # relay
         x_relay = self.channel(x_src_to_relay, d_sr)
-        x_relay = self._relay_forward(
+        x_relay, relay_decoded = self._relay_forward(
             x_relay=x_relay,
             attention_mask=attention_mask,
         )
@@ -270,7 +272,7 @@ class Transceiver(nn.Module):
             or self.src_semantic_encoder.mode == "next_sentence"
         ):
             if greedy:
-                return self.dst_semantic_decoder.generate_greedy(
+                decode_outputs = self.dst_semantic_decoder.generate_greedy(
                     encoder_output=x_dst,
                     is_causal=False,
                     max_length=self.max_length,
@@ -278,7 +280,7 @@ class Transceiver(nn.Module):
                     n_generated_tokens=self.max_length + 1,
                 )
             else:
-                return self.dst_semantic_decoder.generate(
+                decode_outputs = self.dst_semantic_decoder.generate(
                     encoder_output=x_dst,
                     is_causal=False,
                     max_length=self.max_length,
@@ -288,7 +290,7 @@ class Transceiver(nn.Module):
         else:
             x_padding_mask = attention_mask[:, 1:] == 0
             if greedy:
-                return self.dst_semantic_decoder.generate_greedy(
+                decode_outputs = self.dst_semantic_decoder.generate_greedy(
                     encoder_output=x_dst,
                     is_causal=True,
                     max_length=self.max_length,
@@ -296,13 +298,15 @@ class Transceiver(nn.Module):
                     n_generated_tokens=self.max_length + 1,
                 )
             else:
-                return self.dst_semantic_decoder.generate(
+                decode_outputs = self.dst_semantic_decoder.generate(
                     encoder_output=x_dst,
                     is_causal=True,
                     max_length=self.max_length,
                     enc_padding_mask=x_padding_mask,
                     n_generated_tokens=self.max_length + 1,
                 )
+
+        return *decode_outputs, relay_decoded
 
 
 def init_src_relay_transformer_from_transceiver(state_dict_path):
