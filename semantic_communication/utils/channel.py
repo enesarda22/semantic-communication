@@ -40,6 +40,7 @@ class Channel(ABC):
 class AWGN(Channel):
     def __init__(self, signal_power_constraint, alpha, noise_pow):
         super().__init__(signal_power_constraint, alpha, noise_pow)
+        self.type = "AWGN"
 
     def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
         if d is None:
@@ -52,7 +53,7 @@ class AWGN(Channel):
             std=(self.noise_pow * (d**self.alpha)) ** 0.5,  # TODO: path loss
             size=x.shape,
             dtype=torch.cfloat,
-        ).to(self.device)
+        ).to(x.device)
 
         y = x + noise
         return torch.cat((y.real, y.imag), dim=-1)
@@ -61,8 +62,9 @@ class AWGN(Channel):
 class Rayleigh(Channel):
     def __init__(self, signal_power_constraint, alpha, noise_pow):
         super().__init__(signal_power_constraint, alpha, noise_pow)
+        self.type = "Rayleigh"
 
-    def __call__(self, x: torch.Tensor, d: Optional[float] = None) -> torch.Tensor:
+    def __call__(self, x: torch.Tensor, d: Optional[float] = None, return_h: bool = False):
         if d is None:
             return x
 
@@ -71,7 +73,7 @@ class Rayleigh(Channel):
             std=1.0,
             size=(*x.shape[:-1], 1),
             dtype=torch.cfloat,
-        ).to(self.device)
+        ).to(x.device)
 
         x = self.signal_process(x)
         x = x * torch.conj(h) / torch.abs(h)
@@ -81,9 +83,12 @@ class Rayleigh(Channel):
             std=(self.noise_pow * (d**self.alpha)) ** 0.5,
             size=x.shape,
             dtype=torch.cfloat,
-        ).to(self.device)
+        ).to(x.device)
 
         y = h * x + noise
+
+        if return_h:
+            return torch.cat((y.real, y.imag), dim=-1), torch.abs(h).squeeze(-1)
         return torch.cat((y.real, y.imag), dim=-1)
 
 
