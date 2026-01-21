@@ -33,13 +33,11 @@ def parse_args():
     parser.add_argument("--llm-model-name", type=str, default="gpt2")  # e.g., lmsys/vicuna-7b-v1.5
     parser.add_argument("--M", type=int, default=None, help="Modulation order (square QAM): 4,16,64,...")
     parser.add_argument("--symbols-per-token", type=int, default=None, help="Allowed channel uses per token (auto-select M).")
-    parser.add_argument("--n0", type=float, default=1.0, help="Fallback n0 if channel does not expose noise_pow/alpha.")
     parser.add_argument("--beam-width", type=int, default=10)
     parser.add_argument("--candidate-topk", type=int, default=256)
 
     # Large model loading
     parser.add_argument("--torch-dtype", type=str, default=None, help="e.g. float16, bfloat16")
-    parser.add_argument("--trust-remote-code", action="store_true")
 
     add_semantic_decoder_args(parser)
     add_channel_model_args(parser)
@@ -98,13 +96,11 @@ if __name__ == "__main__":
         M=args.M,
         symbols_per_token=args.symbols_per_token,
         channel=channel,
-        n0=args.n0,
         beam_width=args.beam_width,
         candidate_topk=args.candidate_topk,
         entire_network_train=1,
         device=str(device),
         torch_dtype=args.torch_dtype,
-        trust_remote_code=args.trust_remote_code,
     )
 
     tx_relay_rx_model = Tx_Relay_Rx_LLMSC(
@@ -113,12 +109,10 @@ if __name__ == "__main__":
         symbols_per_token=args.symbols_per_token,
         channel=channel,
         tx_relay_model=tx_relay_model,
-        n0=args.n0,
         beam_width=args.beam_width,
         candidate_topk=args.candidate_topk,
         device=str(device),
         torch_dtype=args.torch_dtype,
-        trust_remote_code=args.trust_remote_code,
     )
 
     tok = tx_relay_rx_model.tokenizer

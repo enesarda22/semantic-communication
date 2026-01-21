@@ -37,7 +37,6 @@ def _gray(n: int) -> int:
 
 
 def _qam_points_square(M: int, device=None) -> torch.Tensor:
-    """Square M-QAM (Gray per axis), normalized to unit average power. M must be 2^(even)."""
     k = int(round(math.log2(M)))
     if 2 ** k != M:
         raise ValueError(f"M must be a power of 2, got {M}")
@@ -73,10 +72,6 @@ def _bits_to_int(bits_2d: torch.Tensor) -> torch.Tensor:
 
 
 def _sanitize_cand_ids(cand_ids: torch.Tensor, Vuse: int, fallback_id: int) -> torch.Tensor:
-    """
-    Ensure token ids are valid for indexing logp[:Vuse] and constellation tables.
-    Always returns a non-empty 1D Long tensor on the same device.
-    """
     cand_ids = cand_ids.to(dtype=torch.long).view(-1)
     cand_ids = cand_ids[(cand_ids >= 0) & (cand_ids < Vuse)]
     if cand_ids.numel() == 0:
@@ -225,12 +220,38 @@ def _int_to_bits(x: torch.Tensor, nbits: int) -> torch.Tensor:
     shifts = torch.arange(nbits - 1, -1, -1, device=x.device, dtype=torch.int64)
     return ((x.unsqueeze(-1) >> shifts) & 1).to(torch.int64)
 
+
 def _bits_to_int_1d(bits: torch.Tensor) -> int:
     # bits: [nbits], MSB first
     val = 0
     for b in bits.tolist():
         val = (val << 1) | int(b)
     return val
+
+
+@torch.no_grad()
+def channel_token_candidates_full(
+    y_chunk_complex: torch.Tensor,   # [L] complex
+    h_scalar: torch.Tensor,          # scalar complex
+    constellation: TokenConstellation,
+    max_token_cands: int = 64,
+    vocab_size: Optional[int] = None,
+):
+    # use actual transmitted codebook rows
+    S = constellation.const_complex  # [V,L] complex
+    if vocab_size is None:
+        vocab_size = S.shape[0]
+    S = S[:vocab_size].to(y_chunk_complex.device)
+
+    if h_scalar is None:
+        h_scalar = torch.tensor(1.0 + 0.0j, device=y_chunk_complex.device, dtype=torch.complex64)
+
+    diff = y_chunk_complex.unsqueeze(0) - h_scalar.view(1, 1) * S   # [V,L]
+    dist = (diff.real**2 + diff.imag**2).sum(dim=-1)                # [V]
+
+    k = min(max_token_cands, dist.numel())
+    return torch.topk(dist, k=k, largest=False).indices
+
 
 @torch.no_grad()
 def channel_token_candidates_from_y(
@@ -340,17 +361,12 @@ def llmsc_beam_decode_one_link(
             Vuse = min(V, int(logp.numel()))
 
             # Channel candidates (always available)
-            ch_ids = channel_token_candidates_from_y(
+            ch_ids = channel_token_candidates_full(
                 y_chunk_complex=yt,
                 h_scalar=ht,
-                M=constellation.M,
-                k=constellation.k,
-                L=constellation.L,
-                nbits=constellation.nbits,
-                nbits_padded=constellation.nbits_padded,
-                max_token_cands=32,
-                vocab_size=Vuse,  # <-- ADD
-                sym_topm=2,
+                constellation=constellation,
+                max_token_cands=64,
+                vocab_size=Vuse,
             )
 
             if b.ended:
@@ -439,17 +455,20 @@ def llmsc_beam_decode_two_links(
 
             Vuse = min(V, int(logp.numel()))
 
-            ch_ids_sd = channel_token_candidates_from_y(
-                y_chunk_complex=y1t, h_scalar=h1t,
-                M=constellation.M, k=constellation.k, L=constellation.L,
-                nbits=constellation.nbits, nbits_padded=constellation.nbits_padded,
-                max_token_cands=32, sym_topm=2,     vocab_size=Vuse,              # <-- ADD
+            ch_ids_sd = channel_token_candidates_full(
+                y_chunk_complex=y1t,
+                h_scalar=h1t,
+                constellation=constellation,
+                max_token_cands=64,
+                vocab_size=Vuse,
             )
-            ch_ids_rd = channel_token_candidates_from_y(
-                y_chunk_complex=y2t, h_scalar=h2t,
-                M=constellation.M, k=constellation.k, L=constellation.L,
-                nbits=constellation.nbits, nbits_padded=constellation.nbits_padded,
-                max_token_cands=32, sym_topm=2,     vocab_size=Vuse,              # <-- ADD
+
+            ch_ids_rd = channel_token_candidates_full(
+                y_chunk_complex=y2t,
+                h_scalar=h2t,
+                constellation=constellation,
+                max_token_cands=64,
+                vocab_size=Vuse,
             )
 
             if b.ended:
@@ -487,17 +506,12 @@ def llmsc_beam_decode_two_links(
     return best[:T]
 
 
-
 def _ids_to_logits(ids: torch.Tensor, vocab_size: int, on_value: float = 0.0, off_value: float = -1e9) -> torch.Tensor:
     B, T = ids.shape
     logits = torch.full((B, T, vocab_size), off_value, device=ids.device, dtype=torch.float32)
     logits.scatter_(2, ids.unsqueeze(-1), on_value)
     return logits
 
-
-# ----------------------------
-# Modules mirroring your baseline API
-# ----------------------------
 
 class Tx_Relay_LLMSC(nn.Module):
     def __init__(
@@ -545,7 +559,6 @@ class Tx_Relay_LLMSC(nn.Module):
         self.constellation = TokenConstellation(self.nin, self.M, self.device, signal_power_constraint=channel.signal_power_constraint)
 
         self.channel = channel
-        self.n0_fallback = float(n0)
         self.beam_width = int(beam_width)
         self.candidate_topk = int(candidate_topk)
         self.entire_network_train = int(entire_network_train)
@@ -562,7 +575,7 @@ class Tx_Relay_LLMSC(nn.Module):
         else:
             y_sr, h_sr = ch_input, None
 
-        hop_n0 = _compute_N0(self.channel, d_sr) or self.n0_fallback
+        hop_n0 = _compute_N0(self.channel, d_sr)
 
         B, T, _ = y_sr.shape
         pred_ids = torch.empty((B, T), device=self.device, dtype=torch.long)
@@ -608,12 +621,10 @@ class Tx_Relay_Rx_LLMSC(nn.Module):
         M: Optional[int],
         channel,
         tx_relay_model: Tx_Relay_LLMSC,
-        n0: float = 1.0,
         beam_width: int = 10,
         candidate_topk: int = 256,
         device: Optional[str] = None,
         torch_dtype: Optional[str] = None,
-        trust_remote_code: bool = False,
         symbols_per_token: Optional[int] = None,
     ):
         super().__init__()
@@ -647,7 +658,6 @@ class Tx_Relay_Rx_LLMSC(nn.Module):
         self.constellation = TokenConstellation(self.nin, self.M, self.device, signal_power_constraint=channel.signal_power_constraint)
 
         self.channel = channel
-        self.n0_fallback = float(n0)
         self.beam_width = int(beam_width)
         self.candidate_topk = int(candidate_topk)
 
@@ -673,9 +683,9 @@ class Tx_Relay_Rx_LLMSC(nn.Module):
         else:
             y_sd, h_sd = s_src, None
 
-        N0_sd = _compute_N0(self.channel, d_sd) or self.n0_fallback
-        N0_rd = _compute_N0(self.channel, d_rd) or self.n0_fallback
-        rd_weight = float(N0_sd / N0_rd) if (N0_sd is not None and N0_rd is not None and N0_rd != 0) else 1.0
+        N0_sd = _compute_N0(self.channel, d_sd)
+        N0_rd = _compute_N0(self.channel, d_rd)
+        rd_weight = float(N0_sd / N0_rd)
 
         B, T, _ = y_sd.shape
         dest_ids = torch.empty((B, T), device=self.device, dtype=torch.long)
