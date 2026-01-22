@@ -22,6 +22,16 @@ from semantic_communication.utils.eval_functions import (
     sbert_semantic_similarity_score,
 )
 from semantic_communication.models.llm_baseline import Tx_Relay_LLMSC, Tx_Relay_Rx_LLMSC
+import re
+
+_illegal_excel_re = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")  # includes \x0c
+
+
+def sanitize_for_excel(x):
+    if isinstance(x, str):
+        return _illegal_excel_re.sub("", x)
+    return x
+
 
 
 def parse_args():
@@ -211,7 +221,7 @@ if __name__ == "__main__":
                         bleu_scores.append(bleu)
                         sbert_scores.append(sbert)
 
-                        records.append([d_sd, gamma, s1, s2, sim_score, bleu_1, bleu, sbert])
+                        records.append([d_sd, gamma, sanitize_for_excel(s1), sanitize_for_excel(s2), sim_score, bleu_1, bleu, sbert])
 
                 if len(bleu1_scores) >= args.n_test:
                     break
