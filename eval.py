@@ -162,7 +162,7 @@ if __name__ == "__main__":
             print(f"Simulating for distance: {d_sd}  - Gamma: {gamma}")
 
             sbert_semantic_sim_scores = []
-            cosine_scores = []
+            # cosine_scores = []
             bleu1_scores = []
             bleu_scores = []
 
@@ -173,11 +173,12 @@ if __name__ == "__main__":
                 encoder_attention_mask = b[1].to(device)
                 encoder_idx = data_handler.label_encoder.transform(encoder_idx)
 
-                predicted_ids, probs = transceiver.generate(
+                predicted_ids, probs, _ = transceiver.generate(
                     input_ids=encoder_idx,
                     attention_mask=encoder_attention_mask,
                     d_sd=d_sd,
                     d_sr=d_sr,
+                    beam_width=args.beam_width,
                 )
 
                 # find the end of sentences
@@ -206,8 +207,8 @@ if __name__ == "__main__":
                 )
 
                 for s1, s2 in zip(input_tokens, predicted_tokens):
-                    # print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
-                    sim_score = semantic_similarity_score(s1, s2, client)
+                    print(f"True Sentence: {s1}\nPredicted Sentence: {s2}\n")
+                    # sim_score = semantic_similarity_score(s1, s2, client)
                     bleu_1_score = sentence_bleu(
                         [word_tokenize(s1)],
                         word_tokenize(s2),
@@ -223,7 +224,7 @@ if __name__ == "__main__":
                         s1, s2, sbert_model=sbert_eval_model
                     )
 
-                    cosine_scores.append(sim_score)
+                    # cosine_scores.append(sim_score)
                     bleu1_scores.append(bleu_1_score)
                     bleu_scores.append(bleu_score)
                     sbert_semantic_sim_scores.append(sbert_sim_score)
@@ -233,29 +234,29 @@ if __name__ == "__main__":
                             gamma,
                             s1,
                             s2,
-                            sim_score,
+                            # sim_score,
                             bleu_1_score,
                             bleu_score,
                             sbert_sim_score,
                         ]
                     )
 
-                if len(bleu1_scores) >= args.n_test:
+                if len(bleu_scores) >= args.n_test:
                     break
 
-            n_test_samples = len(bleu1_scores)
-            cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
+            n_test_samples = len(bleu_scores)
+            # cosine_scores = [x for x in cosine_scores if not np.isnan(x)]
 
-            mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
+            # mean_semantic_sim[distance_index, gamma_index] = np.mean(cosine_scores)
             mean_sbert_semantic_sim[distance_index, gamma_index] = np.mean(
                 sbert_semantic_sim_scores
             )
             mean_bleu_1[distance_index, gamma_index] = np.mean(bleu1_scores)
             mean_bleu[distance_index, gamma_index] = np.mean(bleu_scores)
 
-            std_semantic_sim[distance_index, gamma_index] = np.std(
-                cosine_scores, ddof=1
-            ) / np.sqrt(n_test_samples)
+            # std_semantic_sim[distance_index, gamma_index] = np.std(
+            #     cosine_scores, ddof=1
+            # ) / np.sqrt(n_test_samples)
             std_bleu_1[distance_index, gamma_index] = np.std(
                 bleu1_scores, ddof=1
             ) / np.sqrt(n_test_samples)

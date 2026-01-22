@@ -245,6 +245,7 @@ class Transceiver(nn.Module):
         d_sd: Optional[float] = None,
         d_sr: Optional[float] = None,
         greedy: bool = False,
+        beam_width: int = 5,
     ):
         # source
         x_src_to_dst, x_src_to_relay = self._source_forward(
@@ -286,6 +287,7 @@ class Transceiver(nn.Module):
                     max_length=self.max_length,
                     enc_padding_mask=None,
                     n_generated_tokens=self.max_length + 1,
+                    beam_width=beam_width,
                 )
         else:
             x_padding_mask = attention_mask[:, 1:] == 0
