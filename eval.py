@@ -53,7 +53,7 @@ if __name__ == "__main__":
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
-    client = OpenAI(api_key=args.API_KEY)
+    # client = OpenAI(api_key=args.API_KEY)
     sbert_eval_model = SentenceTransformer("all-MiniLM-L6-v2")
 
     data_handler = DataHandler(
