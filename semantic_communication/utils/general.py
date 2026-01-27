@@ -2,6 +2,7 @@ import os
 import random
 import warnings
 from pathlib import Path
+import matplotlib as mpl
 
 import torch
 import numpy as np
@@ -194,7 +195,7 @@ def plotter(
     x_axis,
     xlabel,
     ylabel,
-    title,
+    title=None,  # UPDATED: optional (so we can use a single fig-level title)
     separation_conventional=None,
     SPF=None,
     SLF=None,
@@ -202,113 +203,381 @@ def plotter(
     sentence_predict=None,
     AE_baseline=None,
     LLM_baseline=None,
-    save=True,
+    ax=None,          # UPDATED: draw on provided axes (for subplots)
+    legend=False,     # UPDATED: per-axis legend off by default (we use shared legend)
+):
+    # --- Style ---
+    plt.style.use(["science", "ieee", "no-latex"])
+    mpl.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "STIXGeneral"],
+        "mathtext.fontset": "stix",
+    })
+
+    mpl.rcParams.update({
+        "font.size": 9.5,  # base text
+        "axes.labelsize": 10.5,  # x/y labels
+        "axes.titlesize": 10.5,  # (if you ever re-enable titles)
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.fontsize": 8.5,
+    })
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(3.0, 2.6))
+
+    lw = 1.3
+    handles = []
+
+    def _plot_if_valid(y, *args, **kwargs):
+        if y is None:
+            return
+        y = np.asarray(y)
+        if y.size == 0 or np.all(y == 0):
+            return
+        (h,) = ax.plot(x_axis, y, *args, **kwargs)
+        handles.append(h)
+
+    # --- Curves (colored, not BW-only) ---
+    _plot_if_valid(separation_conventional, label="Conv. Baseline", linewidth=lw)
+
+    _plot_if_valid(
+        LLM_baseline,
+        label="LLM Conv. Baseline",
+        color="m",
+        linestyle=(0, (3, 1, 1, 5, 1, 1)),
+        linewidth=lw,
+    )
+
+    _plot_if_valid(SPF, label="SPF", linewidth=lw)
+    _plot_if_valid(SLF, label="SLF", linewidth=lw)
+    _plot_if_valid(AE_baseline, label="AE-JSCC", linewidth=lw)
+
+    _plot_if_valid(
+        sentence_decode,
+        label="SSF",
+        color="c",
+        linestyle=(0, (5, 1, 1, 1, 1, 1)),
+        linewidth=lw,
+    )
+
+    _plot_if_valid(
+        sentence_predict,
+        label="Sen. PF",
+        color="m",
+        linestyle=(0, (3, 1, 1, 5, 1, 1)),
+        linewidth=lw,
+    )
+
+    # --- Axes styling ---
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim([float(np.min(x_axis)), float(np.max(x_axis))])
+    ax.grid(True, lw=0.2)
+
+    if title:  # UPDATED: only set per-panel title if provided
+        ax.set_title(title)
+
+    if legend:
+        h_, l_ = ax.get_legend_handles_labels()
+        ax.legend(h_, l_, ncols=len(l_), frameon=True, fancybox=True)
+
+    labels = [h.get_label() for h in handles]
+    return handles, labels
+
+
+def plot_three_metrics_figure(
+    x_axis,
+    x_label,
+    fig_title,   # UPDATED: one title for the whole 1x3 figure
+    # y-axis labels for the 3 panels
+    y1_label="BLEU Score",
+    y2_label="SBERT Score",
+    y3_label="GPT Score",
+    # metric 1 arrays (1D)
+    m1_sep=None, m1_spf=None, m1_slf=None, m1_ssf=None, m1_ae=None, m1_llm=None,
+    # metric 2 arrays (1D)
+    m2_sep=None, m2_spf=None, m2_slf=None, m2_ssf=None, m2_ae=None, m2_llm=None,
+    # metric 3 arrays (1D)
+    m3_sep=None, m3_spf=None, m3_slf=None, m3_ssf=None, m3_ae=None, m3_llm=None,
+    out_path="Plots/three_metrics.pdf",
     show=False,
 ):
     plt.style.use(["science", "ieee", "no-latex"])
-    plt.figure(figsize=(3, 2.6))
+    mpl.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "STIXGeneral"],
+        "mathtext.fontset": "stix",
+    })
 
-    lw = 1.3
-    if not np.all(separation_conventional == 0):
-        plt.plot(x_axis, separation_conventional, label="Conv. Baseline", linewidth=lw)
+    fig, axes = plt.subplots(1, 3, figsize=(9.2, 2.6))
 
-    if not np.all(LLM_baseline == 0):
-        plt.plot(x_axis, LLM_baseline, label="LLM Conv. Baseline", color="m", linestyle=(0, (3, 1, 1, 5, 1, 1)),
-                 linewidth=lw,)
+    # UPDATED: one title for entire figure
+    fig.suptitle(fig_title, y=1.10)
 
-    if not np.all(SPF == 0):
-        plt.plot(x_axis, SPF, label="SPF", linewidth=lw)
-    if not np.all(SLF == 0):
-        plt.plot(x_axis, SLF, label="SLF", linewidth=lw)
-    if not np.all(AE_baseline == 0):
-        plt.plot(x_axis, AE_baseline, label="AE-JSCC", linewidth=lw)
-    if not np.all(sentence_decode == 0):
-        plt.plot(x_axis, sentence_decode, label="SSF", color="c", linestyle=(0, (5, 1, 1, 1, 1, 1)), linewidth=lw,)
-    if not np.all(sentence_predict == 0):
-        plt.plot(x_axis, sentence_predict, label="Sen. PF", color="m", linestyle=(0, (3, 1, 1, 5, 1, 1)), linewidth=lw,)
+    # Panel 1 (BLEU)
+    h, lab = plotter(
+        x_axis=x_axis, xlabel=x_label, ylabel=y1_label,
+        title=None,  # no per-axis title
+        separation_conventional=m1_sep, SPF=m1_spf, SLF=m1_slf,
+        sentence_decode=m1_ssf, sentence_predict=None,
+        AE_baseline=m1_ae, LLM_baseline=m1_llm,
+        ax=axes[0], legend=False
+    )
 
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.xlim([np.min(x_axis), np.max(x_axis)])
-    plt.grid(lw=0.2)
-    plt.legend(ncols=5, bbox_to_anchor=(1, 0.5), frameon=True, fancybox=True)
-    plt.title(title)
-    plt.tight_layout()
+    # Panel 2 (SBERT)
+    plotter(
+        x_axis=x_axis, xlabel=x_label, ylabel=y2_label,
+        title=None,
+        separation_conventional=m2_sep, SPF=m2_spf, SLF=m2_slf,
+        sentence_decode=m2_ssf, sentence_predict=None,
+        AE_baseline=m2_ae, LLM_baseline=m2_llm,
+        ax=axes[1], legend=False
+    )
 
-    if save:
-        plots_dir = "Plots"
-        if not os.path.exists(plots_dir):
-            os.makedirs(plots_dir)
+    # Panel 3 (GPT)
+    plotter(
+        x_axis=x_axis, xlabel=x_label, ylabel=y3_label,
+        title=None,
+        separation_conventional=m3_sep, SPF=m3_spf, SLF=m3_slf,
+        sentence_decode=m3_ssf, sentence_predict=None,
+        AE_baseline=m3_ae, LLM_baseline=m3_llm,
+        ax=axes[2], legend=False
+    )
 
-        file_path = os.path.join("Plots", f"{title}.png")
-        plt.savefig(file_path, dpi=900)
+    # Shared legend: single row
+    fig.legend(
+        h, lab,
+        loc="upper center",
+        ncol=len(lab),  # force one line
+        frameon=True,
+        fancybox=True,
+        bbox_to_anchor=(0.5, 1.22),
+        borderaxespad=0.2,
+        columnspacing=1.2,
+        handlelength=2.2,
+    )
 
+    # Leave space for legend + suptitle
+    fig.tight_layout(rect=[0, 0, 1, 0.82])
+
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    fig.savefig(out_path, bbox_inches="tight")  # PDF inferred by extension
     if show:
         plt.show()
+    plt.close(fig)
 
 
-def plot(
-    d_sd_list,
-    y_label,
-    gamma_list,
+def plotter(
+    x_axis,
+    xlabel,
+    ylabel,
+    title=None,
     separation_conventional=None,
     SPF=None,
     SLF=None,
     sentence_decode=None,
     sentence_predict=None,
     AE_baseline=None,
-    LLM_baseline_score=None,
-    save=True,
+    LLM_baseline=None,
+    ax=None,
+    legend=False,
+):
+    plt.style.use(["science", "ieee", "no-latex"])
+    mpl.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "STIXGeneral"],
+        "mathtext.fontset": "stix",
+    })
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(3.0, 2.6))
+
+    lw = 1.3
+    handles = []
+
+    def _plot_if_valid(y, *args, **kwargs):
+        if y is None:
+            return
+        y = np.asarray(y)
+        if y.size == 0 or np.all(y == 0):
+            return
+        (h,) = ax.plot(x_axis, y, *args, **kwargs)
+        handles.append(h)
+
+    _plot_if_valid(separation_conventional, label="Conv. Baseline", linewidth=lw)
+    _plot_if_valid(
+        LLM_baseline,
+        label="LLM Conv. Baseline",
+        color="m",
+        linestyle=(0, (3, 1, 1, 5, 1, 1)),
+        linewidth=lw,
+    )
+    _plot_if_valid(SPF, label="SPF", linewidth=lw)
+    _plot_if_valid(SLF, label="SLF", linewidth=lw)
+    _plot_if_valid(AE_baseline, label="AE-JSCC", linewidth=lw)
+    _plot_if_valid(
+        sentence_decode,
+        label="SSF",
+        color="c",
+        linestyle=(0, (5, 1, 1, 1, 1, 1)),
+        linewidth=lw,
+    )
+    _plot_if_valid(
+        sentence_predict,
+        label="Sen. PF",
+        color="m",
+        linestyle=(0, (3, 1, 1, 5, 1, 1)),
+        linewidth=lw,
+    )
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim([float(np.min(x_axis)), float(np.max(x_axis))])
+    ax.grid(True, lw=0.2)
+
+    if title:
+        ax.set_title(title)
+
+    if legend:
+        h_, l_ = ax.get_legend_handles_labels()
+        ax.legend(h_, l_, ncols=len(l_), frameon=True, fancybox=True)
+
+    labels = [h.get_label() for h in handles]
+    return handles, labels
+
+
+def _plot_three_metrics_figure_compact(
+    x_axis,
+    x_label,
+    fig_title,
+    # BLEU (1D)
+    bleu_sep, bleu_spf, bleu_slf, bleu_ssf, bleu_ae, bleu_llm,
+    # SBERT (1D)
+    sbert_sep, sbert_spf, sbert_slf, sbert_ssf, sbert_ae, sbert_llm,
+    # GPT (1D)
+    gpt_sep, gpt_spf, gpt_slf, gpt_ssf, gpt_ae, gpt_llm,
+    out_path,
     show=False,
 ):
+    plt.style.use(["science", "ieee", "no-latex"])
+    mpl.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "STIXGeneral"],
+        "mathtext.fontset": "stix",
+    })
 
-    if separation_conventional is None:
-        separation_conventional = np.zeros((len(d_sd_list), len(gamma_list)))
-    if SPF is None:
-        SPF = np.zeros((len(d_sd_list), len(gamma_list)))
-    if SLF is None:
-        SLF = np.zeros((len(d_sd_list), len(gamma_list)))
-    if sentence_decode is None:
-        sentence_decode = np.zeros((len(d_sd_list), len(gamma_list)))
-    if sentence_predict is None:
-        sentence_predict = np.zeros((len(d_sd_list), len(gamma_list)))
-    if AE_baseline is None:
-        AE_baseline = np.zeros((len(d_sd_list), len(gamma_list)))
-    if LLM_baseline_score is None:
-        LLM_baseline_score = np.zeros((len(d_sd_list), len(gamma_list)))
+    fig, axes = plt.subplots(1, 3, figsize=(9.0, 3.25))
 
-    # for all distances
-    for index, d_sd in enumerate(d_sd_list):
-        plotter(
-            x_axis=np.array(gamma_list) * d_sd,
-            separation_conventional=separation_conventional[index, :],
-            SPF=SPF[index, :],
-            SLF=SLF[index, :],
-            sentence_decode=sentence_decode[index, :],
-            sentence_predict=sentence_predict[index, :],
-            AE_baseline=AE_baseline[index, :],
-            LLM_baseline=LLM_baseline_score[index, :],
-            save=save,
-            xlabel="$d_{SR}$ (m)",
-            ylabel=y_label,
-            title=f"$d_{{SR}}$ v. {y_label} for $d_{{SD}}={d_sd}$m",
+    # Panels
+    h, lab = plotter(
+        x_axis=x_axis, xlabel=x_label, ylabel="BLEU Score", title=None,
+        separation_conventional=bleu_sep, SPF=bleu_spf, SLF=bleu_slf,
+        sentence_decode=bleu_ssf, sentence_predict=None,
+        AE_baseline=bleu_ae, LLM_baseline=bleu_llm,
+        ax=axes[0], legend=False
+    )
+    plotter(
+        x_axis=x_axis, xlabel=x_label, ylabel="SBERT Score", title=None,
+        separation_conventional=sbert_sep, SPF=sbert_spf, SLF=sbert_slf,
+        sentence_decode=sbert_ssf, sentence_predict=None,
+        AE_baseline=sbert_ae, LLM_baseline=sbert_llm,
+        ax=axes[1], legend=False
+    )
+    plotter(
+        x_axis=x_axis, xlabel=x_label, ylabel="GPT Score", title=None,
+        separation_conventional=gpt_sep, SPF=gpt_spf, SLF=gpt_slf,
+        sentence_decode=gpt_ssf, sentence_predict=None,
+        AE_baseline=gpt_ae, LLM_baseline=gpt_llm,
+        ax=axes[2], legend=False
+    )
+
+    # Compact global title + legend (INSIDE figure)
+    # fig.suptitle(fig_title, y=0.999) # no title
+    fig.legend(
+        h, lab,
+        loc="upper center",
+        ncol=len(lab),            # one row
+        frameon=True,
+        fancybox=True,
+        bbox_to_anchor=(0.5, 0.95),
+        borderaxespad=0.0,
+        columnspacing=0.9,
+        handlelength=1.9,
+    )
+
+    # Compact spacing tuned for papers (no bbox_inches="tight")
+    fig.subplots_adjust(
+        left=0.06, right=0.995,
+        bottom=0.18,
+        top=0.85,
+        wspace=0.18
+    )
+
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    fig.savefig(out_path)
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+def plot_three_metrics(
+    d_sd_list,
+    gamma_list,
+
+    bleu_sep, bleu_spf, bleu_slf, bleu_ssf, bleu_ae, bleu_llm,
+    sbert_sep, sbert_spf, sbert_slf, sbert_ssf, sbert_ae, sbert_llm,
+    gpt_sep, gpt_spf, gpt_slf, gpt_ssf, gpt_ae, gpt_llm,
+
+    save_dir="Plots",
+    show=False,
+):
+    os.makedirs(save_dir, exist_ok=True)
+
+    # A) sweep d_SR for each d_SD
+    for i, d_sd in enumerate(d_sd_list):
+        x_axis = np.array(gamma_list) * d_sd
+        fig_title = rf"$d_{{SR}}$ v. Performance Scores for $d_{{SD}}={d_sd}$m"
+        out_path = os.path.join(save_dir, f"three_metrics_dSR_dSD_{d_sd}m.pdf")
+
+        _plot_three_metrics_figure_compact(
+            x_axis=x_axis,
+            x_label=r"$d_{SR}$ (m)",
+            fig_title=fig_title,
+
+            bleu_sep=bleu_sep[i, :], bleu_spf=bleu_spf[i, :], bleu_slf=bleu_slf[i, :],
+            bleu_ssf=bleu_ssf[i, :], bleu_ae=bleu_ae[i, :],   bleu_llm=bleu_llm[i, :],
+
+            sbert_sep=sbert_sep[i, :], sbert_spf=sbert_spf[i, :], sbert_slf=sbert_slf[i, :],
+            sbert_ssf=sbert_ssf[i, :], sbert_ae=sbert_ae[i, :],   sbert_llm=sbert_llm[i, :],
+
+            gpt_sep=gpt_sep[i, :], gpt_spf=gpt_spf[i, :], gpt_slf=gpt_slf[i, :],
+            gpt_ssf=gpt_ssf[i, :], gpt_ae=gpt_ae[i, :],   gpt_llm=gpt_llm[i, :],
+
+            out_path=out_path,
             show=show,
         )
 
+    # B) sweep d_SD at gamma=0.5
     mid_index = gamma_list.index(0.5)
+    x_axis = np.array(d_sd_list)
+    fig_title = r"$d_{SD}$ v. Performance Scores for $d_{SR}=0.5d_{SD}$"
+    out_path = os.path.join(save_dir, "three_metrics_dSD_gamma_0p5.pdf")
 
-    plotter(
-        x_axis=d_sd_list,
-        separation_conventional=separation_conventional[:, mid_index],
-        SPF=SPF[:, mid_index],
-        SLF=SLF[:, mid_index],
-        sentence_decode=sentence_decode[:, mid_index],
-        sentence_predict=sentence_predict[:, mid_index],
-        AE_baseline=AE_baseline[:, mid_index],
-        LLM_baseline=LLM_baseline_score[:, mid_index],
-        save=save,
-        xlabel="$d_{SD}$ (m)",
-        ylabel=y_label,
-        title=f" $d_{{SD}}$ v. {y_label} for $d_{{SR}}=0.5d_{{SD}}$",
+    _plot_three_metrics_figure_compact(
+        x_axis=x_axis,
+        x_label=r"$d_{SD}$ (m)",
+        fig_title=fig_title,
+
+        bleu_sep=bleu_sep[:, mid_index], bleu_spf=bleu_spf[:, mid_index], bleu_slf=bleu_slf[:, mid_index],
+        bleu_ssf=bleu_ssf[:, mid_index], bleu_ae=bleu_ae[:, mid_index],   bleu_llm=bleu_llm[:, mid_index],
+
+        sbert_sep=sbert_sep[:, mid_index], sbert_spf=sbert_spf[:, mid_index], sbert_slf=sbert_slf[:, mid_index],
+        sbert_ssf=sbert_ssf[:, mid_index], sbert_ae=sbert_ae[:, mid_index],   sbert_llm=sbert_llm[:, mid_index],
+
+        gpt_sep=gpt_sep[:, mid_index], gpt_spf=gpt_spf[:, mid_index], gpt_slf=gpt_slf[:, mid_index],
+        gpt_ssf=gpt_ssf[:, mid_index], gpt_ae=gpt_ae[:, mid_index],   gpt_llm=gpt_llm[:, mid_index],
+
+        out_path=out_path,
         show=show,
     )
