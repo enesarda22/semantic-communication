@@ -201,6 +201,7 @@ def plotter(
     sentence_decode=None,
     sentence_predict=None,
     AE_baseline=None,
+    LLM_baseline=None,
     save=True,
     show=False,
 ):
@@ -210,30 +211,21 @@ def plotter(
     lw = 1.3
     if not np.all(separation_conventional == 0):
         plt.plot(x_axis, separation_conventional, label="Conv. Baseline", linewidth=lw)
+
+    if not np.all(LLM_baseline == 0):
+        plt.plot(x_axis, LLM_baseline, label="LLM Conv. Baseline", color="m", linestyle=(0, (3, 1, 1, 5, 1, 1)),
+                 linewidth=lw,)
+
     if not np.all(SPF == 0):
         plt.plot(x_axis, SPF, label="SPF", linewidth=lw)
     if not np.all(SLF == 0):
         plt.plot(x_axis, SLF, label="SLF", linewidth=lw)
     if not np.all(AE_baseline == 0):
-        plt.plot(x_axis, AE_baseline, label="AE Baseline", linewidth=lw)
+        plt.plot(x_axis, AE_baseline, label="AE-JSCC", linewidth=lw)
     if not np.all(sentence_decode == 0):
-        plt.plot(
-            x_axis,
-            sentence_decode,
-            label="SSF",
-            color="c",
-            linestyle=(0, (5, 1, 1, 1, 1, 1)),
-            linewidth=lw,
-        )
+        plt.plot(x_axis, sentence_decode, label="SSF", color="c", linestyle=(0, (5, 1, 1, 1, 1, 1)), linewidth=lw,)
     if not np.all(sentence_predict == 0):
-        plt.plot(
-            x_axis,
-            sentence_predict,
-            label="Sen. PF",
-            color="m",
-            linestyle=(0, (3, 1, 1, 5, 1, 1)),
-            linewidth=lw,
-        )
+        plt.plot(x_axis, sentence_predict, label="Sen. PF", color="m", linestyle=(0, (3, 1, 1, 5, 1, 1)), linewidth=lw,)
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -265,6 +257,7 @@ def plot(
     sentence_decode=None,
     sentence_predict=None,
     AE_baseline=None,
+    LLM_baseline_score=None,
     save=True,
     show=False,
 ):
@@ -281,6 +274,8 @@ def plot(
         sentence_predict = np.zeros((len(d_sd_list), len(gamma_list)))
     if AE_baseline is None:
         AE_baseline = np.zeros((len(d_sd_list), len(gamma_list)))
+    if LLM_baseline_score is None:
+        LLM_baseline_score = np.zeros((len(d_sd_list), len(gamma_list)))
 
     # for all distances
     for index, d_sd in enumerate(d_sd_list):
@@ -292,6 +287,7 @@ def plot(
             sentence_decode=sentence_decode[index, :],
             sentence_predict=sentence_predict[index, :],
             AE_baseline=AE_baseline[index, :],
+            LLM_baseline=LLM_baseline_score[index, :],
             save=save,
             xlabel="$d_{SR}$ (m)",
             ylabel=y_label,
@@ -309,6 +305,7 @@ def plot(
         sentence_decode=sentence_decode[:, mid_index],
         sentence_predict=sentence_predict[:, mid_index],
         AE_baseline=AE_baseline[:, mid_index],
+        LLM_baseline=LLM_baseline_score[:, mid_index],
         save=save,
         xlabel="$d_{SD}$ (m)",
         ylabel=y_label,
