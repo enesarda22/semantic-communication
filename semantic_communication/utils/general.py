@@ -214,19 +214,10 @@ def plotter(
         "mathtext.fontset": "stix",
     })
 
-    mpl.rcParams.update({
-        "font.size": 9.5,  # base text
-        "axes.labelsize": 10.5,  # x/y labels
-        "axes.titlesize": 10.5,  # (if you ever re-enable titles)
-        "xtick.labelsize": 9,
-        "ytick.labelsize": 9,
-        "legend.fontsize": 8.5,
-    })
-
     if ax is None:
         _, ax = plt.subplots(figsize=(3.0, 2.6))
 
-    lw = 1.3
+    lw = 1.5
     handles = []
 
     def _plot_if_valid(y, *args, **kwargs):
@@ -270,8 +261,8 @@ def plotter(
     )
 
     # --- Axes styling ---
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    ax.set_xlabel(xlabel, fontsize=11.2)
+    ax.set_ylabel(ylabel, fontsize=11.2)
     ax.set_xlim([float(np.min(x_axis)), float(np.max(x_axis))])
     ax.grid(True, lw=0.2)
 
@@ -280,7 +271,7 @@ def plotter(
 
     if legend:
         h_, l_ = ax.get_legend_handles_labels()
-        ax.legend(h_, l_, ncols=len(l_), frameon=True, fancybox=True)
+        ax.legend(h_, l_, ncols=len(l_), frameon=True, fancybox=True, fontsize=11.2)
 
     labels = [h.get_label() for h in handles]
     return handles, labels
@@ -356,6 +347,7 @@ def plot_three_metrics_figure(
         borderaxespad=0.2,
         columnspacing=1.2,
         handlelength=2.2,
+        fontsize=11.2
     )
 
     # Leave space for legend + suptitle
@@ -366,85 +358,6 @@ def plot_three_metrics_figure(
     if show:
         plt.show()
     plt.close(fig)
-
-
-def plotter(
-    x_axis,
-    xlabel,
-    ylabel,
-    title=None,
-    separation_conventional=None,
-    SPF=None,
-    SLF=None,
-    sentence_decode=None,
-    sentence_predict=None,
-    AE_baseline=None,
-    LLM_baseline=None,
-    ax=None,
-    legend=False,
-):
-    plt.style.use(["science", "ieee", "no-latex"])
-    mpl.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "STIXGeneral"],
-        "mathtext.fontset": "stix",
-    })
-
-    if ax is None:
-        _, ax = plt.subplots(figsize=(3.0, 2.6))
-
-    lw = 1.3
-    handles = []
-
-    def _plot_if_valid(y, *args, **kwargs):
-        if y is None:
-            return
-        y = np.asarray(y)
-        if y.size == 0 or np.all(y == 0):
-            return
-        (h,) = ax.plot(x_axis, y, *args, **kwargs)
-        handles.append(h)
-
-    _plot_if_valid(separation_conventional, label="Conv. Baseline", linewidth=lw)
-    _plot_if_valid(
-        LLM_baseline,
-        label="LLM Conv. Baseline",
-        color="m",
-        linestyle=(0, (3, 1, 1, 5, 1, 1)),
-        linewidth=lw,
-    )
-    _plot_if_valid(SPF, label="SPF", linewidth=lw)
-    _plot_if_valid(SLF, label="SLF", linewidth=lw)
-    _plot_if_valid(AE_baseline, label="AE-JSCC", linewidth=lw)
-    _plot_if_valid(
-        sentence_decode,
-        label="SSF",
-        color="c",
-        linestyle=(0, (5, 1, 1, 1, 1, 1)),
-        linewidth=lw,
-    )
-    _plot_if_valid(
-        sentence_predict,
-        label="Sen. PF",
-        color="m",
-        linestyle=(0, (3, 1, 1, 5, 1, 1)),
-        linewidth=lw,
-    )
-
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_xlim([float(np.min(x_axis)), float(np.max(x_axis))])
-    ax.grid(True, lw=0.2)
-
-    if title:
-        ax.set_title(title)
-
-    if legend:
-        h_, l_ = ax.get_legend_handles_labels()
-        ax.legend(h_, l_, ncols=len(l_), frameon=True, fancybox=True)
-
-    labels = [h.get_label() for h in handles]
-    return handles, labels
 
 
 def _plot_three_metrics_figure_compact(
@@ -504,6 +417,7 @@ def _plot_three_metrics_figure_compact(
         borderaxespad=0.0,
         columnspacing=0.9,
         handlelength=1.9,
+        fontsize=11.2
     )
 
     # Compact spacing tuned for papers (no bbox_inches="tight")
