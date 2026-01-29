@@ -25,6 +25,7 @@ class Transceiver(nn.Module):
         dst_semantic_decoder: SemanticDecoder,
         channel: Channel,
         max_length: int,
+        context_length: int = 64,
     ):
         super().__init__()
         # source
@@ -52,6 +53,7 @@ class Transceiver(nn.Module):
 
         self.channel = channel
         self.max_length = max_length
+        self.context_length = context_length
         self.device = get_device()
 
     @staticmethod
@@ -141,6 +143,7 @@ class Transceiver(nn.Module):
             max_length=self.max_length,  # TODO: fix +1 discrepancy
             enc_padding_mask=None,
             n_generated_tokens=self.max_length + 1,
+            context_length=self.context_length,
         )
         relay_decoded = x_relay.clone()
 

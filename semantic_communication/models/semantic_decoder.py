@@ -51,13 +51,15 @@ class DecoderBlock(nn.Module):
     ):
         # norm before the layer, residual connection after the layer
         x_normed = self.ln1(x)
+        seq_len = x_normed.shape[1]
+        causal_mask = self.tril[:seq_len, :seq_len]
         attention_out = self.sa_heads(
             query=x_normed,
             key=x_normed,
             value=x_normed,
             key_padding_mask=source_padding_mask,
             need_weights=False,
-            attn_mask=self.tril,
+            attn_mask=causal_mask,
             is_causal=True,
         )[0]
         x = x + attention_out
@@ -65,7 +67,8 @@ class DecoderBlock(nn.Module):
         x_normed = self.ln2(x)
 
         if is_causal:
-            attention_mask = self.tril
+            enc_seq_len = encoder_output.shape[1]
+            attention_mask = self.tril[:seq_len, :enc_seq_len]
         else:
             attention_mask = None
 
@@ -100,6 +103,7 @@ class SemanticDecoder(nn.Module):
         self.token_embedding_table.weight = bert.embeddings.word_embeddings.weight
 
         self.position_embedding_table = nn.Embedding(block_size, n_embeddings)
+        self.block_size = block_size
 
         self.decoder_blocks = MultiInputSequential(
             *[
@@ -156,6 +160,7 @@ class SemanticDecoder(nn.Module):
         enc_padding_mask=None,
         beam_width=5,
         n_generated_tokens=20,
+        context_length=64,
     ):
         B = encoder_output.shape[0]
         T = n_generated_tokens
@@ -163,10 +168,17 @@ class SemanticDecoder(nn.Module):
         Y = self.pad_idx * torch.ones(B, T).to(self.device).long()
         Y[:, 0] = 1
 
-        next_logits, _ = self(
-            Y[:, :max_length], encoder_output, is_causal, enc_padding_mask
-        )
-        next_logits = next_logits[:, 0, :]
+        max_context = max(1, min(context_length, self.block_size))
+
+        def get_decoder_context(prefix, upto):
+            start_idx = max(0, upto - max_context)
+            return prefix[:, start_idx:upto]
+
+        # at the start, only BOS exists, so feed it (or last K tokens)
+        dec_in = get_decoder_context(Y, 1)
+
+        next_logits, _ = self(dec_in, encoder_output, is_causal, enc_padding_mask)
+        next_logits = next_logits[:, -1, :]  # last position predicts next token
         vocab_size = next_logits.shape[-1]
 
         probabilities, next_chars = F.log_softmax(next_logits, dim=-1).topk(
@@ -181,28 +193,16 @@ class SemanticDecoder(nn.Module):
         Y[:, 1] = next_chars.flatten()
 
         for i in range(1, T - 1):
-            start_idx = max(i - max_length, 0)
-            end_idx = start_idx + max_length
+            # We are about to predict Y[:, i+1].
+            # The known prefix is Y[:, :i+1]. Use only last K tokens of that prefix.
+            dec_in = get_decoder_context(Y, i + 1)  # shape: [B*beam, <=K]
 
-            if enc_padding_mask is None:
-                dataset = TensorDataset(Y[:, -start_idx:end_idx], encoder_output)
-            else:
-                dataset = TensorDataset(
-                    Y[:, -start_idx:end_idx], encoder_output, enc_padding_mask
-                )
+            next_logits, _ = self(dec_in, encoder_output, is_causal, enc_padding_mask)
 
-            dl = DataLoader(dataset, batch_size=B)
-            next_probabilities = []
+            # take logits at the last position of the truncated input
+            next_logits = next_logits[:, -1, :]  # shape: [B*beam, vocab]
+            next_probabilities = F.log_softmax(next_logits, dim=-1)
 
-            for x in dl:
-                if enc_padding_mask is None:
-                    next_logits, _ = self(x[0], x[1], is_causal, None)
-                else:
-                    next_logits, _ = self(x[0], x[1], is_causal, x[2])
-                next_logits = next_logits[:, i, :]
-                next_probabilities.append(F.log_softmax(next_logits, dim=-1))
-
-            next_probabilities = torch.cat(next_probabilities, axis=0)
             next_probabilities = next_probabilities.reshape(
                 (-1, beam_width, next_probabilities.shape[-1])
             )
@@ -213,8 +213,9 @@ class SemanticDecoder(nn.Module):
 
             best_candidates = (idx / vocab_size).long()
             best_candidates += (
-                torch.arange(Y.shape[0] // beam_width, device=self.device).unsqueeze(-1)
-                * beam_width
+                    torch.arange(Y.shape[0] // beam_width,
+                                 device=self.device).unsqueeze(-1)
+                    * beam_width
             )
 
             Y = Y[best_candidates].flatten(end_dim=-2)
