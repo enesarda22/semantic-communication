@@ -272,28 +272,28 @@ if __name__ == "__main__":
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_mean_semantic_sim.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_mean_semantic_sim.npy",
                 ),
                 mean_semantic_sim,
             )
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_mean_sbert_semantic_sim.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_mean_sbert_semantic_sim.npy",
                 ),
                 mean_sbert_semantic_sim,
             )
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_mean_bleu_1.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_mean_bleu_1.npy",
                 ),
                 mean_bleu_1,
             )
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_mean_bleu.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_mean_bleu.npy",
                 ),
                 mean_bleu,
             )
@@ -301,28 +301,28 @@ if __name__ == "__main__":
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_std_semantic_sim.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_std_semantic_sim.npy",
                 ),
                 std_semantic_sim,
             )
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_std_sbert_semantic_sim.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_std_sbert_semantic_sim.npy",
                 ),
                 std_sbert_semantic_sim,
             )
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_std_bleu_1.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_std_bleu_1.npy",
                 ),
                 std_bleu_1,
             )
             np.save(
                 os.path.join(
                     results_dir,
-                    f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_std_bleu.npy",
+                    f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_std_bleu.npy",
                 ),
                 std_bleu,
             )
@@ -342,7 +342,7 @@ if __name__ == "__main__":
             )
             df.to_excel(
                 os.path.join(
-                    results_dir, f"{args.mode}_{args.channel_type}_context{args.context_length}_proposed_output.xlsx"
+                    results_dir, f"{args.mode}_{args.channel_type}_beam{args.beam_width}_proposed_output.xlsx"
                 ),
                 index=False,
             )
