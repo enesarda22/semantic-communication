@@ -9,6 +9,9 @@ __pycache__/
 **/*.npy
 Results/
 Results2/
+figs/
+figures/
+Plots/
 
 # OS / IDE noise
 .DS_Store
