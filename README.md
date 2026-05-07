@@ -109,3 +109,60 @@ python baseline_train_entire_network.py \
 --gamma-min 0.1 \
 --gamma-max 0.9
 ```
+
+### Round-2 evaluator-comparison experiments (JSTSP revision)
+
+Scripts that read precomputed (source, reconstruction) pairs from the
+artifacts/ xlsx dumps and score them with multiple LLM-based and
+embedding-based evaluators. They do **not** load any trained transceiver and
+have no GPU dependency on their own (`score_evaluator_oss.py` does load
+HuggingFace LLMs, the others are CPU-only). Outputs feed into the expanded
+Table III and the new evaluator-comparison subsubsection in v13.
+
+```
+# 0. Build the 600-pair frozen pool (5 methods x 3 distances x 40 sentences)
+python build_frozen_pool.py \
+  --artifacts-dir /path/to/artifacts \
+  --out frozen_pool.jsonl
+
+# 1. A0 pilot - validate JSON parsing, retries, model availability
+python score_evaluator_openai.py --pool frozen_pool.jsonl --pilot 10 \
+  --models gpt-4o-mini-YYYY-MM-DD --out pilot_openai.jsonl
+python score_evaluator_oss.py --pool frozen_pool.jsonl --pilot 10 \
+  --model meta-llama/Llama-3.1-8B-Instruct --out pilot_llama.jsonl
+python score_evaluator_bertscore.py --pool frozen_pool.jsonl --pilot 10 \
+  --out pilot_bertscore.jsonl
+
+# 2. Full GPT stability (3 dated GPT models x 5 prompts x 600 pairs)
+python score_evaluator_openai.py --pool frozen_pool.jsonl --prompt-keys all \
+  --models gpt-4o-mini-YYYY-MM-DD,gpt-4.1-nano-YYYY-MM-DD,gpt-5-nano-YYYY-MM-DD \
+  --out gpt_stability_raw.jsonl
+
+# 3. Determinism check (50-pair subset x 3 calls at temp 0)
+python repeat_check.py --pool frozen_pool.jsonl --subset 50 --repeats 3 \
+  --model gpt-4o-mini-YYYY-MM-DD --out repeat_check.json
+
+# 4. Non-GPT comparison
+python score_evaluator_oss.py --pool frozen_pool.jsonl \
+  --model meta-llama/Llama-3.1-8B-Instruct --out llama8b.jsonl
+python score_evaluator_oss.py --pool frozen_pool.jsonl \
+  --model meta-llama/Llama-3.3-70B-Instruct --quant 4bit --out llama70b.jsonl
+python score_evaluator_oss.py --pool frozen_pool.jsonl \
+  --model Qwen/Qwen2.5-7B-Instruct --out qwen7b.jsonl
+python score_evaluator_oss.py --pool frozen_pool.jsonl \
+  --model mistralai/Mistral-7B-Instruct-v0.3 --out mistral7b.jsonl
+python score_evaluator_bertscore.py --pool frozen_pool.jsonl \
+  --out bertscore_raw.jsonl
+
+# 5. Aggregate everything
+python aggregate_evaluators.py \
+  --gpt gpt_stability_raw.jsonl \
+  --oss llama8b.jsonl,llama70b.jsonl,qwen7b.jsonl,mistral7b.jsonl \
+  --bertscore bertscore_raw.jsonl \
+  --out summary/
+```
+
+Prompt definitions live in `prompts.json` (canonical + 5 paraphrased variants
++ repair). Set `OPENAI_API_KEY` in env or pass `--api-key` to the OpenAI
+scripts.
+
