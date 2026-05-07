@@ -65,6 +65,7 @@ class Tx_Relay_Rx(nn.Module):
 
     def forward(self, x, attention_mask, d_sd, d_sr, d_rd):
         x_hat, x1 = self.tx_relay_model(x, attention_mask, d_sr)
+        relay_logits = x_hat.clone()
 
         x_hard = torch.argmax(x_hat, dim=2)
 
@@ -82,4 +83,4 @@ class Tx_Relay_Rx(nn.Module):
         attention_mask = attention_mask.flatten() == 1
 
         loss = F.cross_entropy(logits[attention_mask, :], grnd_x[attention_mask])
-        return x_hat, loss
+        return x_hat, relay_logits, loss
