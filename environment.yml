@@ -1,6 +1,7 @@
 name: semantic-communication
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - python=3.11
   - pytorch::pytorch
@@ -8,3 +9,13 @@ dependencies:
   - torchvision
   - scikit-learn
   - transformers
+  - numpy
+  - pandas
+  - openpyxl
+  - scipy
+  - tqdm
+  - pip
+  - pip:
+      - openai
+      - bert-score
+      - sentence-transformers
