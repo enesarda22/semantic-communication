@@ -406,6 +406,14 @@ def main():
 
     parser.add_argument("--sentiment-model", default="distilbert-base-uncased-finetuned-sst-2-english", type=str)
 
+    parser.add_argument(
+        "--input-xlsx",
+        type=str,
+        required=True,
+        help="Path to xlsx file containing precomputed (source, reconstruction) pairs "
+             "with columns ['d_sd', 'Gamma', 'Sentence 1', 'Sentence 2'].",
+    )
+
     args = parser.parse_args()
 
     os.makedirs(args.results_dir, exist_ok=True)
@@ -414,90 +422,8 @@ def main():
 
     metrics_set = set([m.lower() for m in args.metrics])
 
-    # Data
-    data_handler = DataHandler(
-        batch_size=args.batch_size,
-        data_fp=args.data_fp,
-        mode=args.mode,
-    )
-
-    # Build transceiver architecture
-    semantic_encoder = SemanticEncoder(
-        label_encoder=data_handler.label_encoder,
-        max_length=args.max_length,
-        mode=args.mode,
-        rate=args.rate,
-    ).to(device)
-
-    semantic_decoder = SemanticDecoder(
-        vocab_size=data_handler.vocab_size,
-        n_blocks=args.n_blocks,
-        n_heads=args.n_heads,
-        n_embeddings=args.n_embeddings,
-        block_size=args.max_length,
-        bert=semantic_encoder.bert,
-        pad_idx=data_handler.label_encoder.pad_id,
-    ).to(device)
-
-    channel_encoder = ChannelEncoder(
-        nin=args.channel_block_input_dim,
-        nout=args.channel_block_latent_dim,
-    ).to(device)
-
-    channel_decoder = ChannelDecoder(
-        nin=args.channel_block_latent_dim,
-        nout=args.channel_block_input_dim,
-    ).to(device)
-
-    channel = init_channel(args.channel_type, args.sig_pow, args.alpha, args.noise_pow)
-
-    semantic_transformer = SemanticTransformer(
-        semantic_encoder=semantic_encoder,
-        semantic_decoder=semantic_decoder,
-        channel_encoder=channel_encoder,
-        channel_decoder=channel_decoder,
-        channel=channel,
-    ).to(device)
-
-    relay_semantic_encoder = SemanticEncoder(
-        label_encoder=data_handler.label_encoder,
-        max_length=args.max_length,
-        mode=args.mode if args.mode == "sentence" else "forward",
-        rate=1 if args.mode == "sentence" else None,
-    ).to(device)
-
-    relay_channel_encoder = ChannelEncoder(
-        nin=args.channel_block_input_dim,
-        nout=args.channel_block_latent_dim,
-    ).to(device)
-
-    dst_channel_decoder = ChannelDecoder(
-        nin=args.channel_block_latent_dim * 2,
-        nout=args.channel_block_input_dim,
-    ).to(device)
-
-    dst_semantic_decoder = SemanticDecoder(
-        vocab_size=data_handler.vocab_size,
-        n_blocks=args.n_blocks,
-        n_heads=args.n_heads,
-        n_embeddings=args.n_embeddings,
-        block_size=args.max_length,
-        bert=relay_semantic_encoder.bert,
-        pad_idx=data_handler.label_encoder.pad_id,
-    ).to(device)
-
-    transceiver = Transceiver(
-        src_relay_transformer=semantic_transformer,
-        relay_semantic_encoder=relay_semantic_encoder,
-        relay_channel_encoder=relay_channel_encoder,
-        dst_channel_decoder=dst_channel_decoder,
-        dst_semantic_decoder=dst_semantic_decoder,
-        channel=channel,
-        max_length=args.max_length,
-    ).to(device)
-
-    load_model(transceiver, args.transceiver_path)
-    transceiver.eval()
+    df = pd.read_excel(args.input_xlsx)
+    df = df.set_index(["d_sd", "Gamma"])
 
     # Retrieval embedder
     embedder = None
@@ -567,32 +493,8 @@ def main():
             d_sr = float(d_sd) * float(gamma)
             print(f"\n=== Evaluating d_sd={d_sd} gamma={gamma} (d_sr={d_sr})")
 
-            originals: List[str] = []
-            decoded: List[str] = []
-
-            # Generate outputs
-            for b in tqdm(data_handler.test_dataloader, desc="Generating", leave=False):
-                encoder_idx = b[0].to(device)
-                encoder_attention_mask = b[1].to(device)
-                encoder_idx = data_handler.label_encoder.transform(encoder_idx)
-
-                out = transceiver.generate(
-                    input_ids=encoder_idx,
-                    attention_mask=encoder_attention_mask,
-                    d_sd=float(d_sd),
-                    d_sr=float(d_sr),
-                    greedy=bool(args.greedy),
-                )
-                predicted_ids = out[0] if isinstance(out, tuple) else out
-
-                decoded_batch = decode_predicted_texts(predicted_ids, semantic_encoder=semantic_encoder)
-                original_batch = decode_original_texts(encoder_idx, semantic_encoder=semantic_encoder)
-
-                originals.extend(original_batch)
-                decoded.extend(decoded_batch)
-
-                if len(originals) >= args.n_test:
-                    break
+            originals: List[str] = df.loc[(d_sd, gamma), "Sentence 1"].astype(str).tolist()
+            decoded: List[str] = df.loc[(d_sd, gamma), "Sentence 2"].astype(str).tolist()
 
             originals = originals[: args.n_test]
             decoded = decoded[: args.n_test]
