@@ -1,5 +1,15 @@
-.idea/workspace.xml
+.idea/
 .venv
+__pycache__/
+*.pyc
 
+# Run artifacts (regeneratable)
 **/*.pt
 **/*.csv
+**/*.npy
+Results/
+Results2/
+
+# OS / IDE noise
+.DS_Store
+**/.DS_Store
