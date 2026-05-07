@@ -19,3 +19,5 @@ dependencies:
       - openai
       - bert-score
       - sentence-transformers
+      - bitsandbytes
+      - accelerate
