@@ -7,11 +7,24 @@ __pycache__/
 **/*.pt
 **/*.csv
 **/*.npy
+**/*.jsonl
 Results/
 Results2/
 figs/
 figures/
 Plots/
+
+# Round-2 evaluator outputs (regeneratable from build_frozen_pool.py + scoring scripts)
+frozen_pool.jsonl
+*_raw.jsonl
+llama*.jsonl
+qwen*.jsonl
+mistral*.jsonl
+gpt*.jsonl
+bertscore*.jsonl
+pilot_*.jsonl
+repeat_check.json
+summary/
 
 # OS / IDE noise
 .DS_Store
