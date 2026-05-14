@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --account=PAS2672
+#SBATCH --job-name=mistral7b-1500
+#SBATCH --gpus-per-node=1
+#SBATCH --time=02:00:00
+#SBATCH --output=mistral7b_1500_%j.log
+#SBATCH --mail-user=enesarda22@gmail.com
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+module load miniconda3/24.1.2-py310
+conda activate semantic-communication
+
+cd ~/repos/semantic-communication
+
+python score_evaluator_oss.py \
+  --pool frozen_pool_1500.jsonl \
+  --model mistralai/Mistral-7B-Instruct-v0.3 \
+  --dtype bf16 \
+  --out mistral7b_1500.jsonl

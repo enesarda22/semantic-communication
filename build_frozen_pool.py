@@ -1,10 +1,15 @@
 """
-Build the frozen 600-pair stratified pool for round-2 evaluator-comparison work.
+Build a stratified frozen pool for round-2 evaluator-comparison work.
 
 Reads precomputed (source, reconstruction) pairs from the per-method xlsx files in
-the artifacts/ directory, takes a stratified random sample of N sentences per
-(method, d_sd) cell at the midpoint relay (gamma=0.5), and writes one JSON line
-per pair to --out.
+the artifacts/ directory, takes a stratified random sample of --n-per-cell
+sentences per (method, d_sd) cell at the midpoint relay (gamma=0.5), and writes
+one JSON line per pair to --out.
+
+Total pool size = n_per_cell * 5 methods * 3 distances. With n_per_cell=40 the
+pool has 600 pairs; with n_per_cell=100 the pool has 1500 pairs (matches the
+round-1 Table III sample size while adding stratification across methods and
+operating conditions).
 
 The same set of source-sentence ids is used at every (method, distance) cell, so
 each pool sentence has reconstructions from all five methods at all three
@@ -14,7 +19,8 @@ because the conventional baseline file uses a different sentence ordering.
 Usage:
   python build_frozen_pool.py \\
       --artifacts-dir /Users/enesarda/projects/jstsp2025/artifacts \\
-      --out frozen_pool.jsonl
+      --n-per-cell 100 \\
+      --out frozen_pool_1500.jsonl
 """
 
 import argparse
