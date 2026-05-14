@@ -10,6 +10,10 @@
 module load miniconda3/24.1.2-py310
 conda activate semantic-communication
 
+# Use scratch for HF cache to avoid home-dir quota issues
+export HF_HOME=/fs/scratch/PAS2672/arda2/hf-cache
+mkdir -p "$HF_HOME"
+
 cd ~/repos/semantic-communication
 
 python score_evaluator_oss.py \
