@@ -1,13 +1,12 @@
 {
-  "_doc": "LLM-as-judge prompts for the round-2 GPT stability and non-GPT evaluator comparison. The five variants are semantic paraphrases of the canonical prompt; they are used only for the GPT prompt-stability analysis (Section VI-C of the manuscript). The canonical prompt is used for all non-GPT generative evaluators. Confirm with the coauthor that `canonical` matches the prompt actually used in the round-1 Table III experiments before running.",
-  "schema_constraint": "Respond ONLY with a single JSON object: {\"score\": <float in [-1, 1]>}. No prose, no explanation, no extra keys.",
-  "canonical": "Provide a number between -1 and 1 denoting the semantic similarity score for given sentences A and B with precision 0.01. A score of 1 means the sentences are perfectly similar, -1 means they are opposites, and 0 indicates no correlation in meaning. Respond ONLY with a single JSON object of the form {\"score\": <float between -1 and 1>}.",
+  "_doc": "Five round-1 LLM-as-judge prompts (provided verbatim by the coauthor) used in the GPT-family stability sweep. All five ask for a bare numeric score in [-1, 1] (no JSON wrapper). The `canonical` field is set to variant_1 for convenience; the stability sweep uses all five.",
+  "canonical": "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 and 1 denoting the semantic similarity score for given sentences A and B with precision 0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their meanings are uncorrelated. Just provide a score without any words or symbols.",
   "variants": [
-    "[TBD: variant 1 verbatim from coauthor]",
-    "[TBD: variant 2 verbatim from coauthor]",
-    "[TBD: variant 3 verbatim from coauthor]",
-    "[TBD: variant 4 verbatim from coauthor]",
-    "[TBD: variant 5 verbatim from coauthor]"
+    "You are skilled in evaluating how similar the two sentences are. Provide a number between -1 and 1 denoting the semantic similarity score for given sentences A and B with precision 0.01. 1 means they are perfectly similar and -1 means they are opposite while 0 means their meanings are uncorrelated. Just provide a score without any words or symbols.",
+    "Rate the semantic similarity of sentences A and B. Respond with exactly one number in [-1, 1] to two decimal places. Use 1.00 for the same meaning, 0.00 for unrelated meaning, and -1.00 for opposite/contradictory meaning. Output only the number.",
+    "Compare the meanings of sentences A and B and output a single similarity score between -1 and 1 (precision 0.01). 1 means their meanings match, 0 means they are unrelated, and -1 means they express opposite or contradictory meanings. Return only the numeric score.",
+    "Evaluate how similar in meaning sentence A is to sentence B. Provide one number between -1 and 1 with precision 0.01: 1 indicates identical meaning, 0 indicates no meaningful relation, and -1 indicates contradiction/opposition. Output only the number.",
+    "Give a semantic similarity score for A and B as a single value in [-1, 1] rounded to two decimals. 1 means same meaning, 0 means unrelated meanings, and -1 means opposite/contradictory meanings. Output only the number."
   ],
-  "repair": "Your previous response was not valid JSON in the schema {\"score\": <float in [-1, 1]>}. Please respond again, this time with the JSON object only and nothing else."
+  "repair": "Your previous response was not a single number in [-1, 1]. Please respond again with just the numeric score, nothing else."
 }
