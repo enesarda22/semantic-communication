@@ -131,13 +131,28 @@ def main():
     pool = [json.loads(line) for line in Path(args.pool).read_text().splitlines() if line.strip()]
     if args.pilot > 0:
         pool = pool[: args.pilot]
-    print(f"Scoring {len(pool)} pairs with {args.model}.")
 
     out_path = Path(args.out)
+    # Resume from existing output: skip pair_ids already scored. Append mode.
+    done_ids = set()
+    if out_path.is_file() and out_path.stat().st_size > 0:
+        for line in out_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                done_ids.add(json.loads(line)["pair_id"])
+            except (json.JSONDecodeError, KeyError):
+                continue
+        print(f"Resume: found {len(done_ids)} already-scored pairs in {out_path}.",
+              file=sys.stderr)
+    pool_remaining = [p for p in pool if p["pair_id"] not in done_ids]
+    print(f"Scoring {len(pool_remaining)} pairs with {args.model} "
+          f"(of {len(pool)} total; {len(pool)-len(pool_remaining)} already done).")
+
     n_done = 0
     n_invalid = 0
-    with out_path.open("w") as f:
-        for pair in pool:
+    with out_path.open("a") as f:
+        for pair in pool_remaining:
             messages = build_messages(canonical, pair["source"], pair["reconstruction"])
             raws: list = []
             score = None

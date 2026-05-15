@@ -2,7 +2,7 @@
 #SBATCH --account=PAS2672
 #SBATCH --job-name=mixtral8x7b-1500
 #SBATCH --gpus-per-node=4
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --output=mixtral8x7b_1500_%j.log
 #SBATCH --mail-user=enesarda22@gmail.com
 #SBATCH --mail-type=BEGIN,END,FAIL
